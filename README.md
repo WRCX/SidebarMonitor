@@ -330,9 +330,11 @@ nota. Cruzado: con una descarga, `pwsh ↓29 MiB/s` contra `Ethernet ↓30 MiB/s
 Dos modos, conmutables desde el menú (**CPU: una línea por core**):
 
 - **Total** (por defecto): una sola curva del uso agregado, con relleno.
-- **Por core**: las 16 curvas superpuestas en la misma gráfica, finas y translúcidas para que
-  la masa se lea como una banda, con el total opaco encima. Nada de rellenos — 16 áreas
-  translúcidas apiladas serían barro.
+- **Por core**: las 16 curvas superpuestas, **cada una con su propio color** (una rueda HSL
+  espaciada 22,5°, escalonada para el fondo oscuro), con el total en blanco grueso encima para
+  que se lea sin ambigüedad. Nada de rellenos — 16 áreas apiladas serían barro. Con este modo
+  activo, **el número de cada core toma su mismo color**, así se emparejan línea y número; con
+  el modo desactivado, el número vuelve al color del proceso dominante.
 
 ### Frecuencia de CPU: mejor núcleo, media o mediana
 

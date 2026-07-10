@@ -207,9 +207,10 @@ internal sealed class Sparkline : FrameworkElement
 }
 
 /// <summary>
-/// N faint lines on one surface, one per core, sharing a 0..100 scale. No fills — 16 stacked
-/// translucent areas would just be mud. Each line is thin and low-alpha so the mass reads as a
-/// band; the total sits on top in the CPU series colour, opaque, as the thing you actually read.
+/// One line per core on a shared 0..100 scale, each in its own colour (see Theme.CoreColor) so
+/// the cores can be told apart and matched to the coloured index numbers in the rows below. No
+/// fills — 16 stacked translucent areas would be mud. The total sits on top as a thick white
+/// line: the aggregate you actually read, unambiguous against the colour wheel underneath.
 /// </summary>
 internal sealed class CoreSparkline : FrameworkElement
 {
@@ -219,7 +220,7 @@ internal sealed class CoreSparkline : FrameworkElement
     private int _count;
     private int _coreCount;
 
-    private readonly Pen _corePen;
+    private readonly List<Pen> _corePens = [];
     private readonly Pen _totalPen;
 
     public CoreSparkline(double height = 48)
@@ -227,13 +228,20 @@ internal sealed class CoreSparkline : FrameworkElement
         Height = height;
         SnapsToDevicePixels = true;
 
-        var faint = new SolidColorBrush(Color.FromArgb(90, Theme.SeriesCpu.R, Theme.SeriesCpu.G, Theme.SeriesCpu.B));
-        faint.Freeze();
-        _corePen = new Pen(faint, 1) { LineJoin = PenLineJoin.Round };
-        _corePen.Freeze();
-        _totalPen = new Pen(Theme.SeriesBrush(Theme.SeriesCpu), 2)
+        _totalPen = new Pen(Theme.InkPrimary, 2)
         { LineJoin = PenLineJoin.Round, StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
         _totalPen.Freeze();
+    }
+
+    private Pen CorePen(int index)
+    {
+        while (_corePens.Count <= index)
+        {
+            var p = new Pen(Theme.CoreBrush(_corePens.Count), 1) { LineJoin = PenLineJoin.Round };
+            p.Freeze();
+            _corePens.Add(p);
+        }
+        return _corePens[index];
     }
 
     public void Push(ref Snapshot s)
@@ -269,8 +277,8 @@ internal sealed class CoreSparkline : FrameworkElement
         dc.DrawLine(new Pen(Theme.Baseline, 1), new Point(0, h - 0.5), new Point(w, h - 0.5));
         if (_count < 2) return;
 
-        for (int c = 0; c < _coreCount; c++) DrawLine(dc, _cores[c], w, h, _corePen);
-        DrawLine(dc, _total, w, h, _totalPen);   // opaque, on top
+        for (int c = 0; c < _coreCount; c++) DrawLine(dc, _cores[c], w, h, CorePen(c));
+        DrawLine(dc, _total, w, h, _totalPen);   // white, on top
     }
 
     private void DrawLine(DrawingContext dc, float[] v, double w, double h, Pen pen)

@@ -45,6 +45,12 @@ internal sealed class CoreRows : FrameworkElement
     private readonly Brush _plainFill = Theme.SeriesBrush(Theme.SeriesCpu);
     private int _hoverRow = -1;
 
+    /// <summary>
+    /// When the composite per-core graph is on, the index number wears its core's graph colour so
+    /// number and line match. Off, it wears the dominant process's colour (links number and bar).
+    /// </summary>
+    public bool UseCoreColors { get; set; }
+
     public CoreRows()
     {
         SnapsToDevicePixels = true;
@@ -123,13 +129,15 @@ internal sealed class CoreRows : FrameworkElement
             double barY = y + BarGap;
             double barH = RowHeight - BarGap * 2;
 
-            // Index and dominant name both wear the dominant process's colour, so the eye links
-            // the number, the bar and the label without reading text.
+            // The dominant process's colour: links the bar and its text label.
             Brush dominantBrush = row.Segments.Length == 0
                 ? Theme.InkMuted
                 : row.Segments[0].Kernel ? Theme.KernelFill : Theme.ProcessBrush(row.Segments[0].Name);
 
-            Draw(dc, Text(i.ToString(CultureInfo.InvariantCulture), 9, dominantBrush, monoFace, dpi), indexW, y, barH, rightAlign: true);
+            // The index number matches the composite graph line when that graph is on, otherwise
+            // the dominant process, so the number always points at whatever the CPU visual shows.
+            Brush indexBrush = UseCoreColors ? Theme.CoreBrush(i) : dominantBrush;
+            Draw(dc, Text(i.ToString(CultureInfo.InvariantCulture), 9, indexBrush, monoFace, dpi), indexW, y, barH, rightAlign: true);
 
             dc.DrawRoundedRectangle(Theme.Grid, null, new WRect(barX, barY, barW, barH), 2, 2);
 

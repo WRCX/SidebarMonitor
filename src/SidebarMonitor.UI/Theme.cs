@@ -52,6 +52,42 @@ internal static class Theme
     /// <summary>The kernel is not a series. It gets a reserved neutral, never a palette slot.</summary>
     public static readonly Brush KernelFill = Freeze("#898781");
 
+    private static readonly Dictionary<int, Color> CoreColorCache = [];
+
+    /// <summary>
+    /// A distinct colour per core index. 16 cores are 16 forced categories that cannot fold into
+    /// "other", so this is a legitimate generated ramp: an evenly-spaced HSL wheel, stepped for
+    /// the dark surface. Adjacent cores land 22° apart on the wheel, clearly distinguishable.
+    /// The offset keeps core 0 off pure red so it never reads as a status colour.
+    /// </summary>
+    public static Color CoreColor(int index)
+    {
+        if (CoreColorCache.TryGetValue(index, out var cached)) return cached;
+        double hue = (index * 360.0 / 16.0 + 25) % 360;
+        var c = FromHsl(hue, 0.68, 0.62);
+        CoreColorCache[index] = c;
+        return c;
+    }
+
+    public static Brush CoreBrush(int index) => SeriesBrush(CoreColor(index));
+
+    private static Color FromHsl(double h, double s, double l)
+    {
+        double c = (1 - Math.Abs(2 * l - 1)) * s;
+        double x = c * (1 - Math.Abs(h / 60.0 % 2 - 1));
+        double m = l - c / 2;
+        (double r, double g, double b) = h switch
+        {
+            < 60 => (c, x, 0.0),
+            < 120 => (x, c, 0.0),
+            < 180 => (0.0, c, x),
+            < 240 => (0.0, x, c),
+            < 300 => (x, 0.0, c),
+            _ => (c, 0.0, x),
+        };
+        return Color.FromRgb((byte)((r + m) * 255), (byte)((g + m) * 255), (byte)((b + m) * 255));
+    }
+
     /// <summary>
     /// Whatever falls outside the top-3 segments. Recessive, but it must never be mistaken for
     /// the empty track (#2C2C2A) behind it, nor for the kernel's lighter neutral.

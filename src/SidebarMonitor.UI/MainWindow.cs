@@ -266,6 +266,7 @@ internal sealed class MainWindow : AppBarWindow
         bool perCore = _cfg.CpuPerCoreGraph;
         _cpuSpark.Visibility = perCore ? Visibility.Collapsed : Visibility.Visible;
         _cpuCoreSpark.Visibility = perCore ? Visibility.Visible : Visibility.Collapsed;
+        _coreRows.UseCoreColors = perCore;
     }
 
     /// <summary>Hover on any sparkline reads the value at that instant; each needs its units.</summary>
