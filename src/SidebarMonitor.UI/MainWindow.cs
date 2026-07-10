@@ -66,7 +66,7 @@ internal sealed class MainWindow : AppBarWindow
     private readonly StackPanel _diskPanels = new();
     private readonly List<DiskBlock> _diskBlocks = [];
 
-    private sealed record DiskBlock(string Key, TextBlock Head, TextBlock Temp, TextBlock Sub,
+    private sealed record DiskBlock(string Key, TextBlock Head, TextBlock Temp, TextBlock Volumes, TextBlock Sub,
                                     BarMeter Active, TextBlock ActiveText, Sparkline Spark, TextBlock Rates);
 
     // TOP
@@ -356,6 +356,7 @@ internal sealed class MainWindow : AppBarWindow
             headGrid.Children.Add(head);
             headGrid.Children.Add(temp);
 
+            var volumes = Theme.Text("", 9.5, Theme.InkSecondary);
             var sub = Theme.Text("", 9, Theme.InkMuted);
 
             var activeText = Theme.Text("", 9.5, Theme.InkSecondary, mono: true);
@@ -372,6 +373,7 @@ internal sealed class MainWindow : AppBarWindow
 
             var block = new StackPanel { Margin = new Thickness(0, 0, 0, 7) };
             block.Children.Add(headGrid);
+            block.Children.Add(volumes);
             block.Children.Add(sub);
             block.Children.Add(activeText);
             block.Children.Add(active);
@@ -379,7 +381,7 @@ internal sealed class MainWindow : AppBarWindow
             block.Children.Add(rates);
             _diskPanels.Children.Add(block);
 
-            _diskBlocks.Add(new DiskBlock(NameField.Get(ref s.Disks[di].Name), head, temp, sub, active, activeText, spark, rates));
+            _diskBlocks.Add(new DiskBlock(NameField.Get(ref s.Disks[di].Name), head, temp, volumes, sub, active, activeText, spark, rates));
         }
     }
 
@@ -815,11 +817,12 @@ internal sealed class MainWindow : AppBarWindow
                 ref var d = ref s.Disks[visibleDisks[i]];
                 var b = _diskBlocks[i];
 
-                // A disk with no mounted volume (the WSL vHD) has no label; fall back to its model.
-                string label = NameField.Get(ref d.Label);
-                if (label.Length == 0) label = NameField.Get(ref d.Model);
-                if (label.Length == 0) label = NameField.Get(ref d.Name);
-                b.Head.Text = label;
+                // Head is the disk MODEL — the physical identity. Its partitions are the line
+                // below, so "C:" and "juegos" no longer read as two separate disks.
+                string model = NameField.Get(ref d.Model);
+                if (model.Length == 0) model = NameField.Get(ref d.Label);
+                if (model.Length == 0) model = NameField.Get(ref d.Name);
+                b.Head.Text = model;
 
                 b.Temp.Text = float.IsNaN(d.TempC) ? "" : string.Create(ci, $"{d.TempC:F0} °C");
                 // A spinning disk sits happily at 45-50 °C; alarming there would cry wolf.
@@ -827,10 +830,11 @@ internal sealed class MainWindow : AppBarWindow
                                   : d.TempC >= 52 ? Theme.StatusSerious
                                   : Theme.InkSecondary;
 
+                b.Volumes.Text = NameField.Get(ref d.Volumes);
+
                 string media = d.Media switch { DiskMedia.Ssd => "SSD", DiskMedia.Hdd => "HDD", _ => "" };
                 string size = d.SizeBytes > 0 ? string.Create(ci, $"{d.SizeBytes / 1e12:F1} TB") : "";
-                b.Sub.Text = string.Join("  ", new[] { NameField.Get(ref d.Model), media, NameField.Get(ref d.Bus), size }
-                    .Where(x => x.Length > 0));
+                b.Sub.Text = string.Join("  ·  ", new[] { media, NameField.Get(ref d.Bus), size }.Where(x => x.Length > 0));
 
                 float active = float.IsNaN(d.ActivePct) ? 0 : d.ActivePct;
                 b.ActiveText.Text = string.Create(ci, $"actividad {active:F0} %");

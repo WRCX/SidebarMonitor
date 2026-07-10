@@ -134,9 +134,10 @@ internal static class Program
             string label = NameField.Get(ref d.Label);
             string temp = float.IsNaN(d.TempC) ? "  n/d" : string.Create(ci, $"{d.TempC,3:F0}°C");
             Console.WriteLine(string.Create(ci,
-                $"DISK {label,-16} {d.Media,-7} {NameField.Get(ref d.Bus),-5} {d.SizeBytes / 1e12,5:F1} TB  {temp}  " +
+                $"DISK {NameField.Get(ref d.Model),-24} {d.Media,-7} {NameField.Get(ref d.Bus),-5} {d.SizeBytes / 1e12,5:F1} TB  {temp}  " +
                 $"R {d.ReadBytesPerSec / 1024,8:F1} KiB/s  W {d.WriteBytesPerSec / 1024,8:F1} KiB/s"));
-            Console.WriteLine($"       {NameField.Get(ref d.Model)}");
+            Console.WriteLine($"       {NameField.Get(ref d.Volumes)}");
+            _ = label;
         }
         Console.WriteLine();
 

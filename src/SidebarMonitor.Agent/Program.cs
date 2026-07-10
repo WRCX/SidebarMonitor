@@ -254,6 +254,7 @@ internal static class Program
             if (int.TryParse(head, out int index) && inventory.TryGetValue(index, out var id))
             {
                 NameField.Set(ref d.Label, id.Label);
+                NameField.Set(ref d.Volumes, id.Volumes);
                 NameField.Set(ref d.Model, id.Model);
                 NameField.Set(ref d.Bus, id.Bus);
                 d.Media = id.Media;

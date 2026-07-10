@@ -5,7 +5,7 @@ using SidebarMonitor.Shared;
 namespace SidebarMonitor.Agent;
 
 internal sealed record DiskIdentity(int Index, string Model, string Bus, DiskMedia Media, ulong SizeBytes,
-                                    string Label, bool Removable, bool Virtual, bool System);
+                                    string Label, string Volumes, bool Removable, bool Virtual, bool System);
 
 /// <summary>
 /// Static facts about the physical disks: model, SSD-vs-HDD, bus, size, and the labels of the
@@ -63,6 +63,11 @@ internal static class DiskInventory
         out uint serial, out uint maxComponent, out uint flags,
         StringBuilder fileSystem, int fileSystemSize);
 
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetDiskFreeSpaceExW(
+        string dir, out ulong freeAvail, out ulong total, out ulong totalFree);
+
     internal sealed class SafeFileHandleWrapper : Microsoft.Win32.SafeHandles.SafeHandleZeroOrMinusOneIsInvalid
     {
         public SafeFileHandleWrapper() : base(true) { }
@@ -85,30 +90,56 @@ internal static class DiskInventory
             if (!int.TryParse(head, out int index) || result.ContainsKey(index)) continue;
 
             string letters = space < 0 ? "" : instance[(space + 1)..];
-            string label = letters.Length == 0 ? "" : Labels(letters);
+            var (label, volumes) = Volumes(letters);
             bool system = HoldsSystemVolume(letters);
-            var id = Query(index, label, system);
+            var id = Query(index, label, volumes, system);
             if (id is not null) result[index] = id;
         }
 
         return result;
     }
 
-    private static string Labels(string letters)
+    /// <summary>
+    /// Returns (joined labels, per-volume summary). The summary lists each drive letter with its
+    /// used/total and label, e.g. "C: 210/293G · juegos(E:) 1.2/1.6T" — so a disk with two
+    /// partitions no longer reads as two disks.
+    /// </summary>
+    private static (string Label, string Volumes) Volumes(string letters)
     {
-        var parts = new List<string>();
+        var labels = new List<string>();
+        var summary = new List<string>();
+
         foreach (string token in letters.Split(' ', StringSplitOptions.RemoveEmptyEntries))
         {
-            if (token.Length < 2 || token[1] != ':') continue;
+            if (token.Length < 1) continue;
+            char letter = token[0];
+            string root = $"{letter}:\\";
+
             var name = new StringBuilder(64);
             var fs = new StringBuilder(16);
-            if (GetVolumeInformationW($"{token[0]}:\\", name, name.Capacity, out _, out _, out _, fs, fs.Capacity)
-                && name.Length > 0)
-                parts.Add(name.ToString());
-            else
-                parts.Add(token);
+            string label = GetVolumeInformationW(root, name, name.Capacity, out _, out _, out _, fs, fs.Capacity) && name.Length > 0
+                ? name.ToString()
+                : "";
+            if (label.Length > 0) labels.Add(label);
+
+            string size = "";
+            if (GetDiskFreeSpaceExW(root, out _, out ulong total, out ulong totalFree) && total > 0)
+                size = $" {Short(total - totalFree)}/{Short(total)}";
+
+            // "juegos(E:) 1.2/1.6T" when labelled, else "C: 210/293G".
+            summary.Add(label.Length > 0 ? $"{label}({letter}:){size}" : $"{letter}:{size}");
         }
-        return string.Join(" / ", parts);
+
+        return (string.Join(" / ", labels), string.Join(" · ", summary));
+    }
+
+    /// <summary>Compact storage size: 293G, 1.6T. Invariant (the agent runs globalization-invariant).</summary>
+    private static string Short(ulong bytes)
+    {
+        const double G = 1024.0 * 1024 * 1024, T = G * 1024;
+        return bytes >= T
+            ? (bytes / T).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "T"
+            : (bytes / G).ToString("0", System.Globalization.CultureInfo.InvariantCulture) + "G";
     }
 
     private static readonly char SystemDrive = (Environment.GetEnvironmentVariable("SystemDrive") ?? "C:")[0];
@@ -121,7 +152,7 @@ internal static class DiskInventory
         return false;
     }
 
-    private static DiskIdentity? Query(int index, string label, bool system)
+    private static DiskIdentity? Query(int index, string label, string volumes, bool system)
     {
         // Desired access 0: enough for property queries, and works without elevation.
         using var h = CreateFileW($@"\\.\PhysicalDrive{index}", 0, FileShareReadWrite, IntPtr.Zero, OpenExisting, 0, IntPtr.Zero);
@@ -170,7 +201,7 @@ internal static class DiskInventory
             bool virtualDisk = bus is "Virtual" or "vHD" or "Spaces"
                 || model.Contains("Virtual", StringComparison.OrdinalIgnoreCase);
 
-            return new DiskIdentity(index, model.Trim(), bus, media, size, label, removable, virtualDisk, system);
+            return new DiskIdentity(index, model.Trim(), bus, media, size, label, volumes, removable, virtualDisk, system);
         }
         finally { Marshal.FreeHGlobal(buf); }
     }

@@ -10,7 +10,7 @@ public static class SnapshotLayout
     public const uint Signature = 0x4E4D4253;
 
     /// <summary>Bump on any layout change. The reader refuses anything it does not know.</summary>
-    public const uint Version = 6;
+    public const uint Version = 7;
 
     /// <summary>
     /// Local\, not Global\. Creating a Global\ kernel object requires SeCreateGlobalPrivilege,
@@ -32,6 +32,7 @@ public static class SnapshotLayout
 
 [InlineArray(32)] public struct Name32 { private byte _element0; }
 [InlineArray(64)] public struct Name64 { private byte _element0; }
+[InlineArray(160)] public struct Name160 { private byte _element0; }
 [InlineArray(SnapshotLayout.MaxCores)] public struct CoreUsageArray { private float _element0; }
 [InlineArray(SnapshotLayout.MaxGpus)] public struct GpuArray { private GpuInfo _element0; }
 [InlineArray(SnapshotLayout.MaxNics)] public struct NicArray { private NicInfo _element0; }
@@ -91,6 +92,12 @@ public struct DiskInfo
     public Name32 Name;
     /// <summary>Volume labels joined, e.g. "DATOS12TB" or "Windows / juegos".</summary>
     public Name32 Label;
+    /// <summary>
+    /// The physical disk's volumes with per-volume used/total, e.g.
+    /// "C: 210/293G · juegos 1,2/1,6T". This is what stops one disk's two partitions reading as
+    /// two disks: the model is the identity, this line shows the partitions live on it.
+    /// </summary>
+    public Name160 Volumes;
     /// <summary>Product id from the device descriptor, e.g. "WDC WD120EFGX-68CPHN0".</summary>
     public Name64 Model;
     public Name32 Bus;
@@ -175,6 +182,8 @@ public static class NameField
 
     public static string Get(ref Name32 f) => Get(ref f, 32);
     public static string Get(ref Name64 f) => Get(ref f, 64);
+    public static string Get(ref Name160 f) => Get(ref f, 160);
     public static void Set(ref Name32 f, ReadOnlySpan<char> v) => Set(ref f, 32, v);
     public static void Set(ref Name64 f, ReadOnlySpan<char> v) => Set(ref f, 64, v);
+    public static void Set(ref Name160 f, ReadOnlySpan<char> v) => Set(ref f, 160, v);
 }

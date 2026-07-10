@@ -288,8 +288,21 @@ la barra de estado avisa con `sin ETW`.
 
 ### Discos
 
-Un bloque por disco físico, con **su propia gráfica** de lectura/escritura: etiqueta de volumen
-(`DATOS12TB`), modelo, HDD/SSD, bus, tamaño, temperatura y **% de actividad**.
+Un bloque por **disco físico**, con **su propia gráfica** de lectura/escritura. La cabecera es
+el **modelo** (la identidad física), y debajo van sus **particiones con espacio usado/total**:
+
+```
+FIKWOT FN501 Pro 2TB                    42 °C
+C: 226G/293G · juegos(E:) 947G/1,6T
+SSD · NVMe · 2,0 TB
+actividad 1 %
+```
+
+Esto es deliberado: un disco con dos particiones (aquí C: y juegos, ambas en el mismo NVMe de
+2 TB) **no debe leerse como dos discos**. Antes se mostraba `C: / juegos` como si fuera un
+nombre y confundía. El modelo manda como identidad; las particiones son lo que vive en él. El
+espacio por volumen sale de `GetDiskFreeSpaceEx`, y la temperatura/actividad son del disco
+físico (compartidas por sus particiones, que es lo correcto).
 
 Ese porcentaje es el «tiempo activo» del Administrador de tareas, que es `100 - % Idle Time`.
 No es `% Disk Time`: ese cuenta peticiones encoladas y pasa de 100 % con toda normalidad.
