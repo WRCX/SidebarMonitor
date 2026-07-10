@@ -307,6 +307,28 @@ El **título** es la etiqueta del volumen cuando el disco tiene **una sola parti
 (`DATOS12TB`), y el **modelo** cuando tiene varias (`FIKWOT FN501 Pro 2TB`), porque entonces
 ninguna etiqueta nombra al disco entero.
 
+### Sin HWiNFO: sensores de CPU por el SDK de AMD
+
+De HWiNFO solo salían tres cosas: potencia de CPU, temperatura de CPU y temperaturas de disco.
+Todas se sacan ya sin él:
+
+- **Temp de disco NVMe**: nuestra, sin admin (`DiskTemps.cs`, IOCTL del log SMART).
+- **Temp y potencia de CPU**: del **AMD Ryzen Master Monitoring SDK**, vía el helper elevado.
+  La temp real (Tctl) y la potencia (PPT) necesitan ring0, pero AMD tiene un driver **firmado y
+  compatible con HVCI** (el de Ryzen Master). WinRing0/LibreHardwareMonitor está bloqueado por la
+  blocklist de drivers vulnerables + HVCI; el de AMD no.
+- **Nombre de CPU**: del registro (`ProcessorNameString`), unelevated.
+
+`native/RyzenShim/` es un puente C plano a la SDK C++ de AMD (`RmOpen`/`RmRead`/`RmClose`): el
+compilador C++ maneja las vtables, el helper C# solo ve funciones planas y un struct POD — nada
+de interop de vtables a mano. Se construye con `native/RyzenShim/build.cmd` (necesita el workload
+de C++ y la SDK de AMD instalada) y se copia junto al helper. Da temp, PPT, Fmax y de regalo
+temp/frecuencia por core. Consulta bajo demanda: **sin el límite de 12 h, sin el ~6 % de overhead
+de HWiNFO**. Verificado con HWiNFO muerto: 43 W / 77 °C / 4.84 GHz, cambiando en vivo.
+
+Con el helper elevado corriendo, HWiNFO ya no hace falta para nada de CPU; solo quedaría para las
+temps de disco **SATA** (ATA pass-through, admin), que se pueden mover al helper más adelante.
+
 ### HWiNFO congelado
 
 La versión gratuita de HWiNFO **desactiva la memoria compartida a las 12 h**. Cuando pasa, el

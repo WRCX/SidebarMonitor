@@ -18,4 +18,10 @@
     <ProjectReference Include="..\SidebarMonitor.Shared\SidebarMonitor.Shared.csproj" />
   </ItemGroup>
 
+  <!-- Native bridge to the AMD Ryzen Master SDK, built by native/RyzenShim/build.cmd (MSVC).
+       Copied next to the helper so its P/Invoke resolves it. Absent = the SDK path is skipped. -->
+  <ItemGroup Condition="Exists('..\..\native\RyzenShim\RyzenShim.dll')">
+    <None Include="..\..\native\RyzenShim\RyzenShim.dll" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

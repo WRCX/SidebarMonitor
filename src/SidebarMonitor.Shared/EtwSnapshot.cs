@@ -64,6 +64,14 @@ public struct EtwSnapshot
 
     public int NetProcCount;
     public NetProcArray NetProcs;
+
+    // ---- From the AMD Ryzen Master SDK, when the helper has it (needs admin + AMD driver) ----
+
+    /// <summary>True when the AMD SDK is providing CPU sensors; then HWiNFO is not needed for CPU.</summary>
+    public byte CpuSdkOk;
+    public double CpuTempC;
+    public float CpuPackageW;
+    public float CpuFmaxMhz;
 }
 
 [InlineArray(SnapshotLayout.MaxCores)] public struct CoreSampleArray { private int _element0; }

@@ -703,7 +703,10 @@ internal sealed class MainWindow : AppBarWindow
             _status.Text = $"agente parado ({age.TotalSeconds:F0} s)";
             return;
         }
-        _status.Text = !s.HwiNfoAvailable ? "sin HWiNFO"
+        // AMD SDK (via the helper) covers CPU temp/power, so a missing/frozen HWiNFO only matters
+        // for SATA disk temps now — don't nag about it when AMD is live.
+        _status.Text = s.CpuFromAmd ? ""
+                     : !s.HwiNfoAvailable ? "sin HWiNFO"
                      : !s.HwiNfoLive ? "HWiNFO en pausa"   // SHM frozen: the free build's 12 h limit
                      : !s.EtwAvailable ? "sin ETW"
                      : "";

@@ -4,3 +4,9 @@ obj/
 *.user
 artifacts/
 publish/
+
+# Native shim build outputs (source + build.cmd are committed; run build.cmd to produce these)
+native/**/*.dll
+native/**/*.obj
+native/**/*.lib
+native/**/*.exp

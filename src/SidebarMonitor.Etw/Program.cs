@@ -54,6 +54,11 @@ internal static class Program
             return 1;
         }
 
+        // CPU temp/power from AMD's SDK (needs admin, which we have). Optional: if the SDK/driver
+        // is absent, the agent keeps using HWiNFO.
+        var ryzen = RyzenSdk.TryOpen(out string? ryzenErr);
+        Console.WriteLine($"AMD Ryzen SDK: {(ryzen is not null ? "OK" : $"no disponible - {ryzenErr}")}");
+
         var names = new ProcessNames();
         var gate = new Lock();
 
@@ -143,6 +148,16 @@ internal static class Program
                 netTx.Clear();
             }
 
+            // AMD CPU sensors read outside the gate (the SDK has its own locking).
+            if (ryzen is not null && ryzen.TryRead(out var rm))
+            {
+                snapshot.CpuSdkOk = 1;
+                snapshot.CpuTempC = rm.TempC;
+                snapshot.CpuPackageW = rm.PackageW;
+                snapshot.CpuFmaxMhz = rm.FmaxMhz;
+            }
+            else snapshot.CpuSdkOk = 0;
+
             writer.Publish(snapshot);
             published++;
 
@@ -202,6 +217,7 @@ internal static class Program
             if (!quit) { restarts++; Console.WriteLine($"--- sesion recreada (#{restarts}) ---"); }
         }
 
+        ryzen?.Dispose();
         writer.Dispose();
         Console.WriteLine($"Parado tras {published} publicaciones, {restarts} reinicios de sesion.");
         return 0;

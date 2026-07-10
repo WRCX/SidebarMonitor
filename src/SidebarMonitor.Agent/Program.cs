@@ -199,6 +199,7 @@ internal static class Program
     private static SeqLockReader<EtwSnapshot>? MergeEtw(ref Snapshot s, SeqLockReader<EtwSnapshot>? etw)
     {
         s.EtwAvailable = false;
+        s.CpuFromAmd = false;
         if (etw is null) return null;
 
         if (!etw.TryRead(out var e)) return etw;   // caught it mid-write; try again next tick
@@ -216,12 +217,36 @@ internal static class Program
         s.NetProcCount = e.NetProcCount;
         s.NetProcs = e.NetProcs;
         s.EtwAvailable = true;
+
+        // AMD SDK CPU sensors override HWiNFO's when present: they don't have the 12 h freeze and
+        // work with HVCI. FreqBest stays PDH-derived (the SDK Fmax is the boost bin, not live).
+        if (e.CpuSdkOk != 0)
+        {
+            s.Cpu.TempC = (float)e.CpuTempC;
+            s.Cpu.PackagePowerW = e.CpuPackageW;
+            s.CpuFromAmd = true;
+        }
         return etw;
+    }
+
+    // The processor name string, read once from the registry — authoritative and unelevated, so
+    // the CPU name never depends on HWiNFO either.
+    private static readonly string CpuNameString = ReadCpuName();
+
+    private static string ReadCpuName()
+    {
+        try
+        {
+            using var k = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
+                @"HARDWARE\DESCRIPTION\System\CentralProcessor\0");
+            return (k?.GetValue("ProcessorNameString") as string)?.Trim() ?? "CPU";
+        }
+        catch { return "CPU"; }
     }
 
     private static void FillCpu(ref CpuInfo cpu, PdhQuery pdh, HwiSensors? hwi)
     {
-        NameField.Set(ref cpu.Name, hwi?.CpuName ?? "CPU");
+        NameField.Set(ref cpu.Name, CpuNameString);
         cpu.TotalUsagePct = Clamp100(pdh.CpuTotalPct);
         cpu.FreqBestMhz = (float)pdh.CpuFrequencyMhz(CpuFreqMode.Best);
         cpu.FreqMeanMhz = (float)pdh.CpuFrequencyMhz(CpuFreqMode.Mean);

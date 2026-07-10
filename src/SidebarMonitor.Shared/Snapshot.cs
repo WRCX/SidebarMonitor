@@ -10,7 +10,7 @@ public static class SnapshotLayout
     public const uint Signature = 0x4E4D4253;
 
     /// <summary>Bump on any layout change. The reader refuses anything it does not know.</summary>
-    public const uint Version = 8;
+    public const uint Version = 9;
 
     /// <summary>
     /// Local\, not Global\. Creating a Global\ kernel object requires SeCreateGlobalPrivilege,
@@ -149,6 +149,10 @@ public struct Snapshot
     /// <summary>...and its poll_time is advancing. False = frozen (the free build disables SHM
     /// after 12 h). When false, every HWiNFO-sourced value is stale and shown as "—".</summary>
     public bool HwiNfoLive;
+
+    /// <summary>CPU temp/power came from the AMD Ryzen Master SDK (via the elevated helper), not
+    /// HWiNFO. When true the panel needs no HWiNFO at all for the CPU.</summary>
+    public bool CpuFromAmd;
 
     // ---- Only populated when the elevated ETW helper is running ----
 
