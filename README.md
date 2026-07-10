@@ -240,6 +240,38 @@ a estado (naranja al 80 %, rojo al 90 %) siempre junto a la cifra, nunca solo po
 dos series de red y disco van direct-labeled con su leyenda, así que la identidad jamás
 depende del color.
 
+## ETW: lo que Windows no expone de otra forma
+
+Dos datos no los da ninguna API normal, y ambos necesitan una sesión ETW de kernel, que exige
+elevación (`SeSystemProfilePrivilege`; comprobado: sin elevar, *acceso denegado*, aunque el
+usuario esté en «Usuarios del registro de rendimiento»):
+
+1. **Qué proceso ocupa cada core.** Ni Task Manager ni Process Explorer lo muestran.
+2. **Ancho de banda por proceso.** El Monitor de Recursos lo hace, y corre elevado.
+
+`EtwProbe` valida ambos. Usa el **profiler muestreado** (`Keywords.Profile`), no context
+switches: CSwitch dispara en cada decisión del planificador (~100k eventos/s) mientras que
+Profile dispara a ritmo fijo por core. Para «quién es dueño de este core» los conteos de
+muestras *son* la respuesta, y el volumen queda acotado.
+
+Coste medido en reposo: **1.24 % de un core (0.078 % de la máquina), 38.5 MiB**, con ~100
+muestras/s por core (~290/s bajo carga: el ritmo sube con la actividad).
+
+> **Trampa importante.** El profiler **no emite muestras mientras un core duerme** en C-state
+> profundo, así que Idle sale infrarrepresentado: un core en reposo puede parecer «95 %
+> ocupado» por conteo de muestras. Las muestras sirven para **atribuir quién**, nunca **cuánto**.
+> La altura de la barra sigue viniendo de PDH; ETW solo colorea los segmentos.
+
+Y confirma que hay que **agrupar por nombre**: sin agrupar, un core sale como
+`powershell 19% powershell 16% powershell 10%` (tres PIDs) y la red lista `chrome` dos veces.
+
+### Diseño híbrido
+
+El agente sigue **sin privilegios y AOT**. ETW vive en un proceso auxiliar **opcional y
+elevado** que publica su propia memoria compartida; el agente la lee si existe. Si no lo
+lanzas, todo funciona igual, sin colores por proceso ni red por proceso. (`TraceEvent` usa
+reflexión, así que ese helper no puede ir AOT — otra razón para separarlo.)
+
 ## Estructura
 
 - `SidebarMonitor.Shared` — el contrato: `Snapshot` + lector/escritor de memoria compartida.
