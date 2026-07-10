@@ -52,6 +52,20 @@ internal abstract class AppBarWindow : Window
         _callbackMsg = Native.RegisterWindowMessage("SidebarMonitor_AppBar");
     }
 
+    /// <summary>
+    /// WS_EX_TRANSPARENT (plus LAYERED, which it requires) makes every click fall through to the
+    /// window behind. A toggle, not a hover: if hovering made the panel solid, you could never
+    /// click through the very spot the cursor is over.
+    /// </summary>
+    protected void SetClickThrough(bool on)
+    {
+        if (_hwnd == IntPtr.Zero) return;
+        long ex = (long)Native.GetWindowLongPtr(_hwnd, Native.GWL_EXSTYLE);
+        ex = on ? ex | Native.WS_EX_TRANSPARENT | Native.WS_EX_LAYERED
+                : ex & ~Native.WS_EX_TRANSPARENT;
+        Native.SetWindowLongPtr(_hwnd, Native.GWL_EXSTYLE, new IntPtr(ex));
+    }
+
     /// <summary>Re-applies the whole placement. Safe to call whenever a setting changes.</summary>
     protected void ApplyPlacement(IntPtr monitor, bool docked, bool edgeLeft, int width, bool minimized, bool topmost,
                                  double floatX, double floatY, double floatHeight)

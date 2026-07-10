@@ -10,7 +10,7 @@ public static class SnapshotLayout
     public const uint Signature = 0x4E4D4253;
 
     /// <summary>Bump on any layout change. The reader refuses anything it does not know.</summary>
-    public const uint Version = 5;
+    public const uint Version = 6;
 
     /// <summary>
     /// Local\, not Global\. Creating a Global\ kernel object requires SeCreateGlobalPrivilege,
@@ -38,12 +38,18 @@ public static class SnapshotLayout
 [InlineArray(SnapshotLayout.MaxDisks)] public struct DiskArray { private DiskInfo _element0; }
 [InlineArray(SnapshotLayout.MaxProcs)] public struct ProcArray { private ProcInfo _element0; }
 
+/// <summary>How to aggregate the per-core clock into one reported number.</summary>
+public enum CpuFreqMode { Best = 0, Mean = 1, Median = 2 }
+
 [StructLayout(LayoutKind.Sequential)]
 public struct CpuInfo
 {
     public Name64 Name;
     public float TotalUsagePct;
-    public float FrequencyMhz;
+    /// <summary>Best core: the highest boost bin any core reaches. Games live here.</summary>
+    public float FreqBestMhz;
+    public float FreqMeanMhz;
+    public float FreqMedianMhz;
     public float PackagePowerW;   // NaN when HWiNFO is not available
     public float TempC;           // NaN when HWiNFO is not available
     public int CoreCount;
@@ -89,6 +95,8 @@ public struct DiskInfo
     public Name64 Model;
     public Name32 Bus;
     public DiskMedia Media;
+    /// <summary>USB / removable, virtual (WSL/Hyper-V vHD), or the disk holding the Windows volume.</summary>
+    public byte IsRemovable, IsVirtual, IsSystem;
     /// <summary>From HWiNFO's S.M.A.R.T. sensors; NaN when unavailable.</summary>
     public float TempC;
     public ulong SizeBytes;

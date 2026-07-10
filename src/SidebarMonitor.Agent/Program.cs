@@ -186,7 +186,9 @@ internal static class Program
     {
         NameField.Set(ref cpu.Name, hwi?.CpuName ?? "CPU");
         cpu.TotalUsagePct = Clamp100(pdh.CpuTotalPct);
-        cpu.FrequencyMhz = (float)pdh.CpuFrequencyMhz;
+        cpu.FreqBestMhz = (float)pdh.CpuFrequencyMhz(CpuFreqMode.Best);
+        cpu.FreqMeanMhz = (float)pdh.CpuFrequencyMhz(CpuFreqMode.Mean);
+        cpu.FreqMedianMhz = (float)pdh.CpuFrequencyMhz(CpuFreqMode.Median);
         cpu.PackagePowerW = (float)(hwi?.PackagePowerW ?? double.NaN);
         cpu.TempC = (float)(hwi?.CpuTempC ?? double.NaN);
 
@@ -256,6 +258,9 @@ internal static class Program
                 NameField.Set(ref d.Bus, id.Bus);
                 d.Media = id.Media;
                 d.SizeBytes = id.SizeBytes;
+                d.IsRemovable = (byte)(id.Removable ? 1 : 0);
+                d.IsVirtual = (byte)(id.Virtual ? 1 : 0);
+                d.IsSystem = (byte)(id.System ? 1 : 0);
                 d.TempC = (float)(hwi?.DriveTempC(id.Model) ?? double.NaN);
             }
             else

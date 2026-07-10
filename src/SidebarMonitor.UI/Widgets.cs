@@ -22,23 +22,90 @@ internal sealed class Sparkline : FrameworkElement
     private readonly Pen? _penB;
     private readonly Brush _fillA;
     private readonly Brush? _fillB;
+    private readonly Color _colorA;
+    private readonly Color? _colorB;
+
+    private double _hoverX = -1;
+    private readonly ToolTip _tip = new() { Placement = System.Windows.Controls.Primitives.PlacementMode.Relative };
 
     /// <summary>0 = autoscale to the window's max (with headroom).</summary>
     public double FixedMax { get; init; }
+
+    /// <summary>How far apart samples are, for the hover tooltip's "hace N s".</summary>
+    public double SecondsPerSample { get; set; } = 1;
+
+    /// <summary>Formats a sample for the tooltip; defaults to a plain number.</summary>
+    public Func<float, string> Format { get; set; } = v => v.ToString("F0", System.Globalization.CultureInfo.InvariantCulture);
+
+    public string LabelA { get; set; } = "";
+    public string LabelB { get; set; } = "";
 
     public Sparkline(Color seriesA, Color? seriesB = null, double height = 36)
     {
         Height = height;
         SnapsToDevicePixels = true;
 
+        _colorA = seriesA;
         _penA = MakePen(seriesA);
         _fillA = MakeFill(seriesA);
         if (seriesB is { } b)
         {
             _b = new float[Capacity];
+            _colorB = b;
             _penB = MakePen(b);
             _fillB = MakeFill(b);
         }
+
+        ToolTip = _tip;
+        ToolTipService.SetInitialShowDelay(this, 100);
+        ToolTipService.SetBetweenShowDelay(this, 0);
+    }
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        _hoverX = e.GetPosition(this).X;
+        UpdateTip();
+        InvalidateVisual();
+    }
+
+    /// <summary>Test hook: place the crosshair without a real mouse, for screenshot verification.</summary>
+    public void ForceHover(double fraction)
+    {
+        _hoverX = ActualWidth * fraction;
+        InvalidateVisual();
+    }
+
+    protected override void OnMouseLeave(MouseEventArgs e)
+    {
+        _hoverX = -1;
+        _tip.IsOpen = false;
+        InvalidateVisual();
+    }
+
+    private int HoverIndex(double w)
+    {
+        if (_hoverX < 0 || _count < 2) return -1;
+        double dx = w / (Capacity - 1);
+        double x0 = w - (_count - 1) * dx;
+        int i = (int)Math.Round((_hoverX - x0) / dx);
+        return Math.Clamp(i, 0, _count - 1);
+    }
+
+    private void UpdateTip()
+    {
+        int i = HoverIndex(ActualWidth);
+        if (i < 0) { _tip.IsOpen = false; return; }
+
+        double ago = (_count - 1 - i) * SecondsPerSample;
+        string when = ago < 0.5 ? "ahora" : $"hace {ago:F0} s";
+        string body = _b is null
+            ? $"{Format(_a[i])}"
+            : $"{(LabelA.Length > 0 ? LabelA + " " : "")}{Format(_a[i])}\n{(LabelB.Length > 0 ? LabelB + " " : "")}{Format(_b[i])}";
+
+        _tip.Content = $"{when}\n{body}";
+        _tip.HorizontalOffset = _hoverX + 12;
+        _tip.VerticalOffset = 4;
+        _tip.IsOpen = true;
     }
 
     private static Pen MakePen(Color c)
@@ -91,6 +158,23 @@ internal sealed class Sparkline : FrameworkElement
 
         Draw(dc, _a, max, w, h, _fillA, _penA);
         if (_b is not null) Draw(dc, _b, max, w, h, _fillB!, _penB!);
+
+        int hi = HoverIndex(w);
+        if (hi >= 0)
+        {
+            double dx = w / (Capacity - 1);
+            double x = w - (_count - 1) * dx + hi * dx;
+            dc.DrawLine(new Pen(Theme.Grid, 1), new System.Windows.Point(x, 0), new System.Windows.Point(x, h));
+            Dot(dc, x, YOf(_a[hi], max, h), _colorA);
+            if (_b is not null && _colorB is { } cb) Dot(dc, x, YOf(_b[hi], max, h), cb);
+        }
+    }
+
+    private static double YOf(float v, double max, double h) => h - 1 - Math.Clamp(v / max, 0, 1) * (h - 5);
+
+    private static void Dot(DrawingContext dc, double x, double y, Color c)
+    {
+        dc.DrawEllipse(Theme.Surface, new Pen(Theme.SeriesBrush(c), 1.5), new System.Windows.Point(x, y), 2.5, 2.5);
     }
 
     private void Draw(DrawingContext dc, float[] values, double max, double w, double h, Brush fill, Pen pen)

@@ -13,6 +13,17 @@ public sealed class UiConfig
     /// <summary>CPU graph: false = single total line, true = one faint line per core overlaid.</summary>
     public bool CpuPerCoreGraph { get; set; }
 
+    /// <summary>Clicks pass through the panel to whatever is behind it. Most useful when floating.</summary>
+    public bool ClickThrough { get; set; }
+
+    /// <summary>Which core-clock aggregate to show: 0 best, 1 mean, 2 median. Best by default.</summary>
+    public int CpuFreqMode { get; set; }
+
+    /// <summary>Disk kinds to leave out of the list.</summary>
+    public bool HideVirtualDisks { get; set; } = true;
+    public bool HideRemovableDisks { get; set; }
+    public bool HideSystemDisk { get; set; }
+
     /// <summary>Docked reserves desktop space via an AppBar. Floating can be dragged anywhere.</summary>
     public bool Docked { get; set; } = true;
 

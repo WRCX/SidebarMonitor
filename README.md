@@ -280,6 +280,8 @@ y el proceso dominante **nombrado en texto**. Verticales no caben: 16 barras en 
 - Separador de 1 px entre segmentos, para que dos tonos contiguos no se fundan.
 - El nombre del dominante va en texto: **la identidad nunca depende solo del color.** Y el
   tooltip de cada fila desglosa el top-3.
+- El **número de core** y el **nombre del dominante** se pintan con el color de ese proceso, para
+  enlazar de un vistazo el índice, la barra y la etiqueta.
 
 Sin el helper ETW, cada barra es un único segmento azul — exactamente el dibujo anterior — y
 la barra de estado avisa con `sin ETW`.
@@ -291,6 +293,11 @@ Un bloque por disco físico, con **su propia gráfica** de lectura/escritura: et
 
 Ese porcentaje es el «tiempo activo» del Administrador de tareas, que es `100 - % Idle Time`.
 No es `% Disk Time`: ese cuenta peticiones encoladas y pasa de 100 % con toda normalidad.
+
+Desde el menú **Discos** se pueden ocultar por tipo: **virtuales** (el vHD de WSL/Hyper-V,
+oculto por defecto), **extraíbles** (USB/SD) y el **disco del sistema**. La clasificación sale
+del bus (`IOCTL_STORAGE_QUERY_PROPERTY`) y de comprobar si alguna de sus letras es la unidad de
+Windows (`%SystemDrive%`).
 
 La identidad sale de `IOCTL_STORAGE_QUERY_PROPERTY`, no de WMI: WMI necesita COM y reflexión, y
 le costaría al agente su build AOT. **Abrir `\\.\PhysicalDriveN` con un acceso deseado de 0
@@ -326,6 +333,34 @@ Dos modos, conmutables desde el menú (**CPU: una línea por core**):
 - **Por core**: las 16 curvas superpuestas en la misma gráfica, finas y translúcidas para que
   la masa se lea como una banda, con el total opaco encima. Nada de rellenos — 16 áreas
   translúcidas apiladas serían barro.
+
+### Frecuencia de CPU: mejor núcleo, media o mediana
+
+`% Processor Performance` es un porcentaje de la frecuencia nominal (base), así que el reloj
+efectivo de un core es `nominal × perf / 100` — y **no se capa a 100**, porque 120 % es
+exactamente cómo se ve un boost de 5.05 GHz sobre una base de 4.2. El agente calcula las tres
+agregaciones sobre los cores (`\Processor Information(*)\% Processor Performance`) y las envía;
+la UI elige desde el menú **Frecuencia CPU**:
+
+- **Mejor núcleo** (por defecto): el bin de boost que alcanza el core más rápido. Es lo que
+  quieres para ver si el Ryzen llega a sus 5.05 GHz en un juego mono-hilo.
+- **Media** — la que muestra el `_Total`, el conjunto del paquete.
+- **Mediana** — robusta al core que va disparado.
+
+La etiqueta bajo la cifra dice cuál es (`GHz máx` / `GHz medio` / `GHz mediana`).
+
+### Sparklines interactivas
+
+Al pasar el ratón por cualquier gráfica: cruceta vertical, un punto en cada serie y un tooltip
+con el valor en ese instante y cuánto hace (`hace 12 s · DL 1,3 MiB/s`). El intervalo entre
+muestras es el de refresco.
+
+### Click-through
+
+Opción del menú (**Ignorar clics**): activa `WS_EX_TRANSPARENT` y los clics atraviesan el panel
+hacia la ventana de detrás. Es un **toggle**, no un hover: si pasar el ratón lo hiciera sólido,
+nunca podrías hacer clic justo donde está el cursor. Se recupera desde la bandeja. Útil sobre
+todo en flotante.
 
 Color por entidad, nunca por posición: CPU azul, GPU violeta, entrada aqua, salida naranja —
 los slots de la paleta de referencia de `dataviz` en su superficie oscura. Los medidores viran

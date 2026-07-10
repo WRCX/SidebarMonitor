@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using SidebarMonitor.Shared;
 
 namespace SidebarMonitor.Agent;
 
@@ -49,7 +50,7 @@ internal sealed class PdhQuery : IDisposable
     }
 
     private readonly IntPtr _query;
-    private readonly IntPtr _cpuTotal, _cpuPerf, _cpuFreq, _cpuPerCore;
+    private readonly IntPtr _cpuTotal, _cpuPerf, _cpuPerfPerCore, _cpuFreq, _cpuPerCore;
     private readonly IntPtr _committed;
     private readonly IntPtr _diskRead, _diskWrite, _diskQueue, _diskIdle;
 
@@ -61,6 +62,7 @@ internal sealed class PdhQuery : IDisposable
         // % Processor Utility, not % Processor Time: the latter undercounts under turbo.
         _cpuTotal = Add(@"\Processor Information(_Total)\% Processor Utility");
         _cpuPerf = Add(@"\Processor Information(_Total)\% Processor Performance");
+        _cpuPerfPerCore = Add(@"\Processor Information(*)\% Processor Performance");
         _cpuFreq = Add(@"\Processor Information(_Total)\Processor Frequency");
         _cpuPerCore = Add(@"\Processor Information(*)\% Processor Utility");
         _committed = Add(@"\Memory\Committed Bytes");
@@ -88,19 +90,40 @@ internal sealed class PdhQuery : IDisposable
 
     public double CommittedBytes => Scalar(_committed);
 
+    /// <summary>The rated (base) frequency. "% Processor Performance" is a percentage of this.</summary>
+    public double NominalMhz => Scalar(_cpuFreq);
+
     /// <summary>
-    /// Nominal MHz scaled by how hard the cores are actually clocking. This is the one counter
-    /// that must NOT be capped: "% Processor Performance" is measured against the nominal
-    /// frequency, so 108 % is exactly how turbo shows up, and capping it would pin the reported
-    /// clock to the base clock forever.
+    /// Effective clock: nominal × how hard the cores clock. Aggregated per the mode — best core
+    /// shows the boost bin a game actually reaches, mean/median the whole-package picture.
+    ///
+    /// Must NOT cap the performance percentage: it is measured against the nominal frequency, so
+    /// 120 % is exactly how a 5.05 GHz boost on a 4.2 GHz base shows up. Capping pins it to base.
     /// </summary>
-    public double CpuFrequencyMhz
+    public double CpuFrequencyMhz(CpuFreqMode mode)
     {
-        get
+        double nominal = NominalMhz;
+        if (double.IsNaN(nominal)) return double.NaN;
+
+        double perf;
+        if (mode == CpuFreqMode.Mean)
         {
-            double nominal = Scalar(_cpuFreq), perf = Scalar(_cpuPerf, cap: false);
-            return double.IsNaN(nominal) || double.IsNaN(perf) ? double.NaN : nominal * perf / 100.0;
+            perf = Scalar(_cpuPerf, cap: false);
         }
+        else
+        {
+            var cores = Array(_cpuPerfPerCore)
+                .Where(s => !s.Instance.Contains("_Total", StringComparison.Ordinal))
+                .Select(s => s.Value)
+                .Where(v => !double.IsNaN(v))
+                .ToList();
+            if (cores.Count == 0) return double.NaN;
+
+            if (mode == CpuFreqMode.Best) perf = cores.Max();
+            else { cores.Sort(); perf = cores[cores.Count / 2]; }   // median
+        }
+
+        return double.IsNaN(perf) ? double.NaN : nominal * perf / 100.0;
     }
 
     public List<InstanceSample> CpuPerCore() => Array(_cpuPerCore);

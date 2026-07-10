@@ -31,6 +31,7 @@ internal sealed class MainWindow : AppBarWindow
 
     // CPU
     private readonly TextBlock _cpuFreq = Stat();
+    private readonly TextBlock _cpuFreqCaption = Theme.Text("GHz", 9, Theme.InkMuted);
     private readonly TextBlock _cpuWatts = Stat();
     private readonly TextBlock _cpuTemp = Stat();
     private readonly TextBlock _cpuPct;
@@ -120,11 +121,14 @@ internal sealed class MainWindow : AppBarWindow
         ContextMenu = BuildMenu();
         LoadSections();
 
+        ConfigureSparklineHovers();
+
         _timer.Interval = TimeSpan.FromMilliseconds(_cfg.RefreshMs);
         _timer.Tick += (_, _) => Tick();
         Loaded += (_, _) =>
         {
             ReapplyPlacement();
+            SetClickThrough(_cfg.ClickThrough);
             SetMinimized(_cfg.Minimized);
             Tick();
             _timer.Start();
@@ -239,7 +243,8 @@ internal sealed class MainWindow : AppBarWindow
     private UIElement BuildCpu()
     {
         var panel = new StackPanel();
-        panel.Children.Add(StatRow(("GHz", _cpuFreq), ("W", _cpuWatts), ("°C", _cpuTemp)));
+        panel.Children.Add(StatRow((_cpuFreqCaption, _cpuFreq), Cap("W", _cpuWatts), Cap("°C", _cpuTemp)));
+        UpdateFreqCaption();
 
         // Both graphs live stacked; only one is visible. The % label overlays whichever shows.
         _cpuGraphHost.Children.Add(_cpuSpark);
@@ -263,6 +268,19 @@ internal sealed class MainWindow : AppBarWindow
         _cpuCoreSpark.Visibility = perCore ? Visibility.Visible : Visibility.Collapsed;
     }
 
+    /// <summary>Hover on any sparkline reads the value at that instant; each needs its units.</summary>
+    private void ConfigureSparklineHovers()
+    {
+        static string Pct(float v) => v.ToString("F0", CultureInfo.InvariantCulture) + " %";
+        double secs = _cfg.RefreshMs / 1000.0;
+
+        _cpuSpark.Format = Pct; _cpuSpark.SecondsPerSample = secs;
+        _gpuSpark.Format = Pct; _gpuSpark.SecondsPerSample = secs;
+
+        _netSpark.Format = v => Theme.Bytes(v);
+        _netSpark.LabelA = "DL"; _netSpark.LabelB = "UL"; _netSpark.SecondsPerSample = secs;
+    }
+
     private UIElement BuildRam()
     {
         var panel = new StackPanel();
@@ -276,7 +294,7 @@ internal sealed class MainWindow : AppBarWindow
     private UIElement BuildGpu()
     {
         var panel = new StackPanel();
-        panel.Children.Add(StatRow(("W", _gpuWatts), ("°C", _gpuTemp), ("fan %", _gpuFan)));
+        panel.Children.Add(StatRow(Cap("W", _gpuWatts), Cap("°C", _gpuTemp), Cap("fan %", _gpuFan)));
         panel.Children.Add(Overlay(_gpuSpark, _gpuPct));
         panel.Children.Add(SpacedTop(_vramText, 4));
         _vramMeter.Margin = new Thickness(0, 3, 0, 3);
@@ -298,18 +316,33 @@ internal sealed class MainWindow : AppBarWindow
 
     private UIElement BuildDisks() => _diskPanels;
 
-    /// <summary>Rebuilt only when the set of disks changes, so each sparkline keeps its history.</summary>
-    private void SyncDiskBlocks(ref Snapshot s)
+    /// <summary>Physical-disk indices that pass the visibility filters, in order.</summary>
+    private List<int> VisibleDisks(ref Snapshot s)
     {
-        bool same = _diskBlocks.Count == s.DiskCount;
-        for (int i = 0; same && i < s.DiskCount; i++)
-            same = _diskBlocks[i].Key == NameField.Get(ref s.Disks[i].Name);
+        var list = new List<int>(s.DiskCount);
+        for (int i = 0; i < s.DiskCount; i++)
+        {
+            ref var d = ref s.Disks[i];
+            if (_cfg.HideVirtualDisks && d.IsVirtual != 0) continue;
+            if (_cfg.HideRemovableDisks && d.IsRemovable != 0) continue;
+            if (_cfg.HideSystemDisk && d.IsSystem != 0) continue;
+            list.Add(i);
+        }
+        return list;
+    }
+
+    /// <summary>Rebuilt only when the visible set of disks changes, so sparklines keep history.</summary>
+    private void SyncDiskBlocks(ref Snapshot s, List<int> visible)
+    {
+        bool same = _diskBlocks.Count == visible.Count;
+        for (int i = 0; same && i < visible.Count; i++)
+            same = _diskBlocks[i].Key == NameField.Get(ref s.Disks[visible[i]].Name);
         if (same) return;
 
         _diskBlocks.Clear();
         _diskPanels.Children.Clear();
 
-        for (int i = 0; i < s.DiskCount; i++)
+        foreach (int di in visible)
         {
             var head = Theme.Text("", 10.5, Theme.InkSecondary);
             var temp = Theme.Text("", 10.5, Theme.InkSecondary, mono: true);
@@ -327,7 +360,13 @@ internal sealed class MainWindow : AppBarWindow
             var activeText = Theme.Text("", 9.5, Theme.InkSecondary, mono: true);
             var active = new BarMeter(Theme.SeriesCpu) { Margin = new Thickness(0, 2, 0, 2) };
 
-            var spark = new Sparkline(Theme.SeriesIn, Theme.SeriesOut, height: 22) { Margin = new Thickness(0, 2, 0, 2) };
+            var spark = new Sparkline(Theme.SeriesIn, Theme.SeriesOut, height: 22)
+            {
+                Margin = new Thickness(0, 2, 0, 2),
+                SecondsPerSample = _cfg.RefreshMs / 1000.0,
+                Format = v => Theme.Bytes(v),
+                LabelA = "R", LabelB = "W",
+            };
             var rates = Theme.Text("", 9.5, Theme.InkMuted, mono: true);
 
             var block = new StackPanel { Margin = new Thickness(0, 0, 0, 7) };
@@ -339,7 +378,7 @@ internal sealed class MainWindow : AppBarWindow
             block.Children.Add(rates);
             _diskPanels.Children.Add(block);
 
-            _diskBlocks.Add(new DiskBlock(NameField.Get(ref s.Disks[i].Name), head, temp, sub, active, activeText, spark, rates));
+            _diskBlocks.Add(new DiskBlock(NameField.Get(ref s.Disks[di].Name), head, temp, sub, active, activeText, spark, rates));
         }
     }
 
@@ -389,14 +428,13 @@ internal sealed class MainWindow : AppBarWindow
         return panel;
     }
 
-    private static UIElement StatRow(params (string Label, TextBlock Value)[] stats)
+    private UIElement StatRow(params (TextBlock Caption, TextBlock Value)[] stats)
     {
         var grid = new UniformGrid { Rows = 1, Columns = stats.Length, Margin = new Thickness(0, 0, 0, 4) };
-        foreach (var (label, value) in stats)
+        foreach (var (caption, value) in stats)
         {
             var cell = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
             value.HorizontalAlignment = HorizontalAlignment.Center;
-            var caption = Theme.Text(label, 9, Theme.InkMuted);
             caption.HorizontalAlignment = HorizontalAlignment.Center;
             cell.Children.Add(value);
             cell.Children.Add(caption);
@@ -404,6 +442,11 @@ internal sealed class MainWindow : AppBarWindow
         }
         return grid;
     }
+
+    private static (TextBlock, TextBlock) Cap(string label, TextBlock value) => (Theme.Text(label, 9, Theme.InkMuted), value);
+
+    private void UpdateFreqCaption() =>
+        _cpuFreqCaption.Text = _cfg.CpuFreqMode switch { 1 => "GHz medio", 2 => "GHz mediana", _ => "GHz máx" };
 
     private static UIElement Overlay(Sparkline spark, TextBlock label)
     {
@@ -484,6 +527,42 @@ internal sealed class MainWindow : AppBarWindow
         ToolTipService.SetToolTip(cpuGraph, "Superpone las 16 curvas de core; el total va encima. Desmarcado, solo el total.");
         menu.Items.Add(cpuGraph);
 
+        var freqMode = new MenuItem { Header = "Frecuencia CPU" };
+        (int Mode, string Label)[] modes = [(0, "Mejor núcleo"), (1, "Media"), (2, "Mediana")];
+        foreach (var (mode, label) in modes)
+        {
+            var item = new MenuItem { Header = label, IsCheckable = true, IsChecked = _cfg.CpuFreqMode == mode };
+            item.Click += (_, _) =>
+            {
+                _cfg.CpuFreqMode = mode;
+                foreach (var o in freqMode.Items.OfType<MenuItem>()) o.IsChecked = false;
+                item.IsChecked = true;
+                UpdateFreqCaption();
+                _cfg.Save();
+            };
+            freqMode.Items.Add(item);
+        }
+        ToolTipService.SetToolTip(freqMode, "Mejor núcleo muestra el boost que alcanza el core más rápido (p. ej. 5.05 GHz en juegos).");
+        menu.Items.Add(freqMode);
+
+        var disks = new MenuItem { Header = "Discos" };
+        void DiskFilter(string label, Func<bool> get, Action<bool> set)
+        {
+            var item = new MenuItem { Header = label, IsCheckable = true, IsChecked = get() };
+            item.Click += (_, _) =>
+            {
+                set(item.IsChecked);
+                _diskBlocks.Clear();
+                _diskPanels.Children.Clear();   // force a rebuild against the new filter
+                _cfg.Save();
+            };
+            disks.Items.Add(item);
+        }
+        DiskFilter("Ocultar discos virtuales", () => _cfg.HideVirtualDisks, v => _cfg.HideVirtualDisks = v);
+        DiskFilter("Ocultar discos extraíbles", () => _cfg.HideRemovableDisks, v => _cfg.HideRemovableDisks = v);
+        DiskFilter("Ocultar disco del sistema", () => _cfg.HideSystemDisk, v => _cfg.HideSystemDisk = v);
+        menu.Items.Add(disks);
+
         var refresh = new MenuItem { Header = "Refresco" };
         foreach (int ms in (int[])[500, 1000, 2000, 5000])
         {
@@ -507,6 +586,11 @@ internal sealed class MainWindow : AppBarWindow
         var left = new MenuItem { Header = "Borde izquierdo", IsCheckable = true, IsChecked = _cfg.EdgeLeft };
         left.Click += (_, _) => { _cfg.EdgeLeft = left.IsChecked; SetMinimized(_cfg.Minimized); };
         place.Items.Add(left);
+
+        var clickThrough = new MenuItem { Header = "Ignorar clics (pasan a través)", IsCheckable = true, IsChecked = _cfg.ClickThrough };
+        clickThrough.Click += (_, _) => { _cfg.ClickThrough = clickThrough.IsChecked; SetClickThrough(_cfg.ClickThrough); _cfg.Save(); };
+        ToolTipService.SetToolTip(clickThrough, "Los clics atraviesan el panel hacia la ventana de detrás. Útil en flotante. Vuelve a activarlo desde la bandeja.");
+        place.Items.Add(clickThrough);
 
         place.Items.Add(new Separator());
         for (int i = 0; i < _monitors.Count; i++)
@@ -572,6 +656,9 @@ internal sealed class MainWindow : AppBarWindow
     {
         _cfg.RefreshMs = ms;
         _timer.Interval = TimeSpan.FromMilliseconds(ms);
+        double secs = ms / 1000.0;
+        _cpuSpark.SecondsPerSample = _gpuSpark.SecondsPerSample = _netSpark.SecondsPerSample = secs;
+        foreach (var b in _diskBlocks) b.Spark.SecondsPerSample = secs;
         foreach (var o in group.Items.OfType<MenuItem>()) o.IsChecked = false;
         foreach (var o in group.Items.OfType<MenuItem>())
             if (o.Header is string h && h == (ms >= 1000 ? $"{ms / 1000} s" : $"{ms} ms")) o.IsChecked = true;
@@ -621,12 +708,13 @@ internal sealed class MainWindow : AppBarWindow
         var ci = CultureInfo.InvariantCulture;
         ref var c = ref s.Cpu;
 
-        string ghz = float.IsNaN(c.FrequencyMhz) ? "" : string.Create(ci, $" {c.FrequencyMhz / 1000:F2}GHz");
+        float freq = _cfg.CpuFreqMode switch { 1 => c.FreqMeanMhz, 2 => c.FreqMedianMhz, _ => c.FreqBestMhz };
+        string ghz = float.IsNaN(freq) ? "" : string.Create(ci, $" {freq / 1000:F2}GHz");
         Find("cpu").SetSummary(string.Create(ci, $"{c.TotalUsagePct,3:F0}%{ghz}{W(c.PackagePowerW)}"));
         if (Find("cpu").IsUpdateWorthy())
         {
             _cpuPct.Text = string.Create(ci, $"{c.TotalUsagePct:F0} %");
-            _cpuFreq.Text = float.IsNaN(c.FrequencyMhz) ? "—" : string.Create(ci, $"{c.FrequencyMhz / 1000:F2}");
+            _cpuFreq.Text = float.IsNaN(freq) ? "—" : string.Create(ci, $"{freq / 1000:F2}");
             _cpuWatts.Text = float.IsNaN(c.PackagePowerW) ? "—" : string.Create(ci, $"{c.PackagePowerW:F1}");
             _cpuTemp.Text = float.IsNaN(c.TempC) ? "—" : string.Create(ci, $"{c.TempC:F1}");
             if (_cfg.CpuPerCoreGraph) _cpuCoreSpark.Push(ref s);
@@ -709,20 +797,21 @@ internal sealed class MainWindow : AppBarWindow
             }
         }
 
+        var visibleDisks = VisibleDisks(ref s);
         double rd = 0, wr = 0, busiest = 0;
-        for (int i = 0; i < s.DiskCount; i++)
+        foreach (int di in visibleDisks)
         {
-            rd += s.Disks[i].ReadBytesPerSec;
-            wr += s.Disks[i].WriteBytesPerSec;
-            if (!float.IsNaN(s.Disks[i].ActivePct)) busiest = Math.Max(busiest, s.Disks[i].ActivePct);
+            rd += s.Disks[di].ReadBytesPerSec;
+            wr += s.Disks[di].WriteBytesPerSec;
+            if (!float.IsNaN(s.Disks[di].ActivePct)) busiest = Math.Max(busiest, s.Disks[di].ActivePct);
         }
         Find("disk").SetSummary(string.Create(ci, $"{busiest,3:F0}%  R{Theme.BytesShort(rd)} W{Theme.BytesShort(wr)}"));
         if (Find("disk").IsUpdateWorthy())
         {
-            SyncDiskBlocks(ref s);
-            for (int i = 0; i < s.DiskCount && i < _diskBlocks.Count; i++)
+            SyncDiskBlocks(ref s, visibleDisks);
+            for (int i = 0; i < visibleDisks.Count && i < _diskBlocks.Count; i++)
             {
-                ref var d = ref s.Disks[i];
+                ref var d = ref s.Disks[visibleDisks[i]];
                 var b = _diskBlocks[i];
 
                 // A disk with no mounted volume (the WSL vHD) has no label; fall back to its model.
@@ -862,6 +951,8 @@ internal sealed class MainWindow : AppBarWindow
     }
 
     public void SetMinimizedForTest(bool minimized) => SetMinimized(minimized);
+
+    public void ForceHoverForTest() { _cpuSpark.ForceHover(0.5); _netSpark.ForceHover(0.5); }
 
     /// <summary>Walks the visual tree and reports every TextBlock's text, size and brush.</summary>
     public void DumpText()

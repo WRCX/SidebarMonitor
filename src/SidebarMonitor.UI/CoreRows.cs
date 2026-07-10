@@ -123,7 +123,13 @@ internal sealed class CoreRows : FrameworkElement
             double barY = y + BarGap;
             double barH = RowHeight - BarGap * 2;
 
-            Draw(dc, Text(i.ToString(CultureInfo.InvariantCulture), 9, Theme.InkMuted, monoFace, dpi), indexW, y, barH, rightAlign: true);
+            // Index and dominant name both wear the dominant process's colour, so the eye links
+            // the number, the bar and the label without reading text.
+            Brush dominantBrush = row.Segments.Length == 0
+                ? Theme.InkMuted
+                : row.Segments[0].Kernel ? Theme.KernelFill : Theme.ProcessBrush(row.Segments[0].Name);
+
+            Draw(dc, Text(i.ToString(CultureInfo.InvariantCulture), 9, dominantBrush, monoFace, dpi), indexW, y, barH, rightAlign: true);
 
             dc.DrawRoundedRectangle(Theme.Grid, null, new WRect(barX, barY, barW, barH), 2, 2);
 
@@ -161,11 +167,12 @@ internal sealed class CoreRows : FrameworkElement
                  row.Usage >= 90 ? Theme.InkPrimary : Theme.InkSecondary, monoFace, dpi),
                  barX + barW + pctW + 2, y, barH, rightAlign: true);
 
-            // Direct label: identity never rides on colour alone.
+            // Direct label in the dominant process's colour: extra visual cue, and identity
+            // still never rides on colour alone because the name is right there in text.
             string dominant = row.Segments.Length > 0 ? row.Segments[0].Name : "";
             if (dominant.Length > 0)
             {
-                var ft = Text(dominant, 9, Theme.InkMuted, uiFace, dpi);
+                var ft = Text(dominant, 9, dominantBrush, uiFace, dpi);
                 ft.MaxTextWidth = Math.Max(10, nameW);
                 ft.MaxLineCount = 1;
                 ft.Trimming = TextTrimming.CharacterEllipsis;

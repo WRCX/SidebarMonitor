@@ -57,6 +57,7 @@ internal static class Program
                 timer.Tick += (_, _) =>
                 {
                     timer.Stop();
+                    if (args.Contains("--hover")) win.ForceHoverForTest();
                     if (args.Contains("--dump")) win.DumpText();
                     if (shot is not null)
                     {

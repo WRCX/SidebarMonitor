@@ -4,7 +4,8 @@ using SidebarMonitor.Shared;
 
 namespace SidebarMonitor.Agent;
 
-internal sealed record DiskIdentity(int Index, string Model, string Bus, DiskMedia Media, ulong SizeBytes, string Label);
+internal sealed record DiskIdentity(int Index, string Model, string Bus, DiskMedia Media, ulong SizeBytes,
+                                    string Label, bool Removable, bool Virtual, bool System);
 
 /// <summary>
 /// Static facts about the physical disks: model, SSD-vs-HDD, bus, size, and the labels of the
@@ -83,8 +84,10 @@ internal static class DiskInventory
             string head = space < 0 ? instance : instance[..space];
             if (!int.TryParse(head, out int index) || result.ContainsKey(index)) continue;
 
-            string label = space < 0 ? "" : Labels(instance[(space + 1)..]);
-            var id = Query(index, label);
+            string letters = space < 0 ? "" : instance[(space + 1)..];
+            string label = letters.Length == 0 ? "" : Labels(letters);
+            bool system = HoldsSystemVolume(letters);
+            var id = Query(index, label, system);
             if (id is not null) result[index] = id;
         }
 
@@ -108,7 +111,17 @@ internal static class DiskInventory
         return string.Join(" / ", parts);
     }
 
-    private static DiskIdentity? Query(int index, string label)
+    private static readonly char SystemDrive = (Environment.GetEnvironmentVariable("SystemDrive") ?? "C:")[0];
+
+    private static bool HoldsSystemVolume(string letters)
+    {
+        foreach (string token in letters.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            if (token.Length >= 1 && char.ToUpperInvariant(token[0]) == char.ToUpperInvariant(SystemDrive))
+                return true;
+        return false;
+    }
+
+    private static DiskIdentity? Query(int index, string label, bool system)
     {
         // Desired access 0: enough for property queries, and works without elevation.
         using var h = CreateFileW($@"\\.\PhysicalDrive{index}", 0, FileShareReadWrite, IntPtr.Zero, OpenExisting, 0, IntPtr.Zero);
@@ -153,7 +166,11 @@ internal static class DiskInventory
                 if (len > 0) size = (ulong)len;
             }
 
-            return new DiskIdentity(index, model.Trim(), bus, media, size, label);
+            bool removable = bus is "USB" or "SD" or "MMC" or "1394";
+            bool virtualDisk = bus is "Virtual" or "vHD" or "Spaces"
+                || model.Contains("Virtual", StringComparison.OrdinalIgnoreCase);
+
+            return new DiskIdentity(index, model.Trim(), bus, media, size, label, removable, virtualDisk, system);
         }
         finally { Marshal.FreeHGlobal(buf); }
     }

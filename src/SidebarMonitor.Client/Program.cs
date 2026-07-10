@@ -73,7 +73,7 @@ internal static class Program
 
         ref var c = ref s.Cpu;
         Console.WriteLine($"CPU  {NameField.Get(ref c.Name)}");
-        Console.WriteLine(string.Create(ci, $"  uso {c.TotalUsagePct,5:F1} %   {c.FrequencyMhz / 1000,4:F2} GHz   {c.PackagePowerW,5:F1} W   {c.TempC,4:F1} °C"));
+        Console.WriteLine(string.Create(ci, $"  uso {c.TotalUsagePct,5:F1} %   {c.FreqBestMhz / 1000,4:F2} GHz máx / {c.FreqMeanMhz / 1000:F2} media / {c.FreqMedianMhz / 1000:F2} mediana   {c.PackagePowerW,5:F1} W   {c.TempC,4:F1} °C"));
 
         if (s.EtwAvailable)
         {
