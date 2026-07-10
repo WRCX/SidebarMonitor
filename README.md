@@ -325,16 +325,29 @@ switches de Hyper-V también tienen una. Debajo, el **tráfico por proceso** que
 (`chrome ↓1,2M`), no la lista de adaptadores. Sin el helper, esa lista se sustituye por una
 nota. Cruzado: con una descarga, `pwsh ↓29 MiB/s` contra `Ethernet ↓30 MiB/s`.
 
-### Gráfica de CPU
+### CPU: vista por proceso o vista por core
 
-Dos modos, conmutables desde el menú (**CPU: una línea por core**):
+El menú **CPU: vista por core** conmuta el bloque entero entre dos vistas, **con un solo
+lenguaje de color cada una** — nunca los dos a la vez, que era lo confuso.
 
-- **Total** (por defecto): una sola curva del uso agregado, con relleno.
-- **Por core**: las 16 curvas superpuestas, **cada una con su propio color** (una rueda HSL
-  espaciada 22,5°, escalonada para el fondo oscuro), con el total en blanco grueso encima para
-  que se lea sin ambigüedad. Nada de rellenos — 16 áreas apiladas serían barro. Con este modo
-  activo, **el número de cada core toma su mismo color**, así se emparejan línea y número; con
-  el modo desactivado, el número vuelve al color del proceso dominante.
+**Vista por proceso** (por defecto):
+- Gráfica: una curva del uso total, con relleno.
+- Barras: segmentadas por los procesos que ocupan el core.
+- Número de core y nombre del dominante: en el color del proceso dominante.
+- Todo el color significa *proceso*.
+
+**Vista por core**:
+- Gráfica: las 16 curvas superpuestas, **cada una con su color** (rueda HSL espaciada 22,5°,
+  escalonada para el fondo oscuro), con el total en blanco grueso encima. Nada de rellenos —
+  16 áreas apiladas serían barro.
+- Barras: un relleno sólido del **color del core** (la longitud es el uso).
+- Número de core: el mismo color del core, así se emparejan línea y barra.
+- Nombre del proceso dominante: en gris neutro, para no competir; el detalle por proceso
+  (top-3) está en el tooltip.
+- Todo el color significa *core*.
+
+16 cores son 16 categorías forzadas que no se pueden plegar, así que la rueda generada es la
+opción legítima para ese caso.
 
 ### Frecuencia de CPU: mejor núcleo, media o mediana
 

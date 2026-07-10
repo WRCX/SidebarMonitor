@@ -518,14 +518,14 @@ internal sealed class MainWindow : AppBarWindow
         }
         menu.Items.Add(sections);
 
-        var cpuGraph = new MenuItem { Header = "CPU: una línea por core", IsCheckable = true, IsChecked = _cfg.CpuPerCoreGraph };
+        var cpuGraph = new MenuItem { Header = "CPU: vista por core", IsCheckable = true, IsChecked = _cfg.CpuPerCoreGraph };
         cpuGraph.Click += (_, _) =>
         {
             _cfg.CpuPerCoreGraph = cpuGraph.IsChecked;
             ApplyCpuGraphMode();
             _cfg.Save();
         };
-        ToolTipService.SetToolTip(cpuGraph, "Superpone las 16 curvas de core; el total va encima. Desmarcado, solo el total.");
+        ToolTipService.SetToolTip(cpuGraph, "Vista por core: gráfica de 16 curvas y barras coloreadas por core, proceso al pasar el ratón. Desmarcado: vista por proceso, con las barras segmentadas y el uso total.");
         menu.Items.Add(cpuGraph);
 
         var freqMode = new MenuItem { Header = "Frecuencia CPU" };

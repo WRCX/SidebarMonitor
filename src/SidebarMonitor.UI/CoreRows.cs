@@ -46,8 +46,10 @@ internal sealed class CoreRows : FrameworkElement
     private int _hoverRow = -1;
 
     /// <summary>
-    /// When the composite per-core graph is on, the index number wears its core's graph colour so
-    /// number and line match. Off, it wears the dominant process's colour (links number and bar).
+    /// Two views, one colour language each. Core view (paired with the composite graph): the bar,
+    /// the index and the graph line all wear the core's colour; the process is on hover. Process
+    /// view: the bar is segmented by process, and the index and name wear the dominant process's
+    /// colour. Never both colour systems at once — that was the ambiguity.
     /// </summary>
     public bool UseCoreColors { get; set; }
 
@@ -129,13 +131,10 @@ internal sealed class CoreRows : FrameworkElement
             double barY = y + BarGap;
             double barH = RowHeight - BarGap * 2;
 
-            // The dominant process's colour: links the bar and its text label.
             Brush dominantBrush = row.Segments.Length == 0
                 ? Theme.InkMuted
                 : row.Segments[0].Kernel ? Theme.KernelFill : Theme.ProcessBrush(row.Segments[0].Name);
 
-            // The index number matches the composite graph line when that graph is on, otherwise
-            // the dominant process, so the number always points at whatever the CPU visual shows.
             Brush indexBrush = UseCoreColors ? Theme.CoreBrush(i) : dominantBrush;
             Draw(dc, Text(i.ToString(CultureInfo.InvariantCulture), 9, indexBrush, monoFace, dpi), indexW, y, barH, rightAlign: true);
 
@@ -146,14 +145,19 @@ internal sealed class CoreRows : FrameworkElement
             {
                 dc.PushClip(new RectangleGeometry(new WRect(barX, barY, filled, barH), 2, 2));
 
-                if (row.Segments.Length == 0)
+                if (UseCoreColors)
+                {
+                    // Core view: a single fill in the core's colour, matching its graph line. Load
+                    // is the length; who runs on it is on hover, not in colour.
+                    dc.DrawRectangle(Theme.CoreBrush(i), null, new WRect(barX, barY, filled, barH));
+                }
+                else if (row.Segments.Length == 0)
                 {
                     dc.DrawRectangle(_plainFill, null, new WRect(barX, barY, filled, barH));
                 }
                 else
                 {
-                    // Shares are of non-idle samples, so they subdivide `filled`, not the track.
-                    // A 1px gap between adjacent fills keeps two similar hues from merging.
+                    // Process view: shares subdivide `filled`. A 1px gap keeps hues from merging.
                     const double gap = 1;
                     double x = barX, covered = 0;
                     foreach (var seg in row.Segments)
@@ -175,12 +179,12 @@ internal sealed class CoreRows : FrameworkElement
                  row.Usage >= 90 ? Theme.InkPrimary : Theme.InkSecondary, monoFace, dpi),
                  barX + barW + pctW + 2, y, barH, rightAlign: true);
 
-            // Direct label in the dominant process's colour: extra visual cue, and identity
-            // still never rides on colour alone because the name is right there in text.
+            // The dominant process's name. In process view it wears the process colour (matches
+            // its bar segment); in core view it stays muted so nothing competes with the core hue.
             string dominant = row.Segments.Length > 0 ? row.Segments[0].Name : "";
             if (dominant.Length > 0)
             {
-                var ft = Text(dominant, 9, dominantBrush, uiFace, dpi);
+                var ft = Text(dominant, 9, UseCoreColors ? Theme.InkMuted : dominantBrush, uiFace, dpi);
                 ft.MaxTextWidth = Math.Max(10, nameW);
                 ft.MaxLineCount = 1;
                 ft.Trimming = TextTrimming.CharacterEllipsis;
