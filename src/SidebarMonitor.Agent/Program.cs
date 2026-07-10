@@ -67,6 +67,10 @@ internal static class Program
             pdh.Collect();
             var inventory = DiskInventory.Enumerate(pdh.DiskRead().Select(d => d.Instance));
 
+            // NVMe drive temperature we read ourselves (unelevated), no HWiNFO. SATA still needs
+            // HWiNFO (ATA pass-through wants admin).
+            using var diskTemps = new DiskTemps(inventory.Where(kv => kv.Value.Bus == "NVMe").Select(kv => kv.Key));
+
             Console.WriteLine($"Agente en marcha. {SnapshotLayout.MapName}, {writer.SizeBytes} B, cada {intervalMs} ms.");
             Console.WriteLine($"  HWiNFO: {(hwi is not null ? $"OK ({hwi.CpuName})" : $"no disponible - {hwiError}")}");
             Console.WriteLine($"  NVML:   {(nvml is not null ? $"OK ({nvml.Count} GPU)" : $"no disponible - {nvmlError}")}");
@@ -148,7 +152,7 @@ internal static class Program
                 FillCpu(ref snapshot.Cpu, pdh, hwiLive ? hwi : null);
                 FillMem(ref snapshot.Mem, pdh);
                 FillGpus(ref snapshot, nvml);
-                FillDisks(ref snapshot, pdh, inventory, hwiLive ? hwi : null);
+                FillDisks(ref snapshot, pdh, inventory, diskTemps, hwiLive ? hwi : null);
 
                 // Adapters come and go (VPN up, dock unplugged); rescanning every tick is wasteful.
                 if (Stopwatch.GetElapsedTime(lastNicRefresh).TotalSeconds >= 30)
@@ -262,7 +266,7 @@ internal static class Program
         for (int i = 0; i < s.GpuCount; i++) nvml!.Fill(i, ref s.Gpus[i]);
     }
 
-    private static void FillDisks(ref Snapshot s, PdhQuery pdh, Dictionary<int, DiskIdentity> inventory, HwiSensors? hwi)
+    private static void FillDisks(ref Snapshot s, PdhQuery pdh, Dictionary<int, DiskIdentity> inventory, DiskTemps diskTemps, HwiSensors? hwi)
     {
         var read = pdh.DiskRead();
         var write = pdh.DiskWrite();
@@ -296,7 +300,12 @@ internal static class Program
                 d.IsRemovable = (byte)(id.Removable ? 1 : 0);
                 d.IsVirtual = (byte)(id.Virtual ? 1 : 0);
                 d.IsSystem = (byte)(id.System ? 1 : 0);
-                d.TempC = (float)(hwi?.DriveTempC(id.Model) ?? double.NaN);
+
+                // Our own NVMe reading first; HWiNFO only as fallback (SATA, or NVMe if the IOCTL
+                // ever fails). This is the first sensor we fully own — no HWiNFO for NVMe temp.
+                double temp = diskTemps.TempC(index);
+                if (double.IsNaN(temp)) temp = hwi?.DriveTempC(id.Model) ?? double.NaN;
+                d.TempC = (float)temp;
             }
             else
             {
