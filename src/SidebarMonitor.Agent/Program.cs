@@ -219,6 +219,7 @@ internal static class Program
         var read = pdh.DiskRead();
         var write = pdh.DiskWrite();
         var queue = pdh.DiskQueue();
+        var idle = pdh.DiskIdle();
 
         int n = 0;
         for (int i = 0; i < read.Count && n < SnapshotLayout.MaxDisks; i++)
@@ -231,6 +232,7 @@ internal static class Program
             d.ReadBytesPerSec = read[i].Value;
             d.WriteBytesPerSec = i < write.Count ? write[i].Value : 0;
             d.QueueLength = i < queue.Count ? queue[i].Value : 0;
+            d.ActivePct = i < idle.Count ? Clamp100(100.0 - idle[i].Value) : float.NaN;
 
             int space = instance.IndexOf(' ');
             string head = space < 0 ? instance : instance[..space];

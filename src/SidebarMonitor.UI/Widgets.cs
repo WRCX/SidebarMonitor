@@ -154,6 +154,7 @@ internal sealed class BarMeter : FrameworkElement
 internal sealed class Section : StackPanel
 {
     public string Key { get; }
+    public string Title { get; }
     public UIElement Body { get; }
     private readonly TextBlock _arrow;
     private readonly TextBlock _summary;
@@ -162,6 +163,7 @@ internal sealed class Section : StackPanel
     public Section(string key, string title, UIElement body)
     {
         Key = key;
+        Title = title;
         Body = body;
 
         _arrow = Theme.Text("▾", 9, Theme.InkMuted);

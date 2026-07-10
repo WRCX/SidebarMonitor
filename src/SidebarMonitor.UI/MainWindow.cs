@@ -1,9 +1,9 @@
 using System.Globalization;
 using System.IO;
-using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -13,16 +13,21 @@ namespace SidebarMonitor.UI;
 
 internal sealed class MainWindow : AppBarWindow
 {
-    private static readonly string StatePath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "SidebarMonitor", "ui.json");
+    private readonly UiConfig _cfg;
+    private readonly List<(IntPtr Handle, MonitorInfo Info)> _monitors;
 
-    private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(1) };
+    private readonly DispatcherTimer _timer = new();
     private SeqLockReader<Snapshot>? _reader;
     private System.Diagnostics.Process? _ownedAgent;
+    private TrayIcon? _tray;
 
     private readonly List<Section> _sections = [];
     private readonly TextBlock _status;
+    private readonly ScrollViewer _body;
+    private readonly Border _tab;
+    private readonly TextBlock _tabArrow;
+    private readonly TextBlock _minButton;
+    private readonly Border _titleBar;
 
     // CPU
     private readonly TextBlock _cpuFreq = Stat();
@@ -47,24 +52,28 @@ internal sealed class MainWindow : AppBarWindow
     private readonly TextBlock _vramText = Value();
     private readonly TextBlock _gpuClocks = Muted();
 
-    // NET / DISK
+    // NET
     private readonly Sparkline _netSpark = new(Theme.SeriesIn, Theme.SeriesOut);
     private readonly TextBlock _netDl = Value();
     private readonly TextBlock _netUl = Value();
     private readonly StackPanel _nicRows = new();
 
-    /// <summary>One block per physical disk, rebuilt only if the set of disks changes.</summary>
+    // DISK
     private readonly StackPanel _diskPanels = new();
     private readonly List<DiskBlock> _diskBlocks = [];
 
-    private sealed record DiskBlock(string Key, TextBlock Head, TextBlock Temp, TextBlock Sub, Sparkline Spark, TextBlock Rates);
+    private sealed record DiskBlock(string Key, TextBlock Head, TextBlock Temp, TextBlock Sub,
+                                    BarMeter Active, TextBlock ActiveText, Sparkline Spark, TextBlock Rates);
 
     // TOP
     private readonly (TextBlock Name, TextBlock Cpu, TextBlock Mem)[] _topRows;
     private readonly TextBlock _totals = Muted();
 
-    public MainWindow(IntPtr monitor, uint edge, int width) : base(monitor, edge, width)
+    public MainWindow(UiConfig cfg, List<(IntPtr, MonitorInfo)> monitors)
     {
+        _cfg = cfg;
+        _monitors = monitors;
+
         Title = "SidebarMonitor";
         Background = Theme.Page;
 
@@ -73,10 +82,13 @@ internal sealed class MainWindow : AppBarWindow
         _gpuPct = Theme.Text("", 16, Theme.InkPrimary, mono: true);
         _gpuPct.FontWeight = FontWeights.Bold;
         _status = Theme.Text("esperando al agente…", 10, Theme.InkMuted);
+        _minButton = Theme.Text("»", 11, Theme.InkMuted);
+        _tabArrow = Theme.Text("‹", 12, Theme.InkMuted);
         _topRows = new (TextBlock, TextBlock, TextBlock)[8];
 
         var stack = new StackPanel();
-        stack.Children.Add(BuildTitleBar());
+        _titleBar = BuildTitleBar();
+        stack.Children.Add(_titleBar);
         Add(stack, new Section("cpu", "CPU", BuildCpu()));
         Add(stack, new Section("ram", "MEMORIA", BuildRam()));
         Add(stack, new Section("gpu", "GPU", BuildGpu()));
@@ -84,44 +96,141 @@ internal sealed class MainWindow : AppBarWindow
         Add(stack, new Section("disk", "DISCOS", BuildDisks()));
         Add(stack, new Section("top", "PROCESOS", BuildTop()));
 
-        Content = new ScrollViewer
+        _body = new ScrollViewer
         {
             Content = stack,
             Background = Theme.Page,
             VerticalScrollBarVisibility = ScrollBarVisibility.Hidden,
         };
 
-        ContextMenu = BuildMenu();
-        LoadState();
+        _tabArrow.HorizontalAlignment = HorizontalAlignment.Center;
+        _tabArrow.VerticalAlignment = VerticalAlignment.Center;
+        _tab = new Border { Background = Theme.Page, Child = _tabArrow, Cursor = Cursors.Hand, Visibility = Visibility.Collapsed };
+        _tab.MouseLeftButtonUp += (_, _) => SetMinimized(false);
+        ToolTipService.SetToolTip(_tab, "Abrir SidebarMonitor");
 
+        var root = new Grid();
+        root.Children.Add(_body);
+        root.Children.Add(_tab);
+        Content = root;
+
+        ContextMenu = BuildMenu();
+        LoadSections();
+
+        _timer.Interval = TimeSpan.FromMilliseconds(_cfg.RefreshMs);
         _timer.Tick += (_, _) => Tick();
-        Loaded += (_, _) => { Tick(); _timer.Start(); };
+        Loaded += (_, _) =>
+        {
+            ReapplyPlacement();
+            SetMinimized(_cfg.Minimized);
+            Tick();
+            _timer.Start();
+        };
+    }
+
+    public void AttachTray(TrayIcon tray)
+    {
+        _tray = tray;
+        tray.ToggleRequested += () => Visibility = Visibility == Visibility.Visible ? Visibility.Hidden : Visibility.Visible;
+        tray.ConfigRequested += () => { if (ContextMenu is not null) ContextMenu.IsOpen = true; };
+        tray.ExitRequested += Close;
     }
 
     private void Add(StackPanel stack, Section s)
     {
-        s.StateChanged += SaveState;
+        s.StateChanged += SaveSections;
         _sections.Add(s);
         stack.Children.Add(s);
     }
 
+    // ---------------------------------------------------------------- placement
+
+    private void ReapplyPlacement()
+    {
+        int index = Math.Clamp(_cfg.Monitor, 0, _monitors.Count - 1);
+        ApplyPlacement(_monitors[index].Handle, _cfg.Docked, _cfg.EdgeLeft, _cfg.Width,
+                       _cfg.Minimized, _cfg.Topmost, _cfg.FloatX, _cfg.FloatY, _cfg.FloatHeight);
+    }
+
+    private void SetMinimized(bool minimized)
+    {
+        _cfg.Minimized = minimized;
+        _body.Visibility = minimized ? Visibility.Collapsed : Visibility.Visible;
+        _tab.Visibility = minimized ? Visibility.Visible : Visibility.Collapsed;
+        _tabArrow.Text = _cfg.EdgeLeft ? "›" : "‹";
+        _minButton.Text = _cfg.EdgeLeft ? "«" : "»";
+        ReapplyPlacement();
+        _cfg.Save();
+    }
+
+    // Dragging: the window never activates, so WPF's DragMove is out. Track raw cursor deltas.
+    private bool _dragging;
+    private Native.PointI _dragOrigin;
+    private (int X, int Y) _windowOrigin;
+
+    private void BeginDrag(object sender, MouseButtonEventArgs e)
+    {
+        if (_cfg.Docked || e.ChangedButton != MouseButton.Left) return;
+        Native.GetCursorPos(out _dragOrigin);
+        var r = WindowRect;
+        _windowOrigin = (r.Left, r.Top);
+        _dragging = true;
+        _titleBar.CaptureMouse();
+    }
+
+    private void ContinueDrag(object sender, MouseEventArgs e)
+    {
+        if (!_dragging) return;
+        Native.GetCursorPos(out var now);
+        MoveFloatingTo(_windowOrigin.X + (now.X - _dragOrigin.X), _windowOrigin.Y + (now.Y - _dragOrigin.Y));
+    }
+
+    private void EndDrag(object sender, MouseButtonEventArgs e)
+    {
+        if (!_dragging) return;
+        _dragging = false;
+        _titleBar.ReleaseMouseCapture();
+        var r = WindowRect;
+        _cfg.FloatX = r.Left;
+        _cfg.FloatY = r.Top;
+        _cfg.FloatHeight = r.Height;
+        _cfg.Save();
+    }
+
     // ---------------------------------------------------------------- layout
 
-    private UIElement BuildTitleBar()
+    private Border BuildTitleBar()
     {
-        var grid = new Grid { Margin = new Thickness(8, 6, 8, 4) };
+        var grid = new Grid { Margin = new Thickness(8, 6, 6, 4) };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
         var title = Theme.Text("SIDEBAR MONITOR", 10, Theme.InkMuted);
         title.FontWeight = FontWeights.SemiBold;
+
+        _status.Margin = new Thickness(0, 0, 6, 0);
         Grid.SetColumn(_status, 1);
+
+        _minButton.Cursor = Cursors.Hand;
+        _minButton.Padding = new Thickness(4, 0, 2, 0);
+        _minButton.MouseLeftButtonUp += (_, e) => { e.Handled = true; SetMinimized(true); };
+        ToolTipService.SetToolTip(_minButton, "Minimizar a pestaña");
+        Grid.SetColumn(_minButton, 2);
+
         grid.Children.Add(title);
         grid.Children.Add(_status);
+        grid.Children.Add(_minButton);
+
+        var bar = new Border { Child = grid, Background = Brushes.Transparent };
+        bar.MouseLeftButtonDown += BeginDrag;
+        bar.MouseMove += ContinueDrag;
+        bar.MouseLeftButtonUp += EndDrag;
 
         var panel = new StackPanel();
-        panel.Children.Add(grid);
+        panel.Children.Add(bar);
         panel.Children.Add(new Border { Height = 1, Background = Theme.Grid });
-        return panel;
+        return new Border { Child = panel };
     }
 
     private UIElement BuildCpu()
@@ -168,11 +277,7 @@ internal sealed class MainWindow : AppBarWindow
 
     private UIElement BuildDisks() => _diskPanels;
 
-    /// <summary>
-    /// A block per disk: label + temperature, model/media/bus/size, its own read/write
-    /// sparkline, and the current rates. Rebuilt only when the set of disks changes, so each
-    /// sparkline keeps its history across ticks.
-    /// </summary>
+    /// <summary>Rebuilt only when the set of disks changes, so each sparkline keeps its history.</summary>
     private void SyncDiskBlocks(ref Snapshot s)
     {
         bool same = _diskBlocks.Count == s.DiskCount;
@@ -197,17 +302,23 @@ internal sealed class MainWindow : AppBarWindow
             headGrid.Children.Add(temp);
 
             var sub = Theme.Text("", 9, Theme.InkMuted);
+
+            var activeText = Theme.Text("", 9.5, Theme.InkSecondary, mono: true);
+            var active = new BarMeter(Theme.SeriesCpu) { Margin = new Thickness(0, 2, 0, 2) };
+
             var spark = new Sparkline(Theme.SeriesIn, Theme.SeriesOut, height: 22) { Margin = new Thickness(0, 2, 0, 2) };
             var rates = Theme.Text("", 9.5, Theme.InkMuted, mono: true);
 
-            var block = new StackPanel { Margin = new Thickness(0, 0, 0, 6) };
+            var block = new StackPanel { Margin = new Thickness(0, 0, 0, 7) };
             block.Children.Add(headGrid);
             block.Children.Add(sub);
+            block.Children.Add(activeText);
+            block.Children.Add(active);
             block.Children.Add(spark);
             block.Children.Add(rates);
             _diskPanels.Children.Add(block);
 
-            _diskBlocks.Add(new DiskBlock(NameField.Get(ref s.Disks[i].Name), head, temp, sub, spark, rates));
+            _diskBlocks.Add(new DiskBlock(NameField.Get(ref s.Disks[i].Name), head, temp, sub, active, activeText, spark, rates));
         }
     }
 
@@ -323,24 +434,126 @@ internal sealed class MainWindow : AppBarWindow
     private static TextBlock Value() => Theme.Text("", 11, Theme.InkSecondary, mono: true);
     private static TextBlock Muted() => Theme.Text("", 10, Theme.InkMuted, mono: true);
 
+    // ---------------------------------------------------------------- menu
+
     private ContextMenu BuildMenu()
     {
         var menu = new ContextMenu();
+
+        var sections = new MenuItem { Header = "Secciones" };
         foreach (var s in _sections)
         {
-            var item = new MenuItem { Header = ((TextBlock)((Grid)((Border)s.Children[0]).Child).Children[1]).Text, IsCheckable = true, IsChecked = true };
+            var item = new MenuItem { Header = s.Title, IsCheckable = true, IsChecked = s.Visibility == Visibility.Visible };
             item.Click += (_, _) =>
             {
                 s.Visibility = item.IsChecked ? Visibility.Visible : Visibility.Collapsed;
-                SaveState();
+                SaveSections();
             };
-            menu.Items.Add(item);
+            sections.Items.Add(item);
         }
+        menu.Items.Add(sections);
+
+        var refresh = new MenuItem { Header = "Refresco" };
+        foreach (int ms in (int[])[500, 1000, 2000, 5000])
+        {
+            var item = new MenuItem { Header = ms >= 1000 ? $"{ms / 1000} s" : $"{ms} ms", IsCheckable = true, IsChecked = _cfg.RefreshMs == ms };
+            item.Click += (_, _) => SetRefresh(ms, refresh);
+            refresh.Items.Add(item);
+        }
+        menu.Items.Add(refresh);
+
+        var place = new MenuItem { Header = "Colocación" };
+
+        var topmost = new MenuItem { Header = "Siempre encima", IsCheckable = true, IsChecked = _cfg.Topmost };
+        topmost.Click += (_, _) => { _cfg.Topmost = topmost.IsChecked; ReapplyPlacement(); _cfg.Save(); };
+        place.Items.Add(topmost);
+
+        var docked = new MenuItem { Header = "Anclado al borde", IsCheckable = true, IsChecked = _cfg.Docked };
+        docked.Click += (_, _) => { _cfg.Docked = docked.IsChecked; ReapplyPlacement(); _cfg.Save(); };
+        ToolTipService.SetToolTip(docked, "Anclado reserva espacio: nada lo tapa. Flotante se arrastra por su cabecera.");
+        place.Items.Add(docked);
+
+        var left = new MenuItem { Header = "Borde izquierdo", IsCheckable = true, IsChecked = _cfg.EdgeLeft };
+        left.Click += (_, _) => { _cfg.EdgeLeft = left.IsChecked; SetMinimized(_cfg.Minimized); };
+        place.Items.Add(left);
+
+        place.Items.Add(new Separator());
+        for (int i = 0; i < _monitors.Count; i++)
+        {
+            int index = i;
+            var mi = _monitors[i].Info;
+            var item = new MenuItem
+            {
+                Header = $"Monitor {i + 1} — {mi.rcMonitor.Width}×{mi.rcMonitor.Height}{(mi.dwFlags == 1 ? " (principal)" : "")}",
+                IsCheckable = true,
+                IsChecked = _cfg.Monitor == i,
+            };
+            item.Click += (_, _) =>
+            {
+                _cfg.Monitor = index;
+                foreach (var o in place.Items.OfType<MenuItem>())
+                    if (o.Header is string h && h.StartsWith("Monitor")) o.IsChecked = false;
+                item.IsChecked = true;
+                ReapplyPlacement();
+                _cfg.Save();
+            };
+            place.Items.Add(item);
+        }
+
+        place.Items.Add(new Separator());
+        foreach (int w in (int[])[240, 280, 320, 360])
+        {
+            var item = new MenuItem { Header = $"Ancho {w} px", IsCheckable = true, IsChecked = _cfg.Width == w };
+            item.Click += (_, _) =>
+            {
+                _cfg.Width = w;
+                foreach (var o in place.Items.OfType<MenuItem>())
+                    if (o.Header is string h && h.StartsWith("Ancho")) o.IsChecked = false;
+                item.IsChecked = true;
+                ReapplyPlacement();
+                _cfg.Save();
+            };
+            place.Items.Add(item);
+        }
+        menu.Items.Add(place);
+
         menu.Items.Add(new Separator());
+        var minimize = new MenuItem { Header = "Minimizar a pestaña" };
+        minimize.Click += (_, _) => SetMinimized(true);
+        menu.Items.Add(minimize);
+
+        var hide = new MenuItem { Header = "Ocultar (queda en la bandeja)" };
+        hide.Click += (_, _) => Visibility = Visibility.Hidden;
+        menu.Items.Add(hide);
+
         var exit = new MenuItem { Header = "Salir" };
         exit.Click += (_, _) => Close();
         menu.Items.Add(exit);
+
         return menu;
+    }
+
+    /// <summary>
+    /// The refresh rate is the UI's. The agent samples at its own cadence, so when we own the
+    /// agent we restart it to match; otherwise we only redraw more or less often and say so.
+    /// </summary>
+    private void SetRefresh(int ms, MenuItem group)
+    {
+        _cfg.RefreshMs = ms;
+        _timer.Interval = TimeSpan.FromMilliseconds(ms);
+        foreach (var o in group.Items.OfType<MenuItem>()) o.IsChecked = false;
+        foreach (var o in group.Items.OfType<MenuItem>())
+            if (o.Header is string h && h == (ms >= 1000 ? $"{ms / 1000} s" : $"{ms} ms")) o.IsChecked = true;
+
+        if (_ownedAgent is { HasExited: false })
+        {
+            try { _ownedAgent.Kill(); _ownedAgent.WaitForExit(2000); } catch { }
+            _ownedAgent = null;
+            _reader?.Dispose();
+            _reader = null;
+            TryLaunchAgent();
+        }
+        _cfg.Save();
     }
 
     // ---------------------------------------------------------------- data
@@ -349,11 +562,13 @@ internal sealed class MainWindow : AppBarWindow
     {
         if (_reader is null)
         {
-            _reader = SnapshotChannel.TryOpenReader(out _);
+            _reader = SnapshotChannel.TryOpenReader(out string? err);
             if (_reader is null)
             {
                 TryLaunchAgent();
-                _status.Text = "esperando al agente…";
+                _status.Text = err is not null && err.Contains("versi", StringComparison.OrdinalIgnoreCase)
+                    ? "agente desfasado"
+                    : "esperando al agente…";
                 return;
             }
         }
@@ -364,15 +579,19 @@ internal sealed class MainWindow : AppBarWindow
         var age = DateTime.UtcNow - new DateTime(s.TimestampUtcTicks, DateTimeKind.Utc);
         if (age > TimeSpan.FromSeconds(10))
         {
-            _status.Text = $"agente sin publicar ({age.TotalSeconds:F0} s)";
+            _status.Text = $"agente parado ({age.TotalSeconds:F0} s)";
             return;
         }
         _status.Text = !s.HwiNfoAvailable ? "sin HWiNFO" : !s.EtwAvailable ? "sin ETW" : "";
 
+        // A minimized panel shows nothing; skip every update but keep the reader warm.
+        if (_cfg.Minimized) return;
+
         var ci = CultureInfo.InvariantCulture;
         ref var c = ref s.Cpu;
 
-        Find("cpu").SetSummary(string.Create(ci, $"{c.TotalUsagePct,3:F0}%  {W(c.PackagePowerW)}"));
+        string ghz = float.IsNaN(c.FrequencyMhz) ? "" : string.Create(ci, $" {c.FrequencyMhz / 1000:F2}GHz");
+        Find("cpu").SetSummary(string.Create(ci, $"{c.TotalUsagePct,3:F0}%{ghz}{W(c.PackagePowerW)}"));
         if (Find("cpu").IsUpdateWorthy())
         {
             _cpuPct.Text = string.Create(ci, $"{c.TotalUsagePct:F0} %");
@@ -384,7 +603,7 @@ internal sealed class MainWindow : AppBarWindow
         }
 
         double ramFrac = s.Mem.PhysTotal > 0 ? (double)s.Mem.PhysUsed / s.Mem.PhysTotal : 0;
-        Find("ram").SetSummary(string.Create(ci, $"{ramFrac * 100,3:F0}%"));
+        Find("ram").SetSummary(string.Create(ci, $"{ramFrac * 100,3:F0}%  {Theme.Gib(s.Mem.PhysUsed)}G"));
         if (Find("ram").IsUpdateWorthy())
         {
             _ramText.Text = string.Create(ci, $"{Theme.Gib(s.Mem.PhysUsed)} / {Theme.Gib(s.Mem.PhysTotal)} GiB");
@@ -395,7 +614,7 @@ internal sealed class MainWindow : AppBarWindow
         if (s.GpuCount > 0)
         {
             ref var g = ref s.Gpus[0];
-            Find("gpu").SetSummary(string.Create(ci, $"{g.LoadPct,3:F0}%  {W(g.PowerW)}"));
+            Find("gpu").SetSummary(string.Create(ci, $"{g.LoadPct,3:F0}%  {g.CoreClockMhz}MHz{W(g.PowerW)}"));
             if (Find("gpu").IsUpdateWorthy())
             {
                 _gpuPct.Text = string.Create(ci, $"{g.LoadPct:F0} %");
@@ -426,9 +645,14 @@ internal sealed class MainWindow : AppBarWindow
             }
         }
 
-        double rd = 0, wr = 0;
-        for (int i = 0; i < s.DiskCount; i++) { rd += s.Disks[i].ReadBytesPerSec; wr += s.Disks[i].WriteBytesPerSec; }
-        Find("disk").SetSummary($"R {Theme.BytesShort(rd)}  W {Theme.BytesShort(wr)}");
+        double rd = 0, wr = 0, busiest = 0;
+        for (int i = 0; i < s.DiskCount; i++)
+        {
+            rd += s.Disks[i].ReadBytesPerSec;
+            wr += s.Disks[i].WriteBytesPerSec;
+            if (!float.IsNaN(s.Disks[i].ActivePct)) busiest = Math.Max(busiest, s.Disks[i].ActivePct);
+        }
+        Find("disk").SetSummary(string.Create(ci, $"{busiest,3:F0}%  R{Theme.BytesShort(rd)} W{Theme.BytesShort(wr)}"));
         if (Find("disk").IsUpdateWorthy())
         {
             SyncDiskBlocks(ref s);
@@ -442,6 +666,7 @@ internal sealed class MainWindow : AppBarWindow
                 if (label.Length == 0) label = NameField.Get(ref d.Model);
                 if (label.Length == 0) label = NameField.Get(ref d.Name);
                 b.Head.Text = label;
+
                 b.Temp.Text = float.IsNaN(d.TempC) ? "" : string.Create(ci, $"{d.TempC:F0} °C");
                 // A spinning disk sits happily at 45-50 °C; alarming there would cry wolf.
                 b.Temp.Foreground = d.TempC >= 60 ? Theme.StatusCritical
@@ -453,13 +678,17 @@ internal sealed class MainWindow : AppBarWindow
                 b.Sub.Text = string.Join("  ", new[] { NameField.Get(ref d.Model), media, NameField.Get(ref d.Bus), size }
                     .Where(x => x.Length > 0));
 
+                float active = float.IsNaN(d.ActivePct) ? 0 : d.ActivePct;
+                b.ActiveText.Text = string.Create(ci, $"actividad {active:F0} %");
+                b.Active.Update(active / 100.0);
+
                 b.Spark.Push((float)d.ReadBytesPerSec, (float)d.WriteBytesPerSec);
                 b.Rates.Text = string.Create(ci,
                     $"R {Theme.BytesShort(d.ReadBytesPerSec),-6} W {Theme.BytesShort(d.WriteBytesPerSec),-6} cola {d.QueueLength:F2}");
             }
         }
 
-        Find("top").SetSummary($"{s.TotalProcesses}p");
+        Find("top").SetSummary(TopSummary(ref s, ci));
         if (Find("top").IsUpdateWorthy())
         {
             int rows = Math.Min(_topRows.Length, s.ProcCount);
@@ -477,7 +706,24 @@ internal sealed class MainWindow : AppBarWindow
         }
     }
 
-    private static string W(float watts) => float.IsNaN(watts) ? "" : string.Create(CultureInfo.InvariantCulture, $"{watts,5:F1}W");
+    /// <summary>The two heaviest processes, if they fit; otherwise just the first.</summary>
+    private static string TopSummary(ref Snapshot s, CultureInfo ci)
+    {
+        if (s.ProcCount == 0) return "";
+
+        static string Short(string n) => n.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? n[..^4] : n;
+
+        ref var first = ref s.Procs[0];
+        string one = string.Create(ci, $"{Truncate(Short(NameField.Get(ref first.Name)), 9)} {first.CpuPct:F1}%");
+        if (s.ProcCount < 2) return one;
+
+        ref var second = ref s.Procs[1];
+        string two = string.Create(ci, $"{Truncate(Short(NameField.Get(ref second.Name)), 8)} {second.CpuPct:F1}%");
+        string both = $"{one} · {two}";
+        return both.Length <= 26 ? both : one;
+    }
+
+    private static string W(float watts) => float.IsNaN(watts) ? "" : string.Create(CultureInfo.InvariantCulture, $" {watts:F0}W");
 
     private Section Find(string key) => _sections.First(s => s.Key == key);
 
@@ -498,6 +744,7 @@ internal sealed class MainWindow : AppBarWindow
         {
             _ownedAgent = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path)
             {
+                Arguments = $"--interval={_cfg.RefreshMs}",
                 UseShellExecute = false,
                 CreateNoWindow = true,
             });
@@ -508,47 +755,33 @@ internal sealed class MainWindow : AppBarWindow
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
         _timer.Stop();
-        SaveState();
+        SaveSections();
+        _cfg.Save();
         if (_ownedAgent is { HasExited: false }) { try { _ownedAgent.Kill(); } catch { } }
         _reader?.Dispose();
+        _tray?.Dispose();
         base.OnClosing(e);
+        Application.Current?.Shutdown();
     }
 
     // ---------------------------------------------------------------- state
 
-    private void LoadState()
+    private void LoadSections()
     {
-        try
+        foreach (var s in _sections)
         {
-            if (!File.Exists(StatePath)) return;
-            var state = JsonSerializer.Deserialize<Dictionary<string, int>>(File.ReadAllText(StatePath));
-            if (state is null) return;
-            foreach (var s in _sections)
-            {
-                if (!state.TryGetValue(s.Key, out int v)) continue;
-                s.Visibility = v == 0 ? Visibility.Collapsed : Visibility.Visible;
-                s.Expanded = v == 2;
-                if (ContextMenu is not null)
-                {
-                    int idx = _sections.IndexOf(s);
-                    if (ContextMenu.Items[idx] is MenuItem mi) mi.IsChecked = v != 0;
-                }
-            }
+            if (!_cfg.Sections.TryGetValue(s.Key, out int v)) continue;
+            s.Visibility = v == 0 ? Visibility.Collapsed : Visibility.Visible;
+            s.Expanded = v == 2;
         }
-        catch { /* first run or corrupt state: defaults */ }
     }
 
-    private void SaveState()
+    private void SaveSections()
     {
-        try
-        {
-            var state = _sections.ToDictionary(
-                s => s.Key,
-                s => s.Visibility != Visibility.Visible ? 0 : s.Expanded ? 2 : 1);
-            Directory.CreateDirectory(Path.GetDirectoryName(StatePath)!);
-            File.WriteAllText(StatePath, JsonSerializer.Serialize(state));
-        }
-        catch { /* non-fatal */ }
+        _cfg.Sections = _sections.ToDictionary(
+            s => s.Key,
+            s => s.Visibility != Visibility.Visible ? 0 : s.Expanded ? 2 : 1);
+        _cfg.Save();
     }
 
     // ---------------------------------------------------------------- proof
@@ -564,13 +797,15 @@ internal sealed class MainWindow : AppBarWindow
         }
     }
 
+    public void SetMinimizedForTest(bool minimized) => SetMinimized(minimized);
+
     /// <summary>Walks the visual tree and reports every TextBlock's text, size and brush.</summary>
     public void DumpText()
     {
         Console.WriteLine($"{"texto",-30} {"w",6} {"h",6}  {"fg",-10} {"parent"}");
-        Walk(this, 0);
+        Walk(this);
 
-        static void Walk(DependencyObject o, int depth)
+        static void Walk(DependencyObject o)
         {
             int n = VisualTreeHelper.GetChildrenCount(o);
             for (int i = 0; i < n; i++)
@@ -578,11 +813,11 @@ internal sealed class MainWindow : AppBarWindow
                 var child = VisualTreeHelper.GetChild(o, i);
                 if (child is TextBlock tb)
                 {
-                    string fg = tb.Foreground is SolidColorBrush sb ? sb.Color.ToString() : tb.Foreground?.ToString() ?? "null";
+                    string fg = tb.Foreground is SolidColorBrush sb ? sb.Color.ToString() : "?";
                     string txt = tb.Text.Length > 28 ? tb.Text[..28] : tb.Text;
                     Console.WriteLine($"{'"' + txt + '"',-30} {tb.ActualWidth,6:F0} {tb.ActualHeight,6:F0}  {fg,-10} {VisualTreeHelper.GetParent(tb)?.GetType().Name}");
                 }
-                Walk(child, depth + 1);
+                Walk(child);
             }
         }
     }

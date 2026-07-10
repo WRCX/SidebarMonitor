@@ -230,11 +230,31 @@ sobre Win2D / DirectComposition.
 Seis secciones — CPU, MEMORIA, GPU, RED, DISCOS, PROCESOS — en un AppBar de 280 px.
 
 - **Plegar** una sección: clic en su cabecera. **Ocultarla** del todo: menú contextual.
-  El estado se guarda en `%LOCALAPPDATA%\SidebarMonitor\ui.json`.
-- Una cabecera plegada **sigue informando**: muestra un resumen en vivo (`CPU  7%  37.2W`,
-  `RED  ↓14K ↑13K`). Plegar no es perder el dato, es perder el detalle.
-- Las secciones plegadas u ocultas **no actualizan su cuerpo**; solo el resumen. Plegar cosas
-  abarata la UI de verdad, no solo visualmente.
+  Todo se guarda en `%LOCALAPPDATA%\SidebarMonitor\ui.json`.
+- Una cabecera plegada **sigue informando**, con lo más útil de cada sección:
+  `CPU 27% 4.70GHz 49W` · `GPU 0% 2640MHz 51W` · `DISCOS 1% R4K W1,5M` ·
+  `PROCESOS pwsh 12.2% · bdservi… 1.7%`. Plegar pierde el detalle, no el dato.
+- Las secciones plegadas u ocultas **no actualizan su cuerpo**; solo el resumen. Y una ventana
+  minimizada no actualiza nada. Plegar abarata la UI de verdad, no solo visualmente.
+
+### Colocación, bandeja y minimizado
+
+Todo desde el menú contextual (clic derecho) o desde el icono de bandeja:
+
+- **Anclado** (AppBar, reserva espacio, nada lo tapa) o **flotante**, arrastrable por su
+  cabecera. La ventana nunca se activa, así que `DragMove` de WPF no sirve: el arrastre se
+  hace con deltas de `GetCursorPos`.
+- **Siempre encima** es una opción, no una constante. Borde izquierdo o derecho, monitor y
+  ancho, todo en caliente.
+- **Minimizar** colapsa el panel a una pestaña de 18 px con una flecha, en vez de ocultarlo:
+  un AppBar de 18 px sigue reservando 18 px, así que el escritorio no pega saltos y el panel
+  queda a un clic. Verificado: la work area pasa de 1920 a 1902 px.
+- **Ocultar** lo quita de la vista; vuelve con doble clic en la bandeja. La ventana es
+  `WS_EX_TOOLWINDOW` y no tiene botón en la barra de tareas, así que sin bandeja no habría
+  forma de recuperarlo.
+
+Los flags de línea de comandos (`--floating`, `--width=`, …) marcan la config como **efímera**:
+una ejecución de prueba nunca reescribe lo que el usuario configuró por el menú.
 
 Gráficas solo donde aportan: sparkline para lo que varía en el tiempo (uso de CPU y GPU,
 red, disco), filas por core, y medidores para lo que es una fracción de un total (RAM, VRAM).
@@ -267,7 +287,10 @@ la barra de estado avisa con `sin ETW`.
 ### Discos
 
 Un bloque por disco físico, con **su propia gráfica** de lectura/escritura: etiqueta de volumen
-(`DATOS12TB`), modelo, HDD/SSD, bus, tamaño y temperatura.
+(`DATOS12TB`), modelo, HDD/SSD, bus, tamaño, temperatura y **% de actividad**.
+
+Ese porcentaje es el «tiempo activo» del Administrador de tareas, que es `100 - % Idle Time`.
+No es `% Disk Time`: ese cuenta peticiones encoladas y pasa de 100 % con toda normalidad.
 
 La identidad sale de `IOCTL_STORAGE_QUERY_PROPERTY`, no de WMI: WMI necesita COM y reflexión, y
 le costaría al agente su build AOT. **Abrir `\\.\PhysicalDriveN` con un acceso deseado de 0
@@ -359,11 +382,11 @@ del padre, si la hay. Ojo: en PowerShell, `& app.exe` **no espera** a un WinExe 
 
 ## Pendiente
 
-- **«Siempre encima» debe ser una opción, no una constante.** Hoy `WS_EX_TOPMOST` está fijo en
-  `AppBarWindow`. Tiene que poder desactivarse desde el menú (y persistirse), para cuando el
-  panel esté en la pantalla principal y no quieras que tape nada.
-- Bandeja: minimizar / restaurar, y menú de configuración con intervalos.
-- Click-through, tooltips al pasar por las sparklines, y elegir monitor desde el menú.
+- Tooltips con puntos sobre las sparklines: pasar el ratón y ver el valor en ese instante.
+  Las filas de core ya tienen tooltip con el desglose del top-3.
+- Click-through al pasar el ratón (`WS_EX_TRANSPARENT` alternado).
+- El menú «Refresco» cambia el ritmo de la UI y reinicia el agente **solo si la UI lo lanzó**.
+  Si el agente lo arrancaste tú, la UI solo redibuja más o menos a menudo.
 - Reusar los diccionarios de `Processes` entre muestras: hoy reconstruye ~370 entradas con sus
   strings cada 3 ticks. Es la única basura real que genera el agente.
 - Arrancar con Windows, e instalador.

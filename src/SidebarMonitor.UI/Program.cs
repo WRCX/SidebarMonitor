@@ -11,20 +11,34 @@ internal static class Program
         if (args.Contains("--dump") || args.Any(a => a.StartsWith("--shot=")))
             Native.AttachToParentConsole();
 
-        int monitorIndex = IntArg(args, "--monitor=", 1);
-        int width = IntArg(args, "--width=", 280);
+        var cfg = UiConfig.Load();
+
+        // Command-line overrides are for debugging. Applying one makes the config ephemeral, so
+        // a throwaway run never rewrites what the user configured through the menu.
+        if (IntArg(args, "--monitor=", -1) is var m and >= 0) { cfg.Monitor = m; cfg.Ephemeral = true; }
+        if (IntArg(args, "--width=", -1) is var w and > 0) { cfg.Width = w; cfg.Ephemeral = true; }
+        if (args.Contains("--left")) { cfg.EdgeLeft = true; cfg.Ephemeral = true; }
+        if (args.Contains("--floating")) { cfg.Docked = false; cfg.Ephemeral = true; }
+        if (args.Contains("--minimized")) { cfg.Minimized = true; cfg.Ephemeral = true; }
+
         int seconds = IntArg(args, "--seconds=", 0);          // 0 = run until closed
         string? shot = args.FirstOrDefault(a => a.StartsWith("--shot="))?["--shot=".Length..];
-        uint edge = args.Contains("--left") ? Native.ABE_LEFT : Native.ABE_RIGHT;
 
         var monitors = Native.EnumerateMonitors();
-        if (monitorIndex >= monitors.Count) monitorIndex = monitors.Count - 1;
+        if (cfg.Monitor >= monitors.Count) cfg.Monitor = monitors.Count - 1;
 
-        var app = new Application { ShutdownMode = ShutdownMode.OnMainWindowClose };
-        var win = new MainWindow(monitors[monitorIndex].Handle, edge, width);
+        var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        var win = new MainWindow(cfg, monitors);
+
+        TrayIcon? tray = null;
+        if (!args.Contains("--no-tray"))
+        {
+            tray = new TrayIcon();
+            win.AttachTray(tray);
+        }
 
         // Rescue the reserved desktop space on every exit path, crash included.
-        void Rescue(object? _, EventArgs __) => win.RemoveAppBar();
+        void Rescue(object? _, EventArgs __) { win.RemoveAppBar(); tray?.Dispose(); }
         AppDomain.CurrentDomain.UnhandledException += Rescue;
         AppDomain.CurrentDomain.ProcessExit += Rescue;
 
@@ -36,6 +50,8 @@ internal static class Program
             win.Loaded += (_, _) =>
             {
                 win.Apply(Split("--collapse="), Split("--expand="), Split("--hide="));
+                if (args.Contains("--minimized")) win.SetMinimizedForTest(true);
+
                 var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(seconds) };
                 timer.Tick += (_, _) =>
                 {
@@ -52,7 +68,9 @@ internal static class Program
             };
         }
 
-        return app.Run(win);
+        win.Show();
+        app.Run();
+        return 0;
     }
 
     private static int IntArg(string[] args, string prefix, int fallback)

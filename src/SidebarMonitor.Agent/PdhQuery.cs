@@ -51,7 +51,7 @@ internal sealed class PdhQuery : IDisposable
     private readonly IntPtr _query;
     private readonly IntPtr _cpuTotal, _cpuPerf, _cpuFreq, _cpuPerCore;
     private readonly IntPtr _committed;
-    private readonly IntPtr _diskRead, _diskWrite, _diskQueue;
+    private readonly IntPtr _diskRead, _diskWrite, _diskQueue, _diskIdle;
 
     public PdhQuery()
     {
@@ -67,6 +67,10 @@ internal sealed class PdhQuery : IDisposable
         _diskRead = Add(@"\PhysicalDisk(*)\Disk Read Bytes/sec");
         _diskWrite = Add(@"\PhysicalDisk(*)\Disk Write Bytes/sec");
         _diskQueue = Add(@"\PhysicalDisk(*)\Current Disk Queue Length");
+
+        // Task Manager's "Active time" is 100 - % Idle Time. "% Disk Time" is not it: it counts
+        // queued requests and routinely reads far above 100 %.
+        _diskIdle = Add(@"\PhysicalDisk(*)\% Idle Time");
 
         PdhCollectQueryData(_query);   // rate counters need a baseline
     }
@@ -103,6 +107,7 @@ internal sealed class PdhQuery : IDisposable
     public List<InstanceSample> DiskRead() => Array(_diskRead);
     public List<InstanceSample> DiskWrite() => Array(_diskWrite);
     public List<InstanceSample> DiskQueue() => Array(_diskQueue);
+    public List<InstanceSample> DiskIdle() => Array(_diskIdle);
 
     private static double Scalar(IntPtr counter, bool cap = true)
     {

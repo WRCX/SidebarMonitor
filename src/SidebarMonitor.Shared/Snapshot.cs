@@ -10,7 +10,7 @@ public static class SnapshotLayout
     public const uint Signature = 0x4E4D4253;
 
     /// <summary>Bump on any layout change. The reader refuses anything it does not know.</summary>
-    public const uint Version = 3;
+    public const uint Version = 4;
 
     /// <summary>
     /// Local\, not Global\. Creating a Global\ kernel object requires SeCreateGlobalPrivilege,
@@ -91,6 +91,8 @@ public struct DiskInfo
     public float TempC;
     public ulong SizeBytes;
     public double ReadBytesPerSec, WriteBytesPerSec, QueueLength;
+    /// <summary>Task Manager's "active time": 100 - % Idle Time.</summary>
+    public float ActivePct;
 }
 
 [StructLayout(LayoutKind.Sequential)]

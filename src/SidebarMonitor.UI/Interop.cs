@@ -56,9 +56,25 @@ internal static class Native
     public const int ABN_POSCHANGED = 0x1;
 
     // SetWindowPos
-    public const uint SWP_NOACTIVATE = 0x0010;
+    public const uint SWP_NOSIZE = 0x0001;
+    public const uint SWP_NOMOVE = 0x0002;
     public const uint SWP_NOZORDER = 0x0004;
+    public const uint SWP_NOACTIVATE = 0x0010;
     public static readonly IntPtr HWND_TOPMOST = new(-1);
+    public static readonly IntPtr HWND_NOTOPMOST = new(-2);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool GetWindowRect(IntPtr hWnd, out Rect rect);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct PointI { public int X, Y; }
+
+    /// <summary>Screen coordinates, in physical pixels. The window never activates, so WPF's
+    /// DragMove is unavailable and dragging is done from raw cursor positions.</summary>
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool GetCursorPos(out PointI point);
 
     public const uint MONITOR_DEFAULTTONEAREST = 2;
 
