@@ -5,7 +5,7 @@ using SidebarMonitor.Shared;
 namespace SidebarMonitor.Agent;
 
 internal sealed record DiskIdentity(int Index, string Model, string Bus, DiskMedia Media, ulong SizeBytes,
-                                    string Label, string Volumes, bool Removable, bool Virtual, bool System);
+                                    string Label, string Volumes, int VolumeCount, bool Removable, bool Virtual, bool System);
 
 /// <summary>
 /// Static facts about the physical disks: model, SSD-vs-HDD, bus, size, and the labels of the
@@ -90,9 +90,9 @@ internal static class DiskInventory
             if (!int.TryParse(head, out int index) || result.ContainsKey(index)) continue;
 
             string letters = space < 0 ? "" : instance[(space + 1)..];
-            var (label, volumes) = Volumes(letters);
+            var (label, volumes, count) = Volumes(letters);
             bool system = HoldsSystemVolume(letters);
-            var id = Query(index, label, volumes, system);
+            var id = Query(index, label, volumes, count, system);
             if (id is not null) result[index] = id;
         }
 
@@ -104,14 +104,16 @@ internal static class DiskInventory
     /// used/total and label, e.g. "C: 210/293G · juegos(E:) 1.2/1.6T" — so a disk with two
     /// partitions no longer reads as two disks.
     /// </summary>
-    private static (string Label, string Volumes) Volumes(string letters)
+    private static (string Label, string Volumes, int Count) Volumes(string letters)
     {
         var labels = new List<string>();
         var summary = new List<string>();
+        int count = 0;
 
         foreach (string token in letters.Split(' ', StringSplitOptions.RemoveEmptyEntries))
         {
             if (token.Length < 1) continue;
+            count++;
             char letter = token[0];
             string root = $"{letter}:\\";
 
@@ -130,7 +132,7 @@ internal static class DiskInventory
             summary.Add(label.Length > 0 ? $"{label}({letter}:){size}" : $"{letter}:{size}");
         }
 
-        return (string.Join(" / ", labels), string.Join(" · ", summary));
+        return (string.Join(" / ", labels), string.Join(" · ", summary), count);
     }
 
     /// <summary>Compact storage size: 293G, 1.6T. Invariant (the agent runs globalization-invariant).</summary>
@@ -152,7 +154,7 @@ internal static class DiskInventory
         return false;
     }
 
-    private static DiskIdentity? Query(int index, string label, string volumes, bool system)
+    private static DiskIdentity? Query(int index, string label, string volumes, int volumeCount, bool system)
     {
         // Desired access 0: enough for property queries, and works without elevation.
         using var h = CreateFileW($@"\\.\PhysicalDrive{index}", 0, FileShareReadWrite, IntPtr.Zero, OpenExisting, 0, IntPtr.Zero);
@@ -201,7 +203,7 @@ internal static class DiskInventory
             bool virtualDisk = bus is "Virtual" or "vHD" or "Spaces"
                 || model.Contains("Virtual", StringComparison.OrdinalIgnoreCase);
 
-            return new DiskIdentity(index, model.Trim(), bus, media, size, label, volumes, removable, virtualDisk, system);
+            return new DiskIdentity(index, model.Trim(), bus, media, size, label, volumes, volumeCount, removable, virtualDisk, system);
         }
         finally { Marshal.FreeHGlobal(buf); }
     }

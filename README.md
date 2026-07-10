@@ -300,9 +300,22 @@ actividad 1 %
 
 Esto es deliberado: un disco con dos particiones (aquí C: y juegos, ambas en el mismo NVMe de
 2 TB) **no debe leerse como dos discos**. Antes se mostraba `C: / juegos` como si fuera un
-nombre y confundía. El modelo manda como identidad; las particiones son lo que vive en él. El
-espacio por volumen sale de `GetDiskFreeSpaceEx`, y la temperatura/actividad son del disco
-físico (compartidas por sus particiones, que es lo correcto).
+nombre y confundía. El espacio por volumen sale de `GetDiskFreeSpaceEx`, y la
+temperatura/actividad son del disco físico (compartidas por sus particiones, que es lo correcto).
+
+El **título** es la etiqueta del volumen cuando el disco tiene **una sola partición**
+(`DATOS12TB`), y el **modelo** cuando tiene varias (`FIKWOT FN501 Pro 2TB`), porque entonces
+ninguna etiqueta nombra al disco entero.
+
+### HWiNFO congelado
+
+La versión gratuita de HWiNFO **desactiva la memoria compartida a las 12 h**. Cuando pasa, el
+`poll_time` de la SHM deja de avanzar y todo lo que sale de HWiNFO (potencia y temperaturas de
+CPU y discos) se queda congelado. El agente lo detecta —si `poll_time` no avanza en 8 s— y
+marca esos valores como `—` en vez de mostrar números viejos que parecen vivos; la barra de
+estado dice **«HWiNFO en pausa»**. Y **se recupera solo**: reintenta abrir la SHM cada 15 s, así
+que en cuanto reactivas HWiNFO (o lo reinicias, que crea un objeto nuevo) vuelve a datos en
+vivo sin reiniciar el agente. Si HWiNFO no está, la barra dice «sin HWiNFO».
 
 Ese porcentaje es el «tiempo activo» del Administrador de tareas, que es `100 - % Idle Time`.
 No es `% Disk Time`: ese cuenta peticiones encoladas y pasa de 100 % con toda normalidad.

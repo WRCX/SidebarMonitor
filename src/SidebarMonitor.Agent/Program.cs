@@ -96,6 +96,13 @@ internal static class Program
             Console.WriteLine();
             long lastEtwProbe = Stopwatch.GetTimestamp();
 
+            // HWiNFO's SHM can freeze (the free build disables it after 12 h) or be replaced (a
+            // restart makes a new mapping). Track poll_time; when it stalls, the readings are stale
+            // and periodically re-open in case HWiNFO came back with a fresh object and new indices.
+            long lastPoll = hwi?.PollTime ?? 0;
+            long lastPollChange = Stopwatch.GetTimestamp();
+            long lastHwiReopen = Stopwatch.GetTimestamp();
+
             while (!quit.IsSet)
             {
                 long t0 = Stopwatch.GetTimestamp();
@@ -107,15 +114,41 @@ internal static class Program
                     if (etw is not null) Console.WriteLine("ETW: helper detectado.");
                 }
 
+                // Is HWiNFO still updating? poll_time not advancing for >8 s means frozen.
+                bool hwiLive = false;
+                if (hwi is not null)
+                {
+                    long poll = hwi.PollTime;
+                    if (poll != lastPoll) { lastPoll = poll; lastPollChange = Stopwatch.GetTimestamp(); }
+                    hwiLive = Stopwatch.GetElapsedTime(lastPollChange).TotalSeconds < 8;
+                }
+
+                // Frozen or absent: try re-opening every 15 s. Catches HWiNFO restarting (new SHM
+                // object, new reading order) and the user re-enabling Shared Memory Support.
+                if ((hwi is null || !hwiLive) && Stopwatch.GetElapsedTime(lastHwiReopen).TotalSeconds >= 15)
+                {
+                    lastHwiReopen = Stopwatch.GetTimestamp();
+                    var fresh = HwiSensors.TryOpen(out _);
+                    if (fresh is not null)
+                    {
+                        hwi?.Dispose();
+                        hwi = fresh;
+                        lastPoll = hwi.PollTime;
+                        lastPollChange = Stopwatch.GetTimestamp();
+                        hwiLive = false;   // confirmed live only once poll_time advances
+                    }
+                }
+
                 pdh.Collect();
                 snapshot.TimestampUtcTicks = DateTime.UtcNow.Ticks;
                 snapshot.SampleIntervalSec = intervalMs / 1000.0;
                 snapshot.HwiNfoAvailable = hwi is not null;
+                snapshot.HwiNfoLive = hwiLive;
 
-                FillCpu(ref snapshot.Cpu, pdh, hwi);
+                FillCpu(ref snapshot.Cpu, pdh, hwiLive ? hwi : null);
                 FillMem(ref snapshot.Mem, pdh);
                 FillGpus(ref snapshot, nvml);
-                FillDisks(ref snapshot, pdh, inventory, hwi);
+                FillDisks(ref snapshot, pdh, inventory, hwiLive ? hwi : null);
 
                 // Adapters come and go (VPN up, dock unplugged); rescanning every tick is wasteful.
                 if (Stopwatch.GetElapsedTime(lastNicRefresh).TotalSeconds >= 30)
@@ -259,6 +292,7 @@ internal static class Program
                 NameField.Set(ref d.Bus, id.Bus);
                 d.Media = id.Media;
                 d.SizeBytes = id.SizeBytes;
+                d.VolumeCount = (byte)Math.Clamp(id.VolumeCount, 0, 255);
                 d.IsRemovable = (byte)(id.Removable ? 1 : 0);
                 d.IsVirtual = (byte)(id.Virtual ? 1 : 0);
                 d.IsSystem = (byte)(id.System ? 1 : 0);

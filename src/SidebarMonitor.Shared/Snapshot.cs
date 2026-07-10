@@ -10,7 +10,7 @@ public static class SnapshotLayout
     public const uint Signature = 0x4E4D4253;
 
     /// <summary>Bump on any layout change. The reader refuses anything it does not know.</summary>
-    public const uint Version = 7;
+    public const uint Version = 8;
 
     /// <summary>
     /// Local\, not Global\. Creating a Global\ kernel object requires SeCreateGlobalPrivilege,
@@ -102,6 +102,8 @@ public struct DiskInfo
     public Name64 Model;
     public Name32 Bus;
     public DiskMedia Media;
+    /// <summary>Number of drive letters on this physical disk. 1 → title by label; more → by model.</summary>
+    public byte VolumeCount;
     /// <summary>USB / removable, virtual (WSL/Hyper-V vHD), or the disk holding the Windows volume.</summary>
     public byte IsRemovable, IsVirtual, IsSystem;
     /// <summary>From HWiNFO's S.M.A.R.T. sensors; NaN when unavailable.</summary>
@@ -142,7 +144,11 @@ public struct Snapshot
     public int TotalProcesses;
     public int TotalThreads;
 
+    /// <summary>HWiNFO's shared memory is mapped.</summary>
     public bool HwiNfoAvailable;
+    /// <summary>...and its poll_time is advancing. False = frozen (the free build disables SHM
+    /// after 12 h). When false, every HWiNFO-sourced value is stale and shown as "—".</summary>
+    public bool HwiNfoLive;
 
     // ---- Only populated when the elevated ETW helper is running ----
 

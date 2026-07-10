@@ -66,8 +66,9 @@ internal static class Program
         var ci = CultureInfo.InvariantCulture;
         const double G = 1024.0 * 1024 * 1024;
 
+        string hwiState = !s.HwiNfoAvailable ? "no" : s.HwiNfoLive ? "si" : "EN PAUSA";
         Console.WriteLine($"=== {new DateTime(s.TimestampUtcTicks, DateTimeKind.Utc).ToLocalTime():HH:mm:ss} " +
-                          $"(cada {s.SampleIntervalSec:F1} s, HWiNFO {(s.HwiNfoAvailable ? "si" : "no")}, " +
+                          $"(cada {s.SampleIntervalSec:F1} s, HWiNFO {hwiState}, " +
                           $"ETW {(s.EtwAvailable ? "si" : "no")}) ===");
         Console.WriteLine();
 

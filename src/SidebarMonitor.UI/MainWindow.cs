@@ -703,7 +703,10 @@ internal sealed class MainWindow : AppBarWindow
             _status.Text = $"agente parado ({age.TotalSeconds:F0} s)";
             return;
         }
-        _status.Text = !s.HwiNfoAvailable ? "sin HWiNFO" : !s.EtwAvailable ? "sin ETW" : "";
+        _status.Text = !s.HwiNfoAvailable ? "sin HWiNFO"
+                     : !s.HwiNfoLive ? "HWiNFO en pausa"   // SHM frozen: the free build's 12 h limit
+                     : !s.EtwAvailable ? "sin ETW"
+                     : "";
 
         // A minimized panel shows nothing; skip every update but keep the reader warm.
         if (_cfg.Minimized) return;
@@ -817,12 +820,16 @@ internal sealed class MainWindow : AppBarWindow
                 ref var d = ref s.Disks[visibleDisks[i]];
                 var b = _diskBlocks[i];
 
-                // Head is the disk MODEL — the physical identity. Its partitions are the line
-                // below, so "C:" and "juegos" no longer read as two separate disks.
+                // One labelled partition → its label is the friendly identity (DATOS12TB).
+                // Several partitions → the model, because no single label names the disk (the
+                // FIKWOT holds both C: and juegos). Then the partition line disambiguates.
+                string label = NameField.Get(ref d.Label);
                 string model = NameField.Get(ref d.Model);
-                if (model.Length == 0) model = NameField.Get(ref d.Label);
-                if (model.Length == 0) model = NameField.Get(ref d.Name);
-                b.Head.Text = model;
+                string title = d.VolumeCount == 1 && label.Length > 0 ? label
+                             : model.Length > 0 ? model
+                             : label.Length > 0 ? label
+                             : NameField.Get(ref d.Name);
+                b.Head.Text = title;
 
                 b.Temp.Text = float.IsNaN(d.TempC) ? "" : string.Create(ci, $"{d.TempC:F0} °C");
                 // A spinning disk sits happily at 45-50 °C; alarming there would cry wolf.
@@ -864,21 +871,14 @@ internal sealed class MainWindow : AppBarWindow
         }
     }
 
-    /// <summary>The two heaviest processes, if they fit; otherwise just the first.</summary>
+    /// <summary>The heaviest process, for the folded header.</summary>
     private static string TopSummary(ref Snapshot s, CultureInfo ci)
     {
         if (s.ProcCount == 0) return "";
-
-        static string Short(string n) => n.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? n[..^4] : n;
-
         ref var first = ref s.Procs[0];
-        string one = string.Create(ci, $"{Truncate(Short(NameField.Get(ref first.Name)), 9)} {first.CpuPct:F1}%");
-        if (s.ProcCount < 2) return one;
-
-        ref var second = ref s.Procs[1];
-        string two = string.Create(ci, $"{Truncate(Short(NameField.Get(ref second.Name)), 8)} {second.CpuPct:F1}%");
-        string both = $"{one} · {two}";
-        return both.Length <= 26 ? both : one;
+        string name = NameField.Get(ref first.Name);
+        if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) name = name[..^4];
+        return string.Create(ci, $"{Truncate(name, 12)} {first.CpuPct:F1}%");
     }
 
     private static string W(float watts) => float.IsNaN(watts) ? "" : string.Create(CultureInfo.InvariantCulture, $" {watts:F0}W");

@@ -16,6 +16,7 @@ internal sealed class HwiSensors : IDisposable
     private const string MapName = @"Global\HWiNFO_SENS_SM2";
     private const uint Signature = 0x53695748;   // "HWiS"
 
+    private const int HdrPollTime = 12;
     private const int HdrSensorOffset = 20, HdrSensorElemSize = 24, HdrSensorCount = 28;
     private const int HdrReadingOffset = 32, HdrReadingElemSize = 36, HdrReadingCount = 40;
     private const int SenNameOrig = 8, SenElemSize = 392;
@@ -37,6 +38,10 @@ internal sealed class HwiSensors : IDisposable
 
     public double PackagePowerW => Read(_idxPackagePower);
     public double CpuTempC => Read(_idxCpuTemp);
+
+    /// <summary>HWiNFO stamps this each poll. If it stops advancing, the SHM is frozen (the free
+    /// build disables it after 12 h) and every reading here is stale.</summary>
+    public long PollTime => _view.ReadInt64(HdrPollTime);
 
     /// <summary>
     /// HWiNFO names its S.M.A.R.T. sensors "S.M.A.R.T.: &lt;model&gt; (&lt;serial&gt;)", so the model
