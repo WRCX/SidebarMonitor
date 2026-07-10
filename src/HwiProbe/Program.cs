@@ -208,22 +208,51 @@ internal static class Program
                 return list;
             }
 
+            // The hot path an agent actually runs: labels and units never change while HWiNFO
+            // is up, so they get read once. Every tick only needs the doubles.
+            var values = new double[readingCount];
+            void ReadValuesOnly()
+            {
+                for (uint i = 0; i < readingCount; i++)
+                    values[i] = view.ReadDouble(readingOffset + (long)i * readingElemSize + Shm.RdValue);
+            }
+
             if (bench)
             {
-                // How expensive is one full snapshot? This is the number that decides
-                // whether a 1 Hz agent is free or not.
+                const int iters = 200;
+
+                // Cold path: rebuild everything, strings included. This is what a naive
+                // implementation would do on every tick.
                 for (int i = 0; i < 20; i++) { ReadSensors(); ReadReadings(); }
                 long before = GC.GetTotalAllocatedBytes(precise: true);
                 var sw = Stopwatch.StartNew();
-                const int iters = 200;
                 for (int i = 0; i < iters; i++) { ReadSensors(); ReadReadings(); }
                 sw.Stop();
                 long after = GC.GetTotalAllocatedBytes(precise: true);
-                double usPer = sw.Elapsed.TotalMicroseconds / iters;
-                Console.WriteLine($"=== Benchmark: snapshot completo ({sensorCount} sensores + {readingCount} lecturas) ===");
-                Console.WriteLine($"  {usPer:F1} us por snapshot   ({iters} iteraciones)");
-                Console.WriteLine($"  {(after - before) / (double)iters / 1024.0:F1} KiB asignados por snapshot (con strings)");
-                Console.WriteLine($"  a 1 Hz eso es {usPer / 10_000.0:F4} % de un core");
+                double usFull = sw.Elapsed.TotalMicroseconds / iters;
+
+                // Hot path: values only.
+                for (int i = 0; i < 20; i++) ReadValuesOnly();
+                long beforeV = GC.GetTotalAllocatedBytes(precise: true);
+                var sw2 = Stopwatch.StartNew();
+                for (int i = 0; i < iters; i++) ReadValuesOnly();
+                sw2.Stop();
+                long afterV = GC.GetTotalAllocatedBytes(precise: true);
+                double usValues = sw2.Elapsed.TotalMicroseconds / iters;
+
+                Console.WriteLine($"=== Benchmark ({sensorCount} sensores + {readingCount} lecturas) ===");
+                Console.WriteLine();
+                Console.WriteLine("  Snapshot completo (reconstruye strings cada vez):");
+                Console.WriteLine($"    {usFull,8:F1} us   {(after - before) / (double)iters / 1024.0,7:F1} KiB asignados   {usFull / 10_000.0:F4} % de un core a 1 Hz");
+                Console.WriteLine();
+                Console.WriteLine("  Solo valores (lo que hara el agente; etiquetas cacheadas):");
+                Console.WriteLine($"    {usValues,8:F1} us   {(afterV - beforeV) / (double)iters / 1024.0,7:F1} KiB asignados   {usValues / 10_000.0:F4} % de un core a 1 Hz");
+                Console.WriteLine();
+                Console.WriteLine($"  Mejora: {usFull / usValues:F1}x mas rapido, sin asignar nada");
+
+                // Reported from inside the process: PeakWorkingSet64 reads back as 0 once it exits.
+                using var self = Process.GetCurrentProcess();
+                Console.WriteLine($"  pico de working set: {self.PeakWorkingSet64 / 1024.0 / 1024:F1} MiB");
                 Console.WriteLine();
                 return 0;
             }

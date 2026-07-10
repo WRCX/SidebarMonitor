@@ -63,6 +63,31 @@ Ryzen 7 7800X3D + RTX 4070 Ti SUPER, Windows 11, sin elevación:
 Un snapshot completo ronda los **8–18 ms**, o sea **~0.05 % de CPU a 1 Hz**. La línea base a
 batir, `sidebar.exe`, consume **2.18 % de CPU, 158 MiB, 134 threads y 1369 handles**.
 
+### El camino caliente
+
+Los 185 µs de HWiNFO son el coste de reconstruir *todo*, cadenas incluidas. Pero las
+etiquetas y unidades no cambian mientras HWiNFO esté arriba: se leen una vez y se cachean.
+Cada tick solo necesita los `double`. Medido con `--bench`:
+
+| | Snapshot completo | Solo valores |
+|---|---|---|
+| JIT | 201.2 µs, 78.3 KiB | **6.2 µs, 0 KiB** |
+| AOT | 116.4 µs, 78.3 KiB | **4.3 µs, 0 KiB** |
+
+**4.3 µs por tick y cero asignaciones**, o sea 0.0004 % de un core a 1 Hz. El GC nunca
+tiene motivo para despertarse.
+
+### AOT vs JIT
+
+| | AOT | JIT (framework-dependent) |
+|---|---|---|
+| Arranque en frío (mín / medio) | **59.6 / 62.7 ms** | 77.4 / 80.0 ms |
+| Pico de working set | **30.3 MiB** | 43.5 MiB |
+| En disco | 2.3 MB, un solo `.exe` | 0.2 MB + runtime .NET 10 aparte |
+
+El pico de working set está inflado por el propio benchmark; el agente real, que no
+reconstruye cadenas, se quedará muy por debajo.
+
 `NtQuerySystemInformation` es el único punto caliente y el que más varía. Los procesos se
 pueden muestrear a menor frecuencia que los sensores.
 
@@ -130,9 +155,15 @@ Dos cosas que hay que respetar sí o sí:
 
 - .NET 10 SDK (fijado en `global.json`).
 - HWiNFO, para los sensores.
-- Para publicar con AOT hace falta el workload **Desktop development with C++** de Visual
-  Studio (el linker de MSVC). El código ya es AOT-compatible (`IsAotCompatible`), pero el
-  toolchain no está instalado en esta máquina.
+- Para publicar con AOT, el workload **Desktop development with C++** de Visual Studio
+  (el linker de MSVC). Verificado con Visual Studio Community 2026 (18.7).
+
+```powershell
+# ILCompiler invoca vswhere.exe esperandolo en el PATH. Si no esta, el texto del error
+# acaba incrustado dentro del comando del linker y falla con un MSB3073 incomprensible.
+$env:PATH = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer;$env:PATH"
+dotnet publish src/HwiProbe/HwiProbe.csproj -c Release -r win-x64 -p:PublishAot=true -o artifacts/aot
+```
 
 Nota para la UI: **WPF no soporta AOT.** O el agente va AOT y la UI en JIT, o la UI se hace
 sobre Win2D / DirectComposition.
