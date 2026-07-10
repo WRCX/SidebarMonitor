@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using System.Security.Principal;
 using Microsoft.Diagnostics.Tracing.Parsers;
 using Microsoft.Diagnostics.Tracing.Session;
@@ -19,6 +20,15 @@ internal static class Program
     {
         Console.OutputEncoding = System.Text.Encoding.UTF8;
 
+        // Redirecting stdout across an elevation boundary does not work, so write our own log
+        // when asked (diagnostics).
+        string? outPath = args.FirstOrDefault(x => x.StartsWith("--out="))?["--out=".Length..];
+        if (outPath is not null)
+        {
+            var file = new StreamWriter(outPath, append: false) { AutoFlush = true };
+            Console.SetOut(file);
+        }
+
         using (var id = WindowsIdentity.GetCurrent())
         {
             if (!new WindowsPrincipal(id).IsInRole(WindowsBuiltInRole.Administrator))
@@ -29,6 +39,7 @@ internal static class Program
         }
 
         int windowMs = IntArg(args, "--window=", 1000);
+        int stallSec = IntArg(args, "--stall=", 20);   // seconds of "NIC busy, ETW silent" before restart
         bool verbose = args.Contains("--verbose");
         int cores = Environment.ProcessorCount;
 
@@ -55,37 +66,59 @@ internal static class Program
         long windowStart = Stopwatch.GetTimestamp();
         long droppedSamples = 0;
 
-        using var session = new TraceEventSession(KernelTraceEventParser.KernelSessionName) { StopOnDispose = true };
-        session.EnableKernelProvider(
-            KernelTraceEventParser.Keywords.Profile |
-            KernelTraceEventParser.Keywords.NetworkTCPIP |
-            KernelTraceEventParser.Keywords.Process);
+        long perfSamples = 0, netEvents = 0;
 
-        session.Source.Kernel.ProcessStart += names.OnStart;
-        session.Source.Kernel.ProcessDCStart += names.OnStart;   // rundown of already-running processes
+        // The classic kernel NetworkTCPIP provider stops delivering events after a long uptime
+        // (seen after hours: TcpIp/UdpIp events dry up while profiling keeps flowing), which froze
+        // the per-process bandwidth. The session lives inside a loop so a watchdog can recreate it.
+        // Profiling never stops, so "perf samples advancing but net events flat" is a real stall.
+        TraceEventSession? current = null;
+        bool quit = false;
 
-        session.Source.Kernel.PerfInfoSample += d =>
+        Console.CancelKeyPress += (_, e) =>
         {
-            int cpu = d.ProcessorNumber;
-            if ((uint)cpu >= (uint)cores) { Interlocked.Increment(ref droppedSamples); return; }
-            string name = names.Get(d.ProcessID);
-            lock (gate)
-            {
-                var map = coreCounts[cpu];
-                map[name] = map.GetValueOrDefault(name) + 1;
-            }
+            e.Cancel = true;
+            quit = true;
+            try { current?.Source.StopProcessing(); } catch { }
         };
 
         void Net(Dictionary<string, long> map, int pid, int size)
         {
+            Interlocked.Increment(ref netEvents);
             string name = names.Get(pid);
             lock (gate) map[name] = map.GetValueOrDefault(name) + size;
         }
 
-        session.Source.Kernel.TcpIpRecv += d => Net(netRx, d.ProcessID, d.size);
-        session.Source.Kernel.TcpIpSend += d => Net(netTx, d.ProcessID, d.size);
-        session.Source.Kernel.UdpIpRecv += d => Net(netRx, d.ProcessID, d.size);
-        session.Source.Kernel.UdpIpSend += d => Net(netTx, d.ProcessID, d.size);
+        TraceEventSession NewSession()
+        {
+            var s = new TraceEventSession(KernelTraceEventParser.KernelSessionName) { StopOnDispose = true };
+            s.EnableKernelProvider(
+                KernelTraceEventParser.Keywords.Profile |
+                KernelTraceEventParser.Keywords.NetworkTCPIP |
+                KernelTraceEventParser.Keywords.Process);
+
+            s.Source.Kernel.ProcessStart += names.OnStart;
+            s.Source.Kernel.ProcessDCStart += names.OnStart;   // rundown of already-running processes
+
+            s.Source.Kernel.PerfInfoSample += d =>
+            {
+                Interlocked.Increment(ref perfSamples);
+                int cpu = d.ProcessorNumber;
+                if ((uint)cpu >= (uint)cores) { Interlocked.Increment(ref droppedSamples); return; }
+                string name = names.Get(d.ProcessID);
+                lock (gate)
+                {
+                    var map = coreCounts[cpu];
+                    map[name] = map.GetValueOrDefault(name) + 1;
+                }
+            };
+
+            s.Source.Kernel.TcpIpRecv += d => Net(netRx, d.ProcessID, d.size);
+            s.Source.Kernel.TcpIpSend += d => Net(netTx, d.ProcessID, d.size);
+            s.Source.Kernel.UdpIpRecv += d => Net(netRx, d.ProcessID, d.size);
+            s.Source.Kernel.UdpIpSend += d => Net(netTx, d.ProcessID, d.size);
+            return s;
+        }
 
         var snapshot = default(EtwSnapshot);
         long published = 0;
@@ -115,10 +148,11 @@ internal static class Program
 
             if (verbose)
             {
-                ref var top = ref snapshot.Cores[0];
-                Console.WriteLine($"pub {published,4}  ventana {snapshot.WindowSeconds:F2}s  " +
-                                  $"core0: {NameField.Get(ref top[0].Name)} {top[0].Pct:F0}%  " +
-                                  $"({snapshot.CoreSamples[0]} muestras)  net procs {snapshot.NetProcCount}");
+                string netTop = snapshot.NetProcCount > 0
+                    ? $"{NameField.Get(ref snapshot.NetProcs[0].Name)} ↓{snapshot.NetProcs[0].RxBytesPerSec / 1024:F1}K ↑{snapshot.NetProcs[0].TxBytesPerSec / 1024:F1}K"
+                    : "(nada)";
+                Console.WriteLine($"pub {published,4}  {snapshot.WindowSeconds:F2}s  " +
+                                  $"netEvents_total={Interlocked.Read(ref netEvents)}  netProcs={snapshot.NetProcCount}  top: {netTop}");
             }
         }, null, windowMs, windowMs);
 
@@ -126,11 +160,50 @@ internal static class Program
         Console.WriteLine("Ctrl+C para parar.");
         Console.WriteLine();
 
-        Console.CancelKeyPress += (_, e) => { e.Cancel = true; session.Source.StopProcessing(); };
-        session.Source.Process();   // blocks until StopProcessing
+        // Watchdog: the definitive stall signal isn't "no net events" (the network may just be
+        // idle) — it's "the NIC is moving bytes but ETW produced no net events". Compare our own
+        // event counter against the interface byte counters (iphlpapi, no admin). When traffic
+        // flows with no events for `stallSec`, the provider has wedged; recreate the session.
+        long netAtCheck = 0;
+        ulong nicAtCheck = NicTotalBytes();
+        long stalledSince = 0;   // 0 = healthy
+        using var watchdog = new Timer(_ =>
+        {
+            long net = Interlocked.Read(ref netEvents);
+            ulong nic = NicTotalBytes();
+            bool eventsMoving = net != netAtCheck;
+            bool trafficMoving = nic > nicAtCheck + 65536;   // >64 KiB since last check
+            netAtCheck = net; nicAtCheck = nic;
+
+            if (eventsMoving || !trafficMoving)
+            {
+                stalledSince = 0;   // healthy, or genuinely idle — either way not a stall
+                return;
+            }
+
+            // Traffic is flowing but ETW is silent.
+            if (stalledSince == 0) stalledSince = Stopwatch.GetTimestamp();
+            else if (Stopwatch.GetElapsedTime(stalledSince).TotalSeconds > stallSec)
+            {
+                Console.WriteLine("watchdog: la NIC mueve datos pero ETW no emite eventos de red; recreando sesion.");
+                stalledSince = 0;
+                try { current?.Source.StopProcessing(); } catch { }
+            }
+        }, null, 5000, 5000);
+
+        int restarts = 0;
+        while (!quit)
+        {
+            using var session = NewSession();
+            current = session;
+            try { session.Source.Process(); }   // blocks until StopProcessing (quit or watchdog)
+            catch (Exception ex) { Console.WriteLine($"sesion cayo: {ex.Message}"); }
+            current = null;
+            if (!quit) { restarts++; Console.WriteLine($"--- sesion recreada (#{restarts}) ---"); }
+        }
 
         writer.Dispose();
-        Console.WriteLine($"Parado tras {published} publicaciones. Muestras descartadas: {droppedSamples}.");
+        Console.WriteLine($"Parado tras {published} publicaciones, {restarts} reinicios de sesion.");
         return 0;
     }
 
@@ -186,6 +259,25 @@ internal static class Program
             np.TxBytesPerSec = top[i].Tx / seconds;
         }
         s.NetProcCount = top.Length;
+    }
+
+    /// <summary>Sum of RX+TX bytes across up, non-loopback interfaces. The ground truth the ETW
+    /// event stream is supposed to track; if this moves and the events don't, ETW has stalled.</summary>
+    private static ulong NicTotalBytes()
+    {
+        ulong total = 0;
+        try
+        {
+            foreach (var nic in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (nic.OperationalStatus != System.Net.NetworkInformation.OperationalStatus.Up) continue;
+                if (nic.NetworkInterfaceType == System.Net.NetworkInformation.NetworkInterfaceType.Loopback) continue;
+                var s = nic.GetIPStatistics();
+                total += (ulong)Math.Max(0, s.BytesReceived) + (ulong)Math.Max(0, s.BytesSent);
+            }
+        }
+        catch { /* transient */ }
+        return total;
     }
 
     private static int IntArg(string[] args, string prefix, int fallback)

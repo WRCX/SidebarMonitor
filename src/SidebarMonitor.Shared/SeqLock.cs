@@ -20,6 +20,7 @@ public struct SeqLockHeader
 /// <summary>Single writer over a named shared-memory block.</summary>
 public sealed unsafe class SeqLockWriter<T> : IDisposable where T : unmanaged
 {
+    private readonly Mutex _singleton;
     private readonly MemoryMappedFile _mmf;
     private readonly MemoryMappedViewAccessor _view;
     private readonly SeqLockHeader* _header;
@@ -32,13 +33,29 @@ public sealed unsafe class SeqLockWriter<T> : IDisposable where T : unmanaged
     public int SizeBytes => TotalSize;
 
     /// <summary>
-    /// CreateNew, not CreateOrOpen: a second writer must fail loudly rather than race.
-    /// The map lives under Local\ because creating a Global\ kernel object needs
-    /// SeCreateGlobalPrivilege, which an unelevated process does not hold.
+    /// Single-writer is enforced by a named mutex, NOT by the map's existence. That distinction
+    /// matters: a reader (the UI) keeps the named map alive after the writer dies, so a fresh
+    /// writer must be able to reuse it — CreateNew would fail ("already exists") and the agent
+    /// could never restart while the UI is open. CreateOrOpen reuses the reader-held map; the
+    /// mutex is what actually rejects a second live writer (and is released when its process dies,
+    /// abandoned or not, so a crashed writer never blocks the next one).
+    ///
+    /// Local\ because creating a Global\ kernel object needs SeCreateGlobalPrivilege, which an
+    /// unelevated process does not hold.
     /// </summary>
     public SeqLockWriter(string mapName, uint signature, uint version)
     {
-        _mmf = MemoryMappedFile.CreateNew(mapName, TotalSize);
+        _singleton = new Mutex(false, mapName + ".writer");
+        bool owned;
+        try { owned = _singleton.WaitOne(0); }
+        catch (AbandonedMutexException) { owned = true; }   // previous writer crashed; we take over
+        if (!owned)
+        {
+            _singleton.Dispose();
+            throw new IOException("Ya hay un escritor para " + mapName);
+        }
+
+        _mmf = MemoryMappedFile.CreateOrOpen(mapName, TotalSize);
         _view = _mmf.CreateViewAccessor(0, TotalSize, MemoryMappedFileAccess.ReadWrite);
 
         byte* p = null;
@@ -46,9 +63,13 @@ public sealed unsafe class SeqLockWriter<T> : IDisposable where T : unmanaged
         _header = (SeqLockHeader*)p;
         _payload = (T*)(p + HeaderSize);
 
+        // Mark the sequence odd first so any reader mid-copy retries while we re-stamp the header.
+        Volatile.Write(ref _header->Sequence, _header->Sequence | 1);
+        Thread.MemoryBarrier();
         _header->Signature = signature;
         _header->Version = version;
         _header->PayloadSize = PayloadSize;
+        Thread.MemoryBarrier();
         Volatile.Write(ref _header->Sequence, 0);
     }
 
@@ -70,6 +91,8 @@ public sealed unsafe class SeqLockWriter<T> : IDisposable where T : unmanaged
         _view.SafeMemoryMappedViewHandle.ReleasePointer();
         _view.Dispose();
         _mmf.Dispose();
+        try { _singleton.ReleaseMutex(); } catch { }
+        _singleton.Dispose();
     }
 }
 

@@ -434,6 +434,27 @@ muestras/s por core (~290/s bajo carga: el ritmo sube con la actividad).
 Y confirma que hay que **agrupar por nombre**: sin agrupar, un core sale como
 `powershell 19% powershell 16% powershell 10%` (tres PIDs) y la red lista `chrome` dos veces.
 
+### Dos fallos de red que costó cazar
+
+**1. La captura de red de ETW se atasca tras muchas horas.** El proveedor clásico
+`NetworkTCPIP` deja de entregar eventos TcpIp/UdpIp mientras el profiling sigue, así que el
+ancho de banda por proceso se congela. El helper corre la sesión de kernel dentro de un bucle
+con un **watchdog**: compara su contador de eventos contra los **bytes reales de la interfaz**
+(iphlpapi) — si la NIC mueve datos y ETW no emite eventos durante 20 s, recrea la sesión. Usar
+los bytes de la NIC evita falsos positivos con la red ociosa (sin tráfico no hay atasco). Las
+publicaciones no se cortan durante el reinicio, así que la UI no ve hueco.
+
+**2. El agente no podía reiniciarse con la UI abierta.** El writer usaba `CreateNew`, que falla
+si el mapa ya existe — y la UI, como lector, mantiene el mapa vivo aunque el agente muera. Un
+agente nuevo no arrancaba («ya hay un agente») y los lectores se quedaban con datos viejos para
+siempre. Ahora la instancia única se controla con un **mutex con nombre** (se libera al morir el
+proceso, aunque crashee) y el mapa usa `CreateOrOpen` para reutilizar el que sujeta la UI.
+
+**Limitación honesta: el tráfico de WSL2 no se atribuye a un proceso.** Sus sockets viven en el
+invitado Linux; en el host el tráfico lo reenvía el vSwitch de Hyper-V sin un PID de proceso
+normal dueño del socket. Así que una descarga dentro de WSL sale en el total de la interfaz
+pero no bajo ningún proceso de la lista. Es intrínseco a cómo funciona ETW, no un bug.
+
 ### Diseño híbrido, implementado
 
 `SidebarMonitor.Etw` es el proceso auxiliar **opcional y elevado** (su manifest pide UAC).
