@@ -8,6 +8,9 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if (args.Contains("--dump") || args.Any(a => a.StartsWith("--shot=")))
+            Native.AttachToParentConsole();
+
         int monitorIndex = IntArg(args, "--monitor=", 1);
         int width = IntArg(args, "--width=", 280);
         int seconds = IntArg(args, "--seconds=", 0);          // 0 = run until closed
@@ -32,7 +35,7 @@ internal static class Program
         {
             win.Loaded += (_, _) =>
             {
-                win.Apply(Split("--collapse="), Split("--hide="));
+                win.Apply(Split("--collapse="), Split("--expand="), Split("--hide="));
                 var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(seconds) };
                 timer.Tick += (_, _) =>
                 {

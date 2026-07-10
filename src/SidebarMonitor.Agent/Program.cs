@@ -30,6 +30,7 @@ internal static class Program
         // time-sensitive number on screen, so they sample every Nth tick by default.
         int procEvery = IntArg(args, "--proc-every=", 3);
         bool verbose = args.Contains("--verbose");
+        bool groupProcs = !args.Contains("--no-group");
 
         SeqLockWriter<Snapshot> writer;
         try
@@ -49,9 +50,17 @@ internal static class Program
             var hwi = HwiSensors.TryOpen(out string? hwiError);
             var nvml = Nvml.TryOpen(out string? nvmlError);
 
+            // Disk identity never changes while we run; a single collect gives us the instances.
+            pdh.Collect();
+            var inventory = DiskInventory.Enumerate(pdh.DiskRead().Select(d => d.Instance));
+
             Console.WriteLine($"Agente en marcha. {SnapshotLayout.MapName}, {writer.SizeBytes} B, cada {intervalMs} ms.");
             Console.WriteLine($"  HWiNFO: {(hwi is not null ? $"OK ({hwi.CpuName})" : $"no disponible - {hwiError}")}");
             Console.WriteLine($"  NVML:   {(nvml is not null ? $"OK ({nvml.Count} GPU)" : $"no disponible - {nvmlError}")}");
+            Console.WriteLine($"  Discos: {inventory.Count} identificados");
+            foreach (var (idx, id) in inventory.OrderBy(kv => kv.Key))
+                Console.WriteLine($"          [{idx}] {id.Label,-18} {id.Model,-24} {id.Media,-7} {id.Bus,-6} {id.SizeBytes / 1e12:F2} TB");
+            Console.WriteLine($"  Procesos: {(groupProcs ? "agrupados por nombre" : "sin agrupar")}");
             Console.WriteLine("Ctrl+C para parar.");
             Console.WriteLine();
 
@@ -93,7 +102,7 @@ internal static class Program
                 FillCpu(ref snapshot.Cpu, pdh, hwi);
                 FillMem(ref snapshot.Mem, pdh);
                 FillGpus(ref snapshot, nvml);
-                FillDisks(ref snapshot, pdh);
+                FillDisks(ref snapshot, pdh, inventory, hwi);
 
                 // Adapters come and go (VPN up, dock unplugged); rescanning every tick is wasteful.
                 if (Stopwatch.GetElapsedTime(lastNicRefresh).TotalSeconds >= 30)
@@ -106,7 +115,7 @@ internal static class Program
                 FillNics(ref snapshot, nics, ref prevNet, ref prevNetStamp);
 
                 // On skipped ticks the previous top list stays in the snapshot untouched.
-                if (ticks % procEvery == 0) FillProcs(ref snapshot, procs);
+                if (ticks % procEvery == 0) FillProcs(ref snapshot, procs, groupProcs);
 
                 etw = MergeEtw(ref snapshot, etw);
 
@@ -205,7 +214,7 @@ internal static class Program
         for (int i = 0; i < s.GpuCount; i++) nvml!.Fill(i, ref s.Gpus[i]);
     }
 
-    private static void FillDisks(ref Snapshot s, PdhQuery pdh)
+    private static void FillDisks(ref Snapshot s, PdhQuery pdh, Dictionary<int, DiskIdentity> inventory, HwiSensors? hwi)
     {
         var read = pdh.DiskRead();
         var write = pdh.DiskWrite();
@@ -214,13 +223,31 @@ internal static class Program
         int n = 0;
         for (int i = 0; i < read.Count && n < SnapshotLayout.MaxDisks; i++)
         {
-            if (read[i].Instance.Contains("_Total", StringComparison.Ordinal)) continue;
+            string instance = read[i].Instance;
+            if (instance.Contains("_Total", StringComparison.Ordinal)) continue;
 
             ref var d = ref s.Disks[n];
-            NameField.Set(ref d.Name, read[i].Instance);
+            NameField.Set(ref d.Name, instance);
             d.ReadBytesPerSec = read[i].Value;
             d.WriteBytesPerSec = i < write.Count ? write[i].Value : 0;
             d.QueueLength = i < queue.Count ? queue[i].Value : 0;
+
+            int space = instance.IndexOf(' ');
+            string head = space < 0 ? instance : instance[..space];
+            if (int.TryParse(head, out int index) && inventory.TryGetValue(index, out var id))
+            {
+                NameField.Set(ref d.Label, id.Label);
+                NameField.Set(ref d.Model, id.Model);
+                NameField.Set(ref d.Bus, id.Bus);
+                d.Media = id.Media;
+                d.SizeBytes = id.SizeBytes;
+                d.TempC = (float)(hwi?.DriveTempC(id.Model) ?? double.NaN);
+            }
+            else
+            {
+                d.TempC = float.NaN;
+            }
+
             n++;
         }
         s.DiskCount = n;
@@ -258,9 +285,9 @@ internal static class Program
         s.NicCount = nics.Length;
     }
 
-    private static void FillProcs(ref Snapshot s, Processes procs)
+    private static void FillProcs(ref Snapshot s, Processes procs, bool group)
     {
-        var top = procs.Top(SnapshotLayout.MaxProcs);
+        var top = procs.Top(SnapshotLayout.MaxProcs, group);
         for (int i = 0; i < top.Count; i++)
         {
             ref var p = ref s.Procs[i];
@@ -269,6 +296,7 @@ internal static class Program
             p.CpuPct = top[i].CpuPct;
             p.WorkingSet = top[i].WorkingSet;
             p.Threads = top[i].Threads;
+            p.Instances = top[i].Instances;
         }
         s.ProcCount = top.Count;
         s.TotalProcesses = procs.TotalProcesses;

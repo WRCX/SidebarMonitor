@@ -100,6 +100,24 @@ internal static class Native
     [DllImport("user32.dll")]
     public static extern int GetSystemMetrics(int nIndex);
 
+    private const int AttachParentProcess = -1;
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool AttachConsole(int processId);
+
+    /// <summary>
+    /// A WinExe owns no console. When it was launched from one, borrow it so the diagnostic
+    /// flags still print where the user is looking. Silently does nothing otherwise.
+    /// </summary>
+    public static void AttachToParentConsole()
+    {
+        if (!AttachConsole(AttachParentProcess)) return;
+        var stdout = new System.IO.StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true };
+        Console.SetOut(stdout);
+        Console.SetError(stdout);
+    }
+
     // DPI awareness, read back to prove the manifest took effect.
     [DllImport("user32.dll")]
     public static extern IntPtr GetThreadDpiAwarenessContext();

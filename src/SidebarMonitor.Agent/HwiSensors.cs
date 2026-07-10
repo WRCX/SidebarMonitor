@@ -19,7 +19,7 @@ internal sealed class HwiSensors : IDisposable
     private const int HdrSensorOffset = 20, HdrSensorElemSize = 24, HdrSensorCount = 28;
     private const int HdrReadingOffset = 32, HdrReadingElemSize = 36, HdrReadingCount = 40;
     private const int SenNameOrig = 8, SenElemSize = 392;
-    private const int RdLabelOrig = 12, RdValue = 284, RdElemSize = 460;
+    private const int RdSensorIndex = 4, RdLabelOrig = 12, RdValue = 284, RdElemSize = 460;
     private const int StringLen = 128;
 
     private readonly MemoryMappedFile _mmf;
@@ -30,10 +30,26 @@ internal sealed class HwiSensors : IDisposable
     private readonly int _idxPackagePower;
     private readonly int _idxCpuTemp;
 
+    /// <summary>Sensor name of each S.M.A.R.T. group -> index of its "Drive Temperature" reading.</summary>
+    private readonly List<(string SensorName, int Index)> _driveTemps = [];
+
     public string CpuName { get; } = "CPU";
 
     public double PackagePowerW => Read(_idxPackagePower);
     public double CpuTempC => Read(_idxCpuTemp);
+
+    /// <summary>
+    /// HWiNFO names its S.M.A.R.T. sensors "S.M.A.R.T.: &lt;model&gt; (&lt;serial&gt;)", so the model
+    /// reported by IOCTL_STORAGE_QUERY_PROPERTY is a substring of it. That is the only join we have.
+    /// </summary>
+    public double DriveTempC(string model)
+    {
+        if (string.IsNullOrEmpty(model)) return double.NaN;
+        foreach (var (sensorName, index) in _driveTemps)
+            if (sensorName.Contains(model, StringComparison.OrdinalIgnoreCase))
+                return Read(index);
+        return double.NaN;
+    }
 
     private HwiSensors(MemoryMappedFile mmf, MemoryMappedViewAccessor view)
     {
@@ -54,22 +70,34 @@ internal sealed class HwiSensors : IDisposable
 
         var buf = new byte[Math.Max(SenElemSize, RdElemSize)];
 
+        var sensorNames = new string[sensorCount];
         for (uint i = 0; i < sensorCount; i++)
         {
             view.ReadArray(sensorOffset + (long)i * sensorElemSize, buf, 0, SenElemSize);
             string name = Ansi(buf, SenNameOrig, StringLen);
-            if (name.StartsWith("CPU [#0]", StringComparison.Ordinal))
+            sensorNames[i] = name;
+
+            if (CpuName == "CPU" && name.StartsWith("CPU [#0]", StringComparison.Ordinal))
             {
                 int colon = name.IndexOf(':');
                 if (colon >= 0 && colon + 2 < name.Length) CpuName = name[(colon + 2)..];
-                break;
             }
         }
 
         for (uint i = 0; i < readingCount; i++)
         {
             view.ReadArray(_readingOffset + (long)i * _readingElemSize, buf, 0, RdElemSize);
-            switch (Ansi(buf, RdLabelOrig, StringLen))
+            string labelOrig = Ansi(buf, RdLabelOrig, StringLen);
+
+            // The first "Drive Temperature" of each S.M.A.R.T. sensor. NVMe drives expose
+            // several (composite, sensor 2, sensor 3); the first one is the one to show.
+            if (labelOrig == "Drive Temperature")
+            {
+                uint sensorIdx = BitConverter.ToUInt32(buf, RdSensorIndex);
+                if (sensorIdx < sensorCount) _driveTemps.Add((sensorNames[sensorIdx], (int)i));
+            }
+
+            switch (labelOrig)
             {
                 case "CPU Package Power" when _idxPackagePower == 0: _idxPackagePower = (int)i + 1; break;
                 case "CPU (Tctl/Tdie)" when _idxCpuTemp == 0: _idxCpuTemp = (int)i + 1; break;

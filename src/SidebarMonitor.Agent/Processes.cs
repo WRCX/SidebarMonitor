@@ -35,19 +35,29 @@ internal sealed class Processes : IDisposable
     public int TotalProcesses { get; private set; }
     public int TotalThreads { get; private set; }
 
-    /// <summary>Top processes by CPU share. Returns empty on the first call: a delta needs two samples.</summary>
-    public List<(string Name, int Pid, float CpuPct, ulong WorkingSet, int Threads)> Top(int count)
+    public readonly record struct TopRow(string Name, int Pid, float CpuPct, ulong WorkingSet, int Threads, int Instances);
+
+    /// <summary>
+    /// Top processes by CPU share. Returns empty on the first call: a delta needs two samples.
+    ///
+    /// When <paramref name="group"/> is set, processes sharing a name are folded into one row
+    /// and their CPU, memory and threads summed — chrome with 40 renderers reads as one entry,
+    /// which is the only way that list is legible.
+    /// </summary>
+    public List<TopRow> Top(int count, bool group)
     {
         long now = Stopwatch.GetTimestamp();
         var current = Sample();
 
-        var result = new List<(string, int, float, ulong, int)>(current.Count);
         TotalProcesses = current.Count;
         TotalThreads = 0;
 
         double elapsed = _previousTimestamp == 0
             ? 0
             : Stopwatch.GetElapsedTime(_previousTimestamp, now).TotalSeconds;
+
+        var rows = new List<TopRow>(current.Count);
+        var grouped = group ? new Dictionary<string, TopRow>(current.Count, StringComparer.OrdinalIgnoreCase) : null;
 
         foreach (var (pid, cur) in current)
         {
@@ -56,16 +66,35 @@ internal sealed class Processes : IDisposable
             // pid 0 is the Idle process: its "CPU" is just unused cores.
             if (pid == 0 || elapsed <= 0 || !_previous.TryGetValue(pid, out var prev)) continue;
 
-            double pct = (cur.Cpu100Ns - prev.Cpu100Ns) / 1e7 / elapsed / _cores * 100.0;
-            result.Add((cur.Name, pid, (float)pct, (ulong)cur.WorkingSet, cur.Threads));
+            float pct = (float)((cur.Cpu100Ns - prev.Cpu100Ns) / 1e7 / elapsed / _cores * 100.0);
+
+            if (grouped is null)
+            {
+                rows.Add(new TopRow(cur.Name, pid, pct, (ulong)cur.WorkingSet, cur.Threads, 1));
+                continue;
+            }
+
+            if (grouped.TryGetValue(cur.Name, out var acc))
+                grouped[cur.Name] = acc with
+                {
+                    Pid = 0,                                     // no single owner any more
+                    CpuPct = acc.CpuPct + pct,
+                    WorkingSet = acc.WorkingSet + (ulong)cur.WorkingSet,
+                    Threads = acc.Threads + cur.Threads,
+                    Instances = acc.Instances + 1,
+                };
+            else
+                grouped[cur.Name] = new TopRow(cur.Name, pid, pct, (ulong)cur.WorkingSet, cur.Threads, 1);
         }
 
         _previous = current;
         _previousTimestamp = now;
 
-        result.Sort((a, b) => b.Item3.CompareTo(a.Item3));
-        if (result.Count > count) result.RemoveRange(count, result.Count - count);
-        return result;
+        if (grouped is not null) rows.AddRange(grouped.Values);
+
+        rows.Sort((a, b) => b.CpuPct.CompareTo(a.CpuPct));
+        if (rows.Count > count) rows.RemoveRange(count, rows.Count - count);
+        return rows;
     }
 
     private Dictionary<int, ProcSample> Sample()

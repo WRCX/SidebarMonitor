@@ -52,8 +52,12 @@ internal sealed class MainWindow : AppBarWindow
     private readonly TextBlock _netDl = Value();
     private readonly TextBlock _netUl = Value();
     private readonly StackPanel _nicRows = new();
-    private readonly Sparkline _diskSpark = new(Theme.SeriesIn, Theme.SeriesOut, height: 28);
-    private readonly StackPanel _diskRows = new();
+
+    /// <summary>One block per physical disk, rebuilt only if the set of disks changes.</summary>
+    private readonly StackPanel _diskPanels = new();
+    private readonly List<DiskBlock> _diskBlocks = [];
+
+    private sealed record DiskBlock(string Key, TextBlock Head, TextBlock Temp, TextBlock Sub, Sparkline Spark, TextBlock Rates);
 
     // TOP
     private readonly (TextBlock Name, TextBlock Cpu, TextBlock Mem)[] _topRows;
@@ -162,18 +166,72 @@ internal sealed class MainWindow : AppBarWindow
         return panel;
     }
 
-    private UIElement BuildDisks()
+    private UIElement BuildDisks() => _diskPanels;
+
+    /// <summary>
+    /// A block per disk: label + temperature, model/media/bus/size, its own read/write
+    /// sparkline, and the current rates. Rebuilt only when the set of disks changes, so each
+    /// sparkline keeps its history across ticks.
+    /// </summary>
+    private void SyncDiskBlocks(ref Snapshot s)
     {
-        var panel = new StackPanel();
-        panel.Children.Add(_diskSpark);
-        _diskRows.Margin = new Thickness(0, 3, 0, 0);
-        panel.Children.Add(_diskRows);
-        return panel;
+        bool same = _diskBlocks.Count == s.DiskCount;
+        for (int i = 0; same && i < s.DiskCount; i++)
+            same = _diskBlocks[i].Key == NameField.Get(ref s.Disks[i].Name);
+        if (same) return;
+
+        _diskBlocks.Clear();
+        _diskPanels.Children.Clear();
+
+        for (int i = 0; i < s.DiskCount; i++)
+        {
+            var head = Theme.Text("", 10.5, Theme.InkSecondary);
+            var temp = Theme.Text("", 10.5, Theme.InkSecondary, mono: true);
+            temp.HorizontalAlignment = HorizontalAlignment.Right;
+
+            var headGrid = new Grid();
+            headGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            headGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            Grid.SetColumn(temp, 1);
+            headGrid.Children.Add(head);
+            headGrid.Children.Add(temp);
+
+            var sub = Theme.Text("", 9, Theme.InkMuted);
+            var spark = new Sparkline(Theme.SeriesIn, Theme.SeriesOut, height: 22) { Margin = new Thickness(0, 2, 0, 2) };
+            var rates = Theme.Text("", 9.5, Theme.InkMuted, mono: true);
+
+            var block = new StackPanel { Margin = new Thickness(0, 0, 0, 6) };
+            block.Children.Add(headGrid);
+            block.Children.Add(sub);
+            block.Children.Add(spark);
+            block.Children.Add(rates);
+            _diskPanels.Children.Add(block);
+
+            _diskBlocks.Add(new DiskBlock(NameField.Get(ref s.Disks[i].Name), head, temp, sub, spark, rates));
+        }
     }
 
     private UIElement BuildTop()
     {
         var panel = new StackPanel();
+
+        // Header, because "116 MB" on its own does not say it is the working set.
+        var hdr = new Grid { Margin = new Thickness(0, 0, 0, 2) };
+        hdr.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        hdr.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(52) });
+        hdr.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(62) });
+        var hName = Theme.Text("proceso", 9, Theme.InkMuted);
+        var hCpu = Theme.Text("CPU", 9, Theme.InkMuted);
+        var hMem = Theme.Text("RAM", 9, Theme.InkMuted);
+        hCpu.HorizontalAlignment = HorizontalAlignment.Right;
+        hMem.HorizontalAlignment = HorizontalAlignment.Right;
+        Grid.SetColumn(hCpu, 1);
+        Grid.SetColumn(hMem, 2);
+        hdr.Children.Add(hName);
+        hdr.Children.Add(hCpu);
+        hdr.Children.Add(hMem);
+        panel.Children.Add(hdr);
+
         for (int i = 0; i < _topRows.Length; i++)
         {
             var name = Theme.Text("", 10.5, Theme.InkSecondary);
@@ -373,13 +431,31 @@ internal sealed class MainWindow : AppBarWindow
         Find("disk").SetSummary($"R {Theme.BytesShort(rd)}  W {Theme.BytesShort(wr)}");
         if (Find("disk").IsUpdateWorthy())
         {
-            _diskSpark.Push((float)rd, (float)wr);
-            SyncRows(_diskRows, s.DiskCount);
-            for (int i = 0; i < s.DiskCount; i++)
+            SyncDiskBlocks(ref s);
+            for (int i = 0; i < s.DiskCount && i < _diskBlocks.Count; i++)
             {
                 ref var d = ref s.Disks[i];
-                ((TextBlock)_diskRows.Children[i]).Text =
-                    $"{Truncate(NameField.Get(ref d.Name), 14),-14} R {Theme.BytesShort(d.ReadBytesPerSec),-7} W {Theme.BytesShort(d.WriteBytesPerSec)}";
+                var b = _diskBlocks[i];
+
+                // A disk with no mounted volume (the WSL vHD) has no label; fall back to its model.
+                string label = NameField.Get(ref d.Label);
+                if (label.Length == 0) label = NameField.Get(ref d.Model);
+                if (label.Length == 0) label = NameField.Get(ref d.Name);
+                b.Head.Text = label;
+                b.Temp.Text = float.IsNaN(d.TempC) ? "" : string.Create(ci, $"{d.TempC:F0} °C");
+                // A spinning disk sits happily at 45-50 °C; alarming there would cry wolf.
+                b.Temp.Foreground = d.TempC >= 60 ? Theme.StatusCritical
+                                  : d.TempC >= 52 ? Theme.StatusSerious
+                                  : Theme.InkSecondary;
+
+                string media = d.Media switch { DiskMedia.Ssd => "SSD", DiskMedia.Hdd => "HDD", _ => "" };
+                string size = d.SizeBytes > 0 ? string.Create(ci, $"{d.SizeBytes / 1e12:F1} TB") : "";
+                b.Sub.Text = string.Join("  ", new[] { NameField.Get(ref d.Model), media, NameField.Get(ref d.Bus), size }
+                    .Where(x => x.Length > 0));
+
+                b.Spark.Push((float)d.ReadBytesPerSec, (float)d.WriteBytesPerSec);
+                b.Rates.Text = string.Create(ci,
+                    $"R {Theme.BytesShort(d.ReadBytesPerSec),-6} W {Theme.BytesShort(d.WriteBytesPerSec),-6} cola {d.QueueLength:F2}");
             }
         }
 
@@ -391,7 +467,9 @@ internal sealed class MainWindow : AppBarWindow
             {
                 if (i >= rows) { _topRows[i].Name.Text = _topRows[i].Cpu.Text = _topRows[i].Mem.Text = ""; continue; }
                 ref var p = ref s.Procs[i];
-                _topRows[i].Name.Text = NameField.Get(ref p.Name);
+                string name = NameField.Get(ref p.Name);
+                // "chrome ×42" says at a glance that this row is 42 processes summed.
+                _topRows[i].Name.Text = p.Instances > 1 ? $"{name} ×{p.Instances}" : name;
                 _topRows[i].Cpu.Text = string.Create(ci, $"{p.CpuPct:F1}%");
                 _topRows[i].Mem.Text = string.Create(ci, $"{p.WorkingSet / (1024.0 * 1024):F0} MB");
             }
@@ -475,12 +553,13 @@ internal sealed class MainWindow : AppBarWindow
 
     // ---------------------------------------------------------------- proof
 
-    /// <summary>Test hook: fold or hide sections by key, exercising the same paths as clicking.</summary>
-    public void Apply(string[] collapse, string[] hide)
+    /// <summary>Test hook: fold, unfold or hide sections by key, as clicking would.</summary>
+    public void Apply(string[] collapse, string[] expand, string[] hide)
     {
         foreach (var s in _sections)
         {
             if (collapse.Contains(s.Key)) s.Expanded = false;
+            if (expand.Contains(s.Key)) { s.Expanded = true; s.Visibility = Visibility.Visible; }
             if (hide.Contains(s.Key)) s.Visibility = Visibility.Collapsed;
         }
     }

@@ -10,14 +10,18 @@ public static class SnapshotLayout
     public const uint Signature = 0x4E4D4253;
 
     /// <summary>Bump on any layout change. The reader refuses anything it does not know.</summary>
-    public const uint Version = 2;
+    public const uint Version = 3;
 
     /// <summary>
     /// Local\, not Global\. Creating a Global\ kernel object requires SeCreateGlobalPrivilege,
     /// which an unelevated process does not hold. HWiNFO gets away with Global\ because it runs
     /// elevated. Agent and UI share a session, so Local\ is all we need.
     /// </summary>
-    public const string MapName = @"Local\SidebarMonitor.Snapshot.v1";
+    /// <summary>
+    /// No version in the name: the header carries it. A stale reader then reports "version 3,
+    /// expected 2" instead of the far more confusing "nobody is publishing".
+    /// </summary>
+    public const string MapName = @"Local\SidebarMonitor.Snapshot";
 
     public const int MaxCores = 64;
     public const int MaxGpus = 2;
@@ -70,10 +74,22 @@ public struct NicInfo
     public ulong LinkBitsPerSec;
 }
 
+public enum DiskMedia : byte { Unknown = 0, Hdd = 1, Ssd = 2 }
+
 [StructLayout(LayoutKind.Sequential)]
 public struct DiskInfo
 {
+    /// <summary>The PDH instance, e.g. "2 C: E:".</summary>
     public Name32 Name;
+    /// <summary>Volume labels joined, e.g. "DATOS12TB" or "Windows / juegos".</summary>
+    public Name32 Label;
+    /// <summary>Product id from the device descriptor, e.g. "WDC WD120EFGX-68CPHN0".</summary>
+    public Name64 Model;
+    public Name32 Bus;
+    public DiskMedia Media;
+    /// <summary>From HWiNFO's S.M.A.R.T. sensors; NaN when unavailable.</summary>
+    public float TempC;
+    public ulong SizeBytes;
     public double ReadBytesPerSec, WriteBytesPerSec, QueueLength;
 }
 
@@ -81,10 +97,13 @@ public struct DiskInfo
 public struct ProcInfo
 {
     public Name32 Name;
+    /// <summary>The PID when this row is a single process; 0 when it aggregates several.</summary>
     public int Pid;
     public float CpuPct;
     public int Threads;
     public ulong WorkingSet;
+    /// <summary>How many processes were folded into this row. 1 when not grouping.</summary>
+    public int Instances;
 }
 
 [StructLayout(LayoutKind.Sequential)]

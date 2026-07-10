@@ -130,15 +130,21 @@ internal static class Program
         for (int i = 0; i < s.DiskCount; i++)
         {
             ref var d = ref s.Disks[i];
-            Console.WriteLine(string.Create(ci, $"DISK {NameField.Get(ref d.Name),-24} R {d.ReadBytesPerSec / 1024,8:F1} KiB/s   W {d.WriteBytesPerSec / 1024,8:F1} KiB/s   cola {d.QueueLength:F2}"));
+            string label = NameField.Get(ref d.Label);
+            string temp = float.IsNaN(d.TempC) ? "  n/d" : string.Create(ci, $"{d.TempC,3:F0}°C");
+            Console.WriteLine(string.Create(ci,
+                $"DISK {label,-16} {d.Media,-7} {NameField.Get(ref d.Bus),-5} {d.SizeBytes / 1e12,5:F1} TB  {temp}  " +
+                $"R {d.ReadBytesPerSec / 1024,8:F1} KiB/s  W {d.WriteBytesPerSec / 1024,8:F1} KiB/s"));
+            Console.WriteLine($"       {NameField.Get(ref d.Model)}");
         }
         Console.WriteLine();
 
         Console.WriteLine($"TOP  ({s.TotalProcesses} procesos, {s.TotalThreads} threads)");
+        Console.WriteLine($"  {"proceso",-28} {"inst",5} {"CPU",7}  {"RAM",10}  thr");
         for (int i = 0; i < s.ProcCount; i++)
         {
             ref var p = ref s.Procs[i];
-            Console.WriteLine(string.Create(ci, $"  {NameField.Get(ref p.Name),-28} {p.Pid,7}  {p.CpuPct,6:F2} %  {p.WorkingSet / 1024.0 / 1024,8:F1} MiB  {p.Threads,4} thr"));
+            Console.WriteLine(string.Create(ci, $"  {NameField.Get(ref p.Name),-28} {p.Instances,5} {p.CpuPct,6:F2} %  {p.WorkingSet / 1024.0 / 1024,8:F1} MiB  {p.Threads,4}"));
         }
     }
 }

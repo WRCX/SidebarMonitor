@@ -8,7 +8,7 @@ public static class EtwLayout
     /// <summary>'SBME' little-endian.</summary>
     public const uint Signature = 0x454D4253;
     public const uint Version = 1;
-    public const string MapName = @"Local\SidebarMonitor.Etw.v1";
+    public const string MapName = @"Local\SidebarMonitor.Etw";
 
     /// <summary>Segments drawn per core bar. Beyond this, the rest folds into "otros".</summary>
     public const int TopPerCore = 3;

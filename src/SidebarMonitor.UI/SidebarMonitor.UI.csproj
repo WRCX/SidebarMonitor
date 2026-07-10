@@ -1,7 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
+    <!-- WinExe: no console window of its own. The debug flags attach to the parent console
+         when launched from one, so diagnostics still print where you ran it. -->
+    <OutputType>WinExe</OutputType>
     <UseWPF>true</UseWPF>
     <RootNamespace>SidebarMonitor.UI</RootNamespace>
     <AssemblyName>SidebarMonitor.UI</AssemblyName>

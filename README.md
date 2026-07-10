@@ -264,6 +264,29 @@ y el proceso dominante **nombrado en texto**. Verticales no caben: 16 barras en 
 Sin el helper ETW, cada barra es un único segmento azul — exactamente el dibujo anterior — y
 la barra de estado avisa con `sin ETW`.
 
+### Discos
+
+Un bloque por disco físico, con **su propia gráfica** de lectura/escritura: etiqueta de volumen
+(`DATOS12TB`), modelo, HDD/SSD, bus, tamaño y temperatura.
+
+La identidad sale de `IOCTL_STORAGE_QUERY_PROPERTY`, no de WMI: WMI necesita COM y reflexión, y
+le costaría al agente su build AOT. **Abrir `\\.\PhysicalDriveN` con un acceso deseado de 0
+basta** para consultar propiedades, así que tampoco hace falta elevación. El tamaño viene de
+`IOCTL_DISK_GET_DRIVE_GEOMETRY_EX`; `GET_LENGTH_INFO` **no vale**, exige acceso de lectura al
+dispositivo crudo y falla sin admin.
+
+SSD vs HDD sale de `StorageDeviceSeekPenaltyProperty`: un disco que «incurre en penalización de
+búsqueda» es mecánico. Los USB no lo reportan y quedan como `Unknown`, correctamente.
+
+La temperatura viene de HWiNFO. El único punto de unión es que HWiNFO nombra sus sensores
+`S.M.A.R.T.: <modelo> (<serie>)`, y el modelo del IOCTL es subcadena de ese nombre.
+
+### Procesos
+
+Agrupados por nombre y sumando CPU, RAM e hilos (`chrome.exe ×31`, `svchost.exe ×97`), que es
+la única forma de que la lista se lea. Se desactiva con `--no-group` en el agente. La cabecera
+etiqueta las columnas: sin ella, `116 MB` no dice que sea el working set.
+
 Color por entidad, nunca por posición: CPU azul, GPU violeta, entrada aqua, salida naranja —
 los slots de la paleta de referencia de `dataviz` en su superficie oscura. Los medidores viran
 a estado (naranja al 80 %, rojo al 90 %) siempre junto a la cifra, nunca solo por color. Las
@@ -323,8 +346,13 @@ el mismo número.
 - `src/*Probe` — las sondas de viabilidad, se pueden borrar cuando estorben.
 
 Para depurar la UI: `--seconds=N` la cierra sola, `--shot=x.png` captura, `--dump` vuelca el
-árbol visual con el texto y color de cada `TextBlock`, y `--collapse=`/`--hide=` fuerzan el
-estado de las secciones sin tocar el ratón.
+árbol visual con el texto y color de cada `TextBlock`, y `--collapse=` / `--expand=` / `--hide=`
+fuerzan el estado de las secciones sin tocar el ratón (útil porque el estado guardado en
+`ui.json` se restaura y puede sorprenderte).
+
+La UI es `WinExe`: **no abre consola**. Con los flags de depuración se engancha a la consola
+del padre, si la hay. Ojo: en PowerShell, `& app.exe` **no espera** a un WinExe — usa
+`Start-Process -Wait` o creerás que ha fallado.
 
 > Al capturar, renderiza el visual directamente (`RenderTargetBitmap.Render(root)`). Pasar por
 > un `VisualBrush` **descarta silenciosamente los textos**: miden bien y nunca se rasterizan.
