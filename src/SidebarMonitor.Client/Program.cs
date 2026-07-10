@@ -11,7 +11,7 @@ internal static class Program
     {
         Console.OutputEncoding = System.Text.Encoding.UTF8;
 
-        var reader = SnapshotReader.TryOpen(out string? error);
+        var reader = SnapshotChannel.TryOpenReader(out string? error);
         if (reader is null)
         {
             Console.Error.WriteLine($"No se pudo abrir el snapshot: {error}");
@@ -41,7 +41,7 @@ internal static class Program
         return 0;
     }
 
-    private static int Bench(SnapshotReader reader)
+    private static int Bench(SeqLockReader<Snapshot> reader)
     {
         const int iters = 100_000;
         for (int i = 0; i < 1000; i++) reader.TryRead(out _);
@@ -67,15 +67,40 @@ internal static class Program
         const double G = 1024.0 * 1024 * 1024;
 
         Console.WriteLine($"=== {new DateTime(s.TimestampUtcTicks, DateTimeKind.Utc).ToLocalTime():HH:mm:ss} " +
-                          $"(cada {s.SampleIntervalSec:F1} s, HWiNFO {(s.HwiNfoAvailable ? "si" : "no")}) ===");
+                          $"(cada {s.SampleIntervalSec:F1} s, HWiNFO {(s.HwiNfoAvailable ? "si" : "no")}, " +
+                          $"ETW {(s.EtwAvailable ? "si" : "no")}) ===");
         Console.WriteLine();
 
         ref var c = ref s.Cpu;
         Console.WriteLine($"CPU  {NameField.Get(ref c.Name)}");
         Console.WriteLine(string.Create(ci, $"  uso {c.TotalUsagePct,5:F1} %   {c.FrequencyMhz / 1000,4:F2} GHz   {c.PackagePowerW,5:F1} W   {c.TempC,4:F1} °C"));
-        Console.Write("  cores ");
-        for (int i = 0; i < c.CoreCount; i++) Console.Write(string.Create(ci, $"{c.CoreUsagePct[i],5:F0}"));
-        Console.WriteLine();
+
+        if (s.EtwAvailable)
+        {
+            // Height from PDH, owner from ETW: the profiler undersamples idle cores, so its
+            // sample counts can say WHO but never HOW MUCH.
+            var parts = new List<string>(3);
+            for (int i = 0; i < c.CoreCount; i++)
+            {
+                parts.Clear();
+                // A ref local (into the inline array) cannot cross a lambda, so build by hand.
+                ref var owners = ref s.CoreOwners[i];
+                for (int k = 0; k < EtwLayout.TopPerCore; k++)
+                {
+                    ref var o = ref owners[k];
+                    if (o.Pct <= 0) continue;
+                    parts.Add(string.Create(ci, $"{NameField.Get(ref o.Name)} {o.Pct:F0}%"));
+                }
+                string who = s.CoreOwnerSamples[i] == 0 ? "(sin muestras)" : string.Join("  ", parts);
+                Console.WriteLine(string.Create(ci, $"  core {i,2}  {c.CoreUsagePct[i],5:F1}%  {who}"));
+            }
+        }
+        else
+        {
+            Console.Write("  cores ");
+            for (int i = 0; i < c.CoreCount; i++) Console.Write(string.Create(ci, $"{c.CoreUsagePct[i],5:F0}"));
+            Console.WriteLine();
+        }
         Console.WriteLine();
 
         Console.WriteLine(string.Create(ci, $"RAM   {s.Mem.PhysUsed / G,5:F2} / {s.Mem.PhysTotal / G:F2} GiB      commit {s.Mem.CommitUsed / G:F2} / {s.Mem.CommitTotal / G:F2} GiB"));
@@ -94,6 +119,11 @@ internal static class Program
         {
             ref var n = ref s.Nics[i];
             Console.WriteLine(string.Create(ci, $"NET  {NameField.Get(ref n.Name),-24} DL {n.RxBytesPerSec / 1024,8:F1} KiB/s   UL {n.TxBytesPerSec / 1024,8:F1} KiB/s   link {n.LinkBitsPerSec / 1e6:F0} Mbps"));
+        }
+        for (int i = 0; i < s.NetProcCount; i++)
+        {
+            ref var np = ref s.NetProcs[i];
+            Console.WriteLine(string.Create(ci, $"  ↳  {NameField.Get(ref np.Name),-22} ↓{np.RxBytesPerSec / 1024,8:F1} KiB/s   ↑{np.TxBytesPerSec / 1024,8:F1} KiB/s"));
         }
         Console.WriteLine();
 

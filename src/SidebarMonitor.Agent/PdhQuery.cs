@@ -79,15 +79,22 @@ internal sealed class PdhQuery : IDisposable
 
     public void Collect() => PdhCollectQueryData(_query);
 
+    /// <summary>Capped at 100: a usage bar cannot be more than full.</summary>
     public double CpuTotalPct => Scalar(_cpuTotal);
+
     public double CommittedBytes => Scalar(_committed);
 
-    /// <summary>Nominal MHz scaled by how hard the cores are actually clocking.</summary>
+    /// <summary>
+    /// Nominal MHz scaled by how hard the cores are actually clocking. This is the one counter
+    /// that must NOT be capped: "% Processor Performance" is measured against the nominal
+    /// frequency, so 108 % is exactly how turbo shows up, and capping it would pin the reported
+    /// clock to the base clock forever.
+    /// </summary>
     public double CpuFrequencyMhz
     {
         get
         {
-            double nominal = Scalar(_cpuFreq), perf = Scalar(_cpuPerf);
+            double nominal = Scalar(_cpuFreq), perf = Scalar(_cpuPerf, cap: false);
             return double.IsNaN(nominal) || double.IsNaN(perf) ? double.NaN : nominal * perf / 100.0;
         }
     }
@@ -97,10 +104,11 @@ internal sealed class PdhQuery : IDisposable
     public List<InstanceSample> DiskWrite() => Array(_diskWrite);
     public List<InstanceSample> DiskQueue() => Array(_diskQueue);
 
-    private static double Scalar(IntPtr counter)
+    private static double Scalar(IntPtr counter, bool cap = true)
     {
         if (counter == IntPtr.Zero) return double.NaN;
-        uint rc = PdhGetFormattedCounterValue(counter, PdhFmtDouble | PdhFmtNoCap100, out _, out var v);
+        uint fmt = cap ? PdhFmtDouble : PdhFmtDouble | PdhFmtNoCap100;
+        uint rc = PdhGetFormattedCounterValue(counter, fmt, out _, out var v);
         return rc == 0 ? v.DoubleValue : double.NaN;
     }
 
@@ -110,13 +118,13 @@ internal sealed class PdhQuery : IDisposable
         if (counter == IntPtr.Zero) return result;
 
         uint size = 0;
-        PdhGetFormattedCounterArrayW(counter, PdhFmtDouble | PdhFmtNoCap100, ref size, out _, IntPtr.Zero);
+        PdhGetFormattedCounterArrayW(counter, PdhFmtDouble, ref size, out _, IntPtr.Zero);
         if (size == 0) return result;
 
         IntPtr buf = Marshal.AllocHGlobal((int)size);
         try
         {
-            if (PdhGetFormattedCounterArrayW(counter, PdhFmtDouble | PdhFmtNoCap100, ref size, out uint count, buf) != 0)
+            if (PdhGetFormattedCounterArrayW(counter, PdhFmtDouble, ref size, out uint count, buf) != 0)
                 return result;
 
             int stride = Marshal.SizeOf<CounterValueItem>();

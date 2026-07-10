@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>SidebarMonitor.Etw</RootNamespace>
+    <AssemblyName>SidebarMonitor.Etw</AssemblyName>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+
+    <!-- TraceEvent uses reflection, so this helper cannot be AOT. That is one more reason it
+         lives in its own process instead of inside the agent, which stays AOT and unelevated. -->
+    <IsAotCompatible>false</IsAotCompatible>
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="3.1.16" />
+    <ProjectReference Include="..\SidebarMonitor.Shared\SidebarMonitor.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

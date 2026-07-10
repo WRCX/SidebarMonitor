@@ -18,7 +18,7 @@ internal sealed class MainWindow : AppBarWindow
         "SidebarMonitor", "ui.json");
 
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(1) };
-    private SnapshotReader? _reader;
+    private SeqLockReader<Snapshot>? _reader;
     private System.Diagnostics.Process? _ownedAgent;
 
     private readonly List<Section> _sections = [];
@@ -291,7 +291,7 @@ internal sealed class MainWindow : AppBarWindow
     {
         if (_reader is null)
         {
-            _reader = SnapshotReader.TryOpen(out _);
+            _reader = SnapshotChannel.TryOpenReader(out _);
             if (_reader is null)
             {
                 TryLaunchAgent();

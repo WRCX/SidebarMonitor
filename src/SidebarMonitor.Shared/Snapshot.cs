@@ -10,7 +10,7 @@ public static class SnapshotLayout
     public const uint Signature = 0x4E4D4253;
 
     /// <summary>Bump on any layout change. The reader refuses anything it does not know.</summary>
-    public const uint Version = 1;
+    public const uint Version = 2;
 
     /// <summary>
     /// Local\, not Global\. Creating a Global\ kernel object requires SeCreateGlobalPrivilege,
@@ -24,20 +24,6 @@ public static class SnapshotLayout
     public const int MaxNics = 4;
     public const int MaxDisks = 8;
     public const int MaxProcs = 16;
-}
-
-/// <summary>
-/// Seqlock header. <see cref="Sequence"/> is odd while a write is in flight; a reader that sees
-/// the same even value before and after its copy knows the copy was not torn. Readers never
-/// block the writer, and there is no mutex to leak if either side dies.
-/// </summary>
-[StructLayout(LayoutKind.Sequential)]
-public struct SnapshotHeader
-{
-    public uint Signature;
-    public uint Version;
-    public int Sequence;
-    public int PayloadSize;
 }
 
 [InlineArray(32)] public struct Name32 { private byte _element0; }
@@ -119,6 +105,19 @@ public struct Snapshot
     public int TotalThreads;
 
     public bool HwiNfoAvailable;
+
+    // ---- Only populated when the elevated ETW helper is running ----
+
+    public bool EtwAvailable;
+
+    /// <summary>Who owns each core, grouped by process name. Shares are over non-idle samples.</summary>
+    public CoreShareArray CoreOwners;
+
+    /// <summary>Zero means "no attribution for this core"; do not colour it.</summary>
+    public CoreSampleArray CoreOwnerSamples;
+
+    public int NetProcCount;
+    public NetProcArray NetProcs;
 }
 
 /// <summary>

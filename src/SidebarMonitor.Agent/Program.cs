@@ -31,10 +31,10 @@ internal static class Program
         int procEvery = IntArg(args, "--proc-every=", 3);
         bool verbose = args.Contains("--verbose");
 
-        SnapshotWriter writer;
+        SeqLockWriter<Snapshot> writer;
         try
         {
-            writer = new SnapshotWriter();
+            writer = SnapshotChannel.CreateWriter();
         }
         catch (IOException)
         {
@@ -67,9 +67,23 @@ internal static class Program
             long ticks = 0;
             double worstMs = 0;
 
+            // The elevated helper is optional and can come and go. Re-probe periodically instead
+            // of deciding once at startup.
+            SeqLockReader<EtwSnapshot>? etw = EtwChannel.TryOpenReader(out _);
+            Console.WriteLine($"  ETW:    {(etw is not null ? "OK (helper elevado presente)" : "no disponible - lanza SidebarMonitor.Etw para colores por proceso")}");
+            Console.WriteLine();
+            long lastEtwProbe = Stopwatch.GetTimestamp();
+
             while (!quit.IsSet)
             {
                 long t0 = Stopwatch.GetTimestamp();
+
+                if (etw is null && Stopwatch.GetElapsedTime(lastEtwProbe).TotalSeconds >= 5)
+                {
+                    lastEtwProbe = Stopwatch.GetTimestamp();
+                    etw = EtwChannel.TryOpenReader(out _);
+                    if (etw is not null) Console.WriteLine("ETW: helper detectado.");
+                }
 
                 pdh.Collect();
                 snapshot.TimestampUtcTicks = DateTime.UtcNow.Ticks;
@@ -94,6 +108,8 @@ internal static class Program
                 // On skipped ticks the previous top list stays in the snapshot untouched.
                 if (ticks % procEvery == 0) FillProcs(ref snapshot, procs);
 
+                etw = MergeEtw(ref snapshot, etw);
+
                 writer.Publish(snapshot);
 
                 double ms = Stopwatch.GetElapsedTime(t0).TotalMilliseconds;
@@ -116,10 +132,38 @@ internal static class Program
         return 0;
     }
 
+    /// <summary>
+    /// Copies the elevated helper's attribution into our snapshot, if it is publishing. Returns
+    /// the reader, or null if the helper died (a stale map keeps its last values forever, so the
+    /// timestamp is what tells us it is gone).
+    /// </summary>
+    private static SeqLockReader<EtwSnapshot>? MergeEtw(ref Snapshot s, SeqLockReader<EtwSnapshot>? etw)
+    {
+        s.EtwAvailable = false;
+        if (etw is null) return null;
+
+        if (!etw.TryRead(out var e)) return etw;   // caught it mid-write; try again next tick
+
+        var age = DateTime.UtcNow - new DateTime(e.TimestampUtcTicks, DateTimeKind.Utc);
+        if (age > TimeSpan.FromSeconds(5))
+        {
+            etw.Dispose();
+            Console.WriteLine("ETW: el helper dejo de publicar.");
+            return null;
+        }
+
+        s.CoreOwners = e.Cores;
+        s.CoreOwnerSamples = e.CoreSamples;
+        s.NetProcCount = e.NetProcCount;
+        s.NetProcs = e.NetProcs;
+        s.EtwAvailable = true;
+        return etw;
+    }
+
     private static void FillCpu(ref CpuInfo cpu, PdhQuery pdh, HwiSensors? hwi)
     {
         NameField.Set(ref cpu.Name, hwi?.CpuName ?? "CPU");
-        cpu.TotalUsagePct = (float)pdh.CpuTotalPct;
+        cpu.TotalUsagePct = Clamp100(pdh.CpuTotalPct);
         cpu.FrequencyMhz = (float)pdh.CpuFrequencyMhz;
         cpu.PackagePowerW = (float)(hwi?.PackagePowerW ?? double.NaN);
         cpu.TempC = (float)(hwi?.CpuTempC ?? double.NaN);
@@ -130,10 +174,19 @@ internal static class Program
             // Instances are "<group>,<core>" plus the "_Total" aggregates, which we skip.
             if (s.Instance.Contains("_Total", StringComparison.Ordinal)) continue;
             if (n >= SnapshotLayout.MaxCores) break;
-            cpu.CoreUsagePct[n++] = (float)s.Value;
+            cpu.CoreUsagePct[n++] = Clamp100(s.Value);
         }
         cpu.CoreCount = n;
     }
+
+    /// <summary>
+    /// "% Processor Utility" is measured against the nominal frequency, so a boosting core
+    /// legitimately reports 105 %. PDH does not cap it — clearing PDH_FMT_NOCAP100 changes
+    /// nothing, verified. A usage bar cannot be more than full, so we clamp it ourselves.
+    /// The real clock still comes through untouched via "% Processor Performance".
+    /// </summary>
+    private static float Clamp100(double v) =>
+        double.IsNaN(v) ? float.NaN : (float)Math.Clamp(v, 0, 100);
 
     private static void FillMem(ref MemInfo mem, PdhQuery pdh)
     {

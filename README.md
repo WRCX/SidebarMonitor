@@ -150,7 +150,13 @@ o `dwReadingID`; para mostrar, `szLabelUserUTF8`.
 nombres en inglés en cualquier idioma.
 
 **4. Usar `% Processor Utility`, no `% Processor Time`**, que subcuenta con turbo/boost. Para
-la frecuencia real: `% Processor Performance` × frecuencia base.
+la frecuencia real: `% Processor Performance` × frecuencia nominal.
+
+**5. `% Processor Utility` pasa de 100 y PDH no lo capa.** Se mide contra la frecuencia
+nominal, así que un core en turbo reporta 105 % legítimamente. Quitar `PDH_FMT_NOCAP100` **no
+cambia nada** (comprobado). Una barra de uso no puede estar más que llena: el agente hace el
+`Clamp(0,100)`. Cuidado de no capar `% Processor Performance`, que es justo donde el turbo
+tiene que verse.
 
 ## La ventana: verificado en Windows 11 25H2 (build 26200)
 
@@ -265,18 +271,29 @@ muestras/s por core (~290/s bajo carga: el ritmo sube con la actividad).
 Y confirma que hay que **agrupar por nombre**: sin agrupar, un core sale como
 `powershell 19% powershell 16% powershell 10%` (tres PIDs) y la red lista `chrome` dos veces.
 
-### Diseño híbrido
+### Diseño híbrido, implementado
 
-El agente sigue **sin privilegios y AOT**. ETW vive en un proceso auxiliar **opcional y
-elevado** que publica su propia memoria compartida; el agente la lee si existe. Si no lo
-lanzas, todo funciona igual, sin colores por proceso ni red por proceso. (`TraceEvent` usa
-reflexión, así que ese helper no puede ir AOT — otra razón para separarlo.)
+`SidebarMonitor.Etw` es el proceso auxiliar **opcional y elevado** (su manifest pide UAC).
+Publica en `Local\SidebarMonitor.Etw.v1` con el mismo seqlock. El agente sigue **sin
+privilegios y AOT**: abre ese mapa si existe, lo fusiona en su snapshot y expone
+`EtwAvailable`. Si el helper no está, todo funciona igual, sin colores por proceso ni red por
+proceso. (`TraceEvent` usa reflexión y no puede ir AOT — otra razón para separarlo.)
+
+Verificado: **un proceso sin elevar puede abrir para lectura el mapa creado por uno elevado**
+(el nivel de integridad por defecto de un objeto es medio, no el del creador). El agente
+re-sondea cada 5 s por si lanzas el helper después, y detecta que ha muerto porque el
+timestamp del mapa envejece — un mapa huérfano conserva sus últimos valores para siempre.
+
+Validación cruzada de la red: con una descarga en curso, ETW atribuye `powershell ↓1279 KiB/s`
+mientras el contador de la interfaz marca `Ethernet ↓1310 KiB/s`. Dos caminos independientes,
+el mismo número.
 
 ## Estructura
 
 - `SidebarMonitor.Shared` — el contrato: `Snapshot` + lector/escritor de memoria compartida.
 - `SidebarMonitor.Agent` — muestrea (HWiNFO, PDH, NVML, `NtQuerySystemInformation`,
-  `GlobalMemoryStatusEx`) y publica. AOT-compatible.
+  `GlobalMemoryStatusEx`) y publica. AOT, sin privilegios.
+- `SidebarMonitor.Etw` — helper **opcional y elevado**: quién ocupa cada core y red por proceso.
 - `SidebarMonitor.UI` — el panel (WPF). Reusa el chasis de ventana de `ShellProbe`.
 - `SidebarMonitor.Client` — el snapshot en texto; útil para depurar sin abrir la UI.
 - `src/*Probe` — las sondas de viabilidad, se pueden borrar cuando estorben.
@@ -290,6 +307,10 @@ estado de las secciones sin tocar el ratón.
 
 ## Pendiente
 
+- **«Siempre encima» debe ser una opción, no una constante.** Hoy `WS_EX_TOPMOST` está fijo en
+  `AppBarWindow`. Tiene que poder desactivarse desde el menú (y persistirse), para cuando el
+  panel esté en la pantalla principal y no quieras que tape nada.
+- Bandeja: minimizar / restaurar, y menú de configuración con intervalos.
 - Click-through, tooltips al pasar por las sparklines, y elegir monitor desde el menú.
 - Reusar los diccionarios de `Processes` entre muestras: hoy reconstruye ~370 entradas con sus
   strings cada 3 ticks. Es la única basura real que genera el agente.
