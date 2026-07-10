@@ -28,6 +28,29 @@ La idea es un **agente** que muestrea y publica un snapshot, y una **UI separada
 consume. Así la UI no corre elevada, y se puede añadir LibreHardwareMonitor como fallback
 (o monitorizar otra máquina) sin rediseñar nada.
 
+### El canal: memoria compartida con seqlock
+
+`SidebarMonitor.Shared` define el contrato: un `Snapshot` de tamaño fijo (2248 B, todo structs
+`[StructLayout(Sequential)]` con `[InlineArray]`, sin punteros ni offsets que reubicar) sobre
+un memory-mapped file `Local\SidebarMonitor.Snapshot.v1`.
+
+La sincronización es un **seqlock**, no un mutex: el agente incrementa un contador a impar
+antes de escribir y a par después; la UI copia el payload y comprueba que el contador no
+cambió. **El lector nunca bloquea al escritor, y no hay ningún mutex que se quede colgado si
+un proceso muere.** Si la UI pilla una escritura a medias, reintenta. Medido: **100 ns por
+lectura, 0 lecturas rotas en 100.000 intentos, 0 asignaciones.**
+
+`Local\`, no `Global\`: crear un objeto de kernel `Global\` necesita `SeCreateGlobalPrivilege`,
+que un proceso sin elevar no tiene. HWiNFO usa `Global\` porque corre elevado; nosotros no lo
+necesitamos, agente y UI comparten sesión.
+
+### Cadencia
+
+Los procesos (`NtQuerySystemInformation`) son el coste dominante (~16 ms) y el dato menos
+urgente, así que se muestrean **1 de cada 3 ticks** (`--proc-every=`). El efecto es nítido: un
+tick con procesos cuesta ~16 ms, uno sin ellos **~1.2 ms** (JIT; menos con AOT). En los ticks
+saltados, el último top se queda en el snapshot sin tocar.
+
 ## Sondas
 
 ```
@@ -38,6 +61,15 @@ src/HwiProbe/bin/Release/net10.0-windows/HwiProbe.exe --watch
 src/HwiProbe/bin/Release/net10.0-windows/HwiProbe.exe --filter=Potencia
 src/NativeProbe/bin/Release/net10.0-windows/NativeProbe.exe    # PDH + RAM + red + procesos + NVML
 src/ShellProbe/bin/Release/net10.0-windows/ShellProbe.exe --monitor=1 --seconds=10
+```
+
+El agente y su cliente de prueba (la UI real todavía no existe):
+
+```
+SidebarMonitor.Agent.exe  --interval=1000 --proc-every=3 --verbose   # muestrea y publica
+SidebarMonitor.Client.exe                                            # lee e imprime una vez
+SidebarMonitor.Client.exe --watch                                    # refresco continuo
+SidebarMonitor.Client.exe --bench                                    # coste de leer el snapshot
 ```
 
 `ShellProbe` aplica cada comportamiento de ventana y luego **lo lee de vuelta por API**, así
@@ -168,10 +200,22 @@ dotnet publish src/HwiProbe/HwiProbe.csproj -c Release -r win-x64 -p:PublishAot=
 Nota para la UI: **WPF no soporta AOT.** O el agente va AOT y la UI en JIT, o la UI se hace
 sobre Win2D / DirectComposition.
 
+## Estructura
+
+- `SidebarMonitor.Shared` — el contrato: `Snapshot` + lector/escritor de memoria compartida.
+- `SidebarMonitor.Agent` — muestrea (HWiNFO, PDH, NVML, `NtQuerySystemInformation`,
+  `GlobalMemoryStatusEx`) y publica. AOT-compatible.
+- `SidebarMonitor.Client` — cliente de consola de prueba; se convertirá / dará paso a la UI.
+- `src/*Probe` — las sondas de viabilidad, se pueden borrar cuando estorben.
+
 ## Pendiente
 
-- Agente con `ISensorSource` (HWiNFO + hueco para LibreHardwareMonitor), publicando el
-  snapshot para la UI.
-- La UI de verdad: gráficas, layout de paneles, temas.
+- La UI de verdad sobre el chasis de `ShellProbe`: gráficas, layout de paneles, temas.
+- Publicar el agente con AOT (ahora corre en JIT: 59 MiB de working set; con AOT, bastante
+  menos). El código ya tiene `PublishAot=true`.
+- Extraer un `ISensorSource` cuando entre LibreHardwareMonitor como fallback. Hoy el agente
+  habla con HWiNFO directamente; no vale la pena la abstracción hasta tener el segundo backend.
+- Más sensores de HWiNFO al snapshot (temperaturas de disco, hotspot de GPU, potencia por
+  raíl): el mecanismo ya está, es añadir campos e índices.
 - Click-through al pasar el ratón (`WS_EX_TRANSPARENT` alternado), que `ShellProbe` ya
   soporta con `--clickthrough` pero no está probado en uso real.

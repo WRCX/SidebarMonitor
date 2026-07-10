@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>SidebarMonitor.Client</RootNamespace>
+    <AssemblyName>SidebarMonitor.Client</AssemblyName>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SidebarMonitor.Shared\SidebarMonitor.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

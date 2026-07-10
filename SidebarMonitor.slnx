@@ -3,5 +3,8 @@
     <Project Path="src/HwiProbe/HwiProbe.csproj" />
     <Project Path="src/NativeProbe/NativeProbe.csproj" />
     <Project Path="src/ShellProbe/ShellProbe.csproj" />
+    <Project Path="src/SidebarMonitor.Agent/SidebarMonitor.Agent.csproj" />
+    <Project Path="src/SidebarMonitor.Client/SidebarMonitor.Client.csproj" />
+    <Project Path="src/SidebarMonitor.Shared/SidebarMonitor.Shared.csproj" />
   </Folder>
 </Solution>

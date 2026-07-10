@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>SidebarMonitor.Agent</RootNamespace>
+    <AssemblyName>SidebarMonitor.Agent</AssemblyName>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <PublishAot>true</PublishAot>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SidebarMonitor.Shared\SidebarMonitor.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

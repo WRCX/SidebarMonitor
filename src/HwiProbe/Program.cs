@@ -82,7 +82,7 @@ internal static class Shm
 
 internal readonly record struct Reading(
     uint Type, uint SensorIndex, uint Id,
-    string Label, string Unit,
+    string Label, string LabelOrig, string Unit,
     double Value, double Min, double Max, double Avg);
 
 internal readonly record struct Sensor(uint Id, uint Instance, string Name);
@@ -95,6 +95,7 @@ internal static class Program
 
         bool watch = args.Contains("--watch");
         bool bench = args.Contains("--bench");
+        bool orig = args.Contains("--orig");
         string? filter = args.FirstOrDefault(a => a.StartsWith("--filter="))?["--filter=".Length..];
 
         MemoryMappedFile mmf;
@@ -199,7 +200,7 @@ internal static class Program
                     if (unit.Length == 0) unit = Ansi(buf, Shm.RdUnit, Shm.UnitLen);
                     list[i] = new Reading(
                         type, sIdx, id,
-                        user.Length > 0 ? user : orig, unit,
+                        user.Length > 0 ? user : orig, orig, unit,
                         BitConverter.ToDouble(buf, Shm.RdValue),
                         BitConverter.ToDouble(buf, Shm.RdValueMin),
                         BitConverter.ToDouble(buf, Shm.RdValueMax),
@@ -275,7 +276,7 @@ internal static class Program
                     int shown = 0;
                     foreach (var r in readings)
                     {
-                        if (rx is not null && !rx.IsMatch(r.Label) &&
+                        if (rx is not null && !rx.IsMatch(r.Label) && !rx.IsMatch(r.LabelOrig) &&
                             !(r.SensorIndex < sensors.Length && rx.IsMatch(sensors[r.SensorIndex].Name)))
                             continue;
 
@@ -287,8 +288,13 @@ internal static class Program
                             Console.WriteLine($"--- [{r.SensorIndex}] {sn} ---");
                         }
 
-                        Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
-                            $"  {Shm.TypeName(r.Type),-8} {r.Label,-42} {r.Value,12:F3} {r.Unit,-6} (min {r.Min,10:F2}  max {r.Max,10:F2}  avg {r.Avg,10:F2})"));
+                        // --orig shows the English label and the reading id: those are what an
+                        // agent must match on, never the localized user label.
+                        Console.WriteLine(orig
+                            ? string.Create(CultureInfo.InvariantCulture,
+                                $"  {Shm.TypeName(r.Type),-8} id=0x{r.Id:X8} {r.LabelOrig,-46} {r.Value,12:F3} {r.Unit}")
+                            : string.Create(CultureInfo.InvariantCulture,
+                                $"  {Shm.TypeName(r.Type),-8} {r.Label,-42} {r.Value,12:F3} {r.Unit,-6} (min {r.Min,10:F2}  max {r.Max,10:F2}  avg {r.Avg,10:F2})"));
                         shown++;
                     }
 
