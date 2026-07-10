@@ -1,0 +1,3 @@
+# Sin conversion de finales de linea: los ficheros se commitean tal cual se escriben.
+# Silencia los avisos "LF will be replaced by CRLF" que provoca core.autocrlf=true.
+* -text

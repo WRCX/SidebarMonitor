@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>SidebarMonitor.UI</RootNamespace>
+    <AssemblyName>SidebarMonitor.UI</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+
+    <!-- WPF: no AOT, and it cannot run globalization-invariant (font cache builds CultureInfo). -->
+    <IsAotCompatible>false</IsAotCompatible>
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SidebarMonitor.Shared\SidebarMonitor.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

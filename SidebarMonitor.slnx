@@ -6,5 +6,6 @@
     <Project Path="src/SidebarMonitor.Agent/SidebarMonitor.Agent.csproj" />
     <Project Path="src/SidebarMonitor.Client/SidebarMonitor.Client.csproj" />
     <Project Path="src/SidebarMonitor.Shared/SidebarMonitor.Shared.csproj" />
+    <Project Path="src/SidebarMonitor.UI/SidebarMonitor.UI.csproj" />
   </Folder>
 </Solution>

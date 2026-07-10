@@ -63,14 +63,16 @@ src/NativeProbe/bin/Release/net10.0-windows/NativeProbe.exe    # PDH + RAM + red
 src/ShellProbe/bin/Release/net10.0-windows/ShellProbe.exe --monitor=1 --seconds=10
 ```
 
-El agente y su cliente de prueba (la UI real todavía no existe):
+El agente, la UI y el cliente de consola:
 
 ```
 SidebarMonitor.Agent.exe  --interval=1000 --proc-every=3 --verbose   # muestrea y publica
-SidebarMonitor.Client.exe                                            # lee e imprime una vez
-SidebarMonitor.Client.exe --watch                                    # refresco continuo
+SidebarMonitor.UI.exe     --monitor=1 --width=280                    # el panel
+SidebarMonitor.Client.exe --watch                                    # el snapshot en texto
 SidebarMonitor.Client.exe --bench                                    # coste de leer el snapshot
 ```
+
+La UI arranca el agente ella sola si no lo encuentra publicando.
 
 `ShellProbe` aplica cada comportamiento de ventana y luego **lo lee de vuelta por API**, así
 que su salida es evidencia, no intención. Acepta `--monitor=N`, `--width=`, `--seconds=`,
@@ -200,19 +202,49 @@ dotnet publish src/HwiProbe/HwiProbe.csproj -c Release -r win-x64 -p:PublishAot=
 Nota para la UI: **WPF no soporta AOT.** O el agente va AOT y la UI en JIT, o la UI se hace
 sobre Win2D / DirectComposition.
 
+## La UI
+
+**Un solo panel**, no cinco ventanas. Si fueran ventanas sueltas ya tendríamos la de HWiNFO.
+Seis secciones — CPU, MEMORIA, GPU, RED, DISCOS, PROCESOS — en un AppBar de 280 px.
+
+- **Plegar** una sección: clic en su cabecera. **Ocultarla** del todo: menú contextual.
+  El estado se guarda en `%LOCALAPPDATA%\SidebarMonitor\ui.json`.
+- Una cabecera plegada **sigue informando**: muestra un resumen en vivo (`CPU  7%  37.2W`,
+  `RED  ↓14K ↑13K`). Plegar no es perder el dato, es perder el detalle.
+- Las secciones plegadas u ocultas **no actualizan su cuerpo**; solo el resumen. Plegar cosas
+  abarata la UI de verdad, no solo visualmente.
+
+Gráficas solo donde aportan: sparkline para lo que varía en el tiempo (uso de CPU y GPU,
+red, disco), barras por core, y medidores para lo que es una fracción de un total (RAM, VRAM).
+El resto son cifras. Nada de ejes ni rejillas: el valor actual va etiquetado al lado.
+
+Color por entidad, nunca por posición: CPU azul, GPU violeta, entrada aqua, salida naranja —
+los slots de la paleta de referencia de `dataviz` en su superficie oscura. Los medidores viran
+a estado (naranja al 80 %, rojo al 90 %) siempre junto a la cifra, nunca solo por color. Las
+dos series de red y disco van direct-labeled con su leyenda, así que la identidad jamás
+depende del color.
+
 ## Estructura
 
 - `SidebarMonitor.Shared` — el contrato: `Snapshot` + lector/escritor de memoria compartida.
 - `SidebarMonitor.Agent` — muestrea (HWiNFO, PDH, NVML, `NtQuerySystemInformation`,
   `GlobalMemoryStatusEx`) y publica. AOT-compatible.
-- `SidebarMonitor.Client` — cliente de consola de prueba; se convertirá / dará paso a la UI.
+- `SidebarMonitor.UI` — el panel (WPF). Reusa el chasis de ventana de `ShellProbe`.
+- `SidebarMonitor.Client` — el snapshot en texto; útil para depurar sin abrir la UI.
 - `src/*Probe` — las sondas de viabilidad, se pueden borrar cuando estorben.
+
+Para depurar la UI: `--seconds=N` la cierra sola, `--shot=x.png` captura, `--dump` vuelca el
+árbol visual con el texto y color de cada `TextBlock`, y `--collapse=`/`--hide=` fuerzan el
+estado de las secciones sin tocar el ratón.
+
+> Al capturar, renderiza el visual directamente (`RenderTargetBitmap.Render(root)`). Pasar por
+> un `VisualBrush` **descarta silenciosamente los textos**: miden bien y nunca se rasterizan.
 
 ## Pendiente
 
-- La UI de verdad sobre el chasis de `ShellProbe`: gráficas, layout de paneles, temas.
 - Publicar el agente con AOT (ahora corre en JIT: 59 MiB de working set; con AOT, bastante
   menos). El código ya tiene `PublishAot=true`.
+- Click-through, tooltips al pasar por las sparklines, y elegir monitor desde el menú.
 - Extraer un `ISensorSource` cuando entre LibreHardwareMonitor como fallback. Hoy el agente
   habla con HWiNFO directamente; no vale la pena la abstracción hasta tener el segundo backend.
 - Más sensores de HWiNFO al snapshot (temperaturas de disco, hotspot de GPU, potencia por
