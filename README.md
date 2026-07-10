@@ -196,8 +196,24 @@ Dos cosas que hay que respetar sí o sí:
 # ILCompiler invoca vswhere.exe esperandolo en el PATH. Si no esta, el texto del error
 # acaba incrustado dentro del comando del linker y falla con un MSB3073 incomprensible.
 $env:PATH = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer;$env:PATH"
-dotnet publish src/HwiProbe/HwiProbe.csproj -c Release -r win-x64 -p:PublishAot=true -o artifacts/aot
+dotnet publish src/SidebarMonitor.Agent -c Release -r win-x64 -p:PublishAot=true -o artifacts/agent
 ```
+
+El agente AOT es **un `.exe` de 1.83 MB** sin runtime. Un cliente JIT lee sin problema el
+snapshot que publica un agente AOT: el header valida `PayloadSize`, y coincide.
+
+### El agente en régimen (AOT, medido)
+
+| | Agente AOT | `sidebar.exe` (gadgets) |
+|---|---|---|
+| CPU | **0.94 % de un core** = 0.06 % de la máquina | 2.18 % de la máquina |
+| Working set privado | **28.3 MiB** | 62.6 MiB |
+| Threads | **6** | 135 |
+
+Cuidado al leer el working set *total* (43 MiB): **casi nada es nuestro.** `RTSSHooks64.dll`
+(RivaTuner) se inyecta con 52 MiB en todos los procesos de esta máquina, `nvml.dll` aporta 18
+y el hook de Bitdefender otro tanto. Nuestro binario son 1.89 MiB. Por eso la cifra a mirar es
+el **working set privado**, y por eso tocar el GC no movió la aguja (probado: idéntico).
 
 Nota para la UI: **WPF no soporta AOT.** O el agente va AOT y la UI en JIT, o la UI se hace
 sobre Win2D / DirectComposition.
@@ -242,9 +258,10 @@ estado de las secciones sin tocar el ratón.
 
 ## Pendiente
 
-- Publicar el agente con AOT (ahora corre en JIT: 59 MiB de working set; con AOT, bastante
-  menos). El código ya tiene `PublishAot=true`.
 - Click-through, tooltips al pasar por las sparklines, y elegir monitor desde el menú.
+- Reusar los diccionarios de `Processes` entre muestras: hoy reconstruye ~370 entradas con sus
+  strings cada 3 ticks. Es la única basura real que genera el agente.
+- Arrancar con Windows, e instalador.
 - Extraer un `ISensorSource` cuando entre LibreHardwareMonitor como fallback. Hoy el agente
   habla con HWiNFO directamente; no vale la pena la abstracción hasta tener el segundo backend.
 - Más sensores de HWiNFO al snapshot (temperaturas de disco, hotspot de GPU, potencia por
