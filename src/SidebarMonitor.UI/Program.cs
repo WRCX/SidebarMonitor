@@ -20,6 +20,7 @@ internal static class Program
         if (args.Contains("--left")) { cfg.EdgeLeft = true; cfg.Ephemeral = true; }
         if (args.Contains("--floating")) { cfg.Docked = false; cfg.Ephemeral = true; }
         if (args.Contains("--minimized")) { cfg.Minimized = true; cfg.Ephemeral = true; }
+        if (args.Contains("--cpu-cores")) { cfg.CpuPerCoreGraph = true; cfg.Ephemeral = true; }
 
         int seconds = IntArg(args, "--seconds=", 0);          // 0 = run until closed
         string? shot = args.FirstOrDefault(a => a.StartsWith("--shot="))?["--shot=".Length..];

@@ -118,7 +118,8 @@ internal static class Program
         for (int i = 0; i < s.NicCount; i++)
         {
             ref var n = ref s.Nics[i];
-            Console.WriteLine(string.Create(ci, $"NET  {NameField.Get(ref n.Name),-24} DL {n.RxBytesPerSec / 1024,8:F1} KiB/s   UL {n.TxBytesPerSec / 1024,8:F1} KiB/s   link {n.LinkBitsPerSec / 1e6:F0} Mbps"));
+            string mark = n.IsPrimary ? " «primaria»" : "";
+            Console.WriteLine(string.Create(ci, $"NET  {NameField.Get(ref n.Name),-24} DL {n.RxBytesPerSec / 1024,8:F1} KiB/s   UL {n.TxBytesPerSec / 1024,8:F1} KiB/s   link {n.LinkBitsPerSec / 1e6:F0} Mbps{mark}"));
         }
         for (int i = 0; i < s.NetProcCount; i++)
         {

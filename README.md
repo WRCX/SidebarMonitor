@@ -310,6 +310,23 @@ Agrupados por nombre y sumando CPU, RAM e hilos (`chrome.exe ×31`, `svchost.exe
 la única forma de que la lista se lea. Se desactiva con `--no-group` en el agente. La cabecera
 etiqueta las columnas: sin ella, `116 MB` no dice que sea el working set.
 
+### Red
+
+La sección muestra **solo la interfaz primaria** — la que usaría la ruta por defecto, según
+`GetBestInterface(8.8.8.8)`. Adivinar por «tiene puerta de enlace» falla: Tailscale y los
+switches de Hyper-V también tienen una. Debajo, el **tráfico por proceso** que da ETW
+(`chrome ↓1,2M`), no la lista de adaptadores. Sin el helper, esa lista se sustituye por una
+nota. Cruzado: con una descarga, `pwsh ↓29 MiB/s` contra `Ethernet ↓30 MiB/s`.
+
+### Gráfica de CPU
+
+Dos modos, conmutables desde el menú (**CPU: una línea por core**):
+
+- **Total** (por defecto): una sola curva del uso agregado, con relleno.
+- **Por core**: las 16 curvas superpuestas en la misma gráfica, finas y translúcidas para que
+  la masa se lea como una banda, con el total opaco encima. Nada de rellenos — 16 áreas
+  translúcidas apiladas serían barro.
+
 Color por entidad, nunca por posición: CPU azul, GPU violeta, entrada aqua, salida naranja —
 los slots de la paleta de referencia de `dataviz` en su superficie oscura. Los medidores viran
 a estado (naranja al 80 %, rojo al 90 %) siempre junto a la cifra, nunca solo por color. Las

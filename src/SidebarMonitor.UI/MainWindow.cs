@@ -35,6 +35,8 @@ internal sealed class MainWindow : AppBarWindow
     private readonly TextBlock _cpuTemp = Stat();
     private readonly TextBlock _cpuPct;
     private readonly Sparkline _cpuSpark = new(Theme.SeriesCpu) { FixedMax = 100 };
+    private readonly CoreSparkline _cpuCoreSpark = new(height: 48);
+    private readonly Grid _cpuGraphHost = new();
     private readonly CoreRows _coreRows = new();
 
     // RAM
@@ -56,7 +58,8 @@ internal sealed class MainWindow : AppBarWindow
     private readonly Sparkline _netSpark = new(Theme.SeriesIn, Theme.SeriesOut);
     private readonly TextBlock _netDl = Value();
     private readonly TextBlock _netUl = Value();
-    private readonly StackPanel _nicRows = new();
+    private readonly TextBlock _netPrimary = Muted();
+    private readonly StackPanel _netProcRows = new();
 
     // DISK
     private readonly StackPanel _diskPanels = new();
@@ -237,10 +240,27 @@ internal sealed class MainWindow : AppBarWindow
     {
         var panel = new StackPanel();
         panel.Children.Add(StatRow(("GHz", _cpuFreq), ("W", _cpuWatts), ("°C", _cpuTemp)));
-        panel.Children.Add(Overlay(_cpuSpark, _cpuPct));
+
+        // Both graphs live stacked; only one is visible. The % label overlays whichever shows.
+        _cpuGraphHost.Children.Add(_cpuSpark);
+        _cpuGraphHost.Children.Add(_cpuCoreSpark);
+        _cpuPct.HorizontalAlignment = HorizontalAlignment.Right;
+        _cpuPct.VerticalAlignment = VerticalAlignment.Top;
+        _cpuPct.Margin = new Thickness(0, 1, 6, 0);
+        _cpuGraphHost.Children.Add(_cpuPct);
+        ApplyCpuGraphMode();
+        panel.Children.Add(_cpuGraphHost);
+
         _coreRows.Margin = new Thickness(0, 5, 0, 0);
         panel.Children.Add(_coreRows);
         return panel;
+    }
+
+    private void ApplyCpuGraphMode()
+    {
+        bool perCore = _cfg.CpuPerCoreGraph;
+        _cpuSpark.Visibility = perCore ? Visibility.Collapsed : Visibility.Visible;
+        _cpuCoreSpark.Visibility = perCore ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private UIElement BuildRam()
@@ -270,8 +290,9 @@ internal sealed class MainWindow : AppBarWindow
         var panel = new StackPanel();
         panel.Children.Add(_netSpark);
         panel.Children.Add(SpacedTop(LegendRow((Theme.SeriesIn, "DL", _netDl), (Theme.SeriesOut, "UL", _netUl)), 3));
-        _nicRows.Margin = new Thickness(0, 2, 0, 0);
-        panel.Children.Add(_nicRows);
+        panel.Children.Add(_netPrimary);
+        _netProcRows.Margin = new Thickness(0, 3, 0, 0);
+        panel.Children.Add(_netProcRows);
         return panel;
     }
 
@@ -453,6 +474,16 @@ internal sealed class MainWindow : AppBarWindow
         }
         menu.Items.Add(sections);
 
+        var cpuGraph = new MenuItem { Header = "CPU: una línea por core", IsCheckable = true, IsChecked = _cfg.CpuPerCoreGraph };
+        cpuGraph.Click += (_, _) =>
+        {
+            _cfg.CpuPerCoreGraph = cpuGraph.IsChecked;
+            ApplyCpuGraphMode();
+            _cfg.Save();
+        };
+        ToolTipService.SetToolTip(cpuGraph, "Superpone las 16 curvas de core; el total va encima. Desmarcado, solo el total.");
+        menu.Items.Add(cpuGraph);
+
         var refresh = new MenuItem { Header = "Refresco" };
         foreach (int ms in (int[])[500, 1000, 2000, 5000])
         {
@@ -598,7 +629,8 @@ internal sealed class MainWindow : AppBarWindow
             _cpuFreq.Text = float.IsNaN(c.FrequencyMhz) ? "—" : string.Create(ci, $"{c.FrequencyMhz / 1000:F2}");
             _cpuWatts.Text = float.IsNaN(c.PackagePowerW) ? "—" : string.Create(ci, $"{c.PackagePowerW:F1}");
             _cpuTemp.Text = float.IsNaN(c.TempC) ? "—" : string.Create(ci, $"{c.TempC:F1}");
-            _cpuSpark.Push(c.TotalUsagePct);
+            if (_cfg.CpuPerCoreGraph) _cpuCoreSpark.Push(ref s);
+            else _cpuSpark.Push(c.TotalUsagePct);
             _coreRows.Update(ref s);
         }
 
@@ -628,20 +660,52 @@ internal sealed class MainWindow : AppBarWindow
             }
         }
 
-        double dl = 0, ul = 0;
-        for (int i = 0; i < s.NicCount; i++) { dl += s.Nics[i].RxBytesPerSec; ul += s.Nics[i].TxBytesPerSec; }
+        // Only the primary interface — the one the default route uses. The rest (Tailscale,
+        // the Hyper-V switches) are noise here. If none is flagged, fall back to the busiest.
+        int prim = -1;
+        for (int i = 0; i < s.NicCount; i++) if (s.Nics[i].IsPrimary) { prim = i; break; }
+        if (prim < 0)
+        {
+            double best = -1;
+            for (int i = 0; i < s.NicCount; i++)
+            {
+                double t = s.Nics[i].RxBytesPerSec + s.Nics[i].TxBytesPerSec;
+                if (t > best) { best = t; prim = i; }
+            }
+        }
+
+        double dl = prim >= 0 ? s.Nics[prim].RxBytesPerSec : 0;
+        double ul = prim >= 0 ? s.Nics[prim].TxBytesPerSec : 0;
         Find("net").SetSummary($"↓{Theme.BytesShort(dl)} ↑{Theme.BytesShort(ul)}");
         if (Find("net").IsUpdateWorthy())
         {
             _netSpark.Push((float)dl, (float)ul);
             _netDl.Text = Theme.Bytes(dl);
             _netUl.Text = Theme.Bytes(ul);
-            SyncRows(_nicRows, s.NicCount);
-            for (int i = 0; i < s.NicCount; i++)
+
+            if (prim >= 0)
             {
-                ref var n = ref s.Nics[i];
-                ((TextBlock)_nicRows.Children[i]).Text =
-                    $"{Truncate(NameField.Get(ref n.Name), 16),-16} ↓{Theme.BytesShort(n.RxBytesPerSec),-7} ↑{Theme.BytesShort(n.TxBytesPerSec)}";
+                ref var n = ref s.Nics[prim];
+                string link = n.LinkBitsPerSec > 0 ? $" · {n.LinkBitsPerSec / 1_000_000:F0} Mbps" : "";
+                _netPrimary.Text = $"{NameField.Get(ref n.Name)}{link}";
+            }
+            else _netPrimary.Text = "sin interfaz activa";
+
+            // Per-process breakdown from ETW; without the helper there is nothing to attribute.
+            if (s.EtwAvailable)
+            {
+                SyncRows(_netProcRows, s.NetProcCount);
+                for (int i = 0; i < s.NetProcCount; i++)
+                {
+                    ref var np = ref s.NetProcs[i];
+                    ((TextBlock)_netProcRows.Children[i]).Text =
+                        $"{Truncate(NameField.Get(ref np.Name), 15),-15} ↓{Theme.BytesShort(np.RxBytesPerSec),-7} ↑{Theme.BytesShort(np.TxBytesPerSec)}";
+                }
+            }
+            else
+            {
+                SyncRows(_netProcRows, 1);
+                ((TextBlock)_netProcRows.Children[0]).Text = "· ETW para ver el tráfico por proceso";
             }
         }
 

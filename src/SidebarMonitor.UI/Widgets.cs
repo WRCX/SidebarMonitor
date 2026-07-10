@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using SidebarMonitor.Shared;
 
 namespace SidebarMonitor.UI;
 
@@ -117,6 +118,90 @@ internal sealed class Sparkline : FrameworkElement
         line.Freeze();
         area.Freeze();
         dc.DrawGeometry(fill, null, area);
+        dc.DrawGeometry(null, pen, line);
+    }
+}
+
+/// <summary>
+/// N faint lines on one surface, one per core, sharing a 0..100 scale. No fills — 16 stacked
+/// translucent areas would just be mud. Each line is thin and low-alpha so the mass reads as a
+/// band; the total sits on top in the CPU series colour, opaque, as the thing you actually read.
+/// </summary>
+internal sealed class CoreSparkline : FrameworkElement
+{
+    private const int Capacity = 120;
+    private float[][] _cores = [];
+    private readonly float[] _total = new float[Capacity];
+    private int _count;
+    private int _coreCount;
+
+    private readonly Pen _corePen;
+    private readonly Pen _totalPen;
+
+    public CoreSparkline(double height = 48)
+    {
+        Height = height;
+        SnapsToDevicePixels = true;
+
+        var faint = new SolidColorBrush(Color.FromArgb(90, Theme.SeriesCpu.R, Theme.SeriesCpu.G, Theme.SeriesCpu.B));
+        faint.Freeze();
+        _corePen = new Pen(faint, 1) { LineJoin = PenLineJoin.Round };
+        _corePen.Freeze();
+        _totalPen = new Pen(Theme.SeriesBrush(Theme.SeriesCpu), 2)
+        { LineJoin = PenLineJoin.Round, StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+        _totalPen.Freeze();
+    }
+
+    public void Push(ref Snapshot s)
+    {
+        int n = s.Cpu.CoreCount;
+        if (_coreCount != n)
+        {
+            _coreCount = n;
+            _cores = new float[n][];
+            for (int i = 0; i < n; i++) _cores[i] = new float[Capacity];
+            _count = 0;
+        }
+
+        if (_count == Capacity)
+        {
+            for (int c = 0; c < n; c++) Array.Copy(_cores[c], 1, _cores[c], 0, Capacity - 1);
+            Array.Copy(_total, 1, _total, 0, Capacity - 1);
+            _count--;
+        }
+
+        for (int c = 0; c < n; c++) _cores[c][_count] = s.Cpu.CoreUsagePct[c];
+        _total[_count] = s.Cpu.TotalUsagePct;
+        _count++;
+        InvalidateVisual();
+    }
+
+    protected override void OnRender(DrawingContext dc)
+    {
+        double w = ActualWidth, h = ActualHeight;
+        if (w <= 0 || h <= 0) return;
+
+        dc.DrawRoundedRectangle(Theme.Surface, null, new System.Windows.Rect(0, 0, w, h), 3, 3);
+        dc.DrawLine(new Pen(Theme.Baseline, 1), new Point(0, h - 0.5), new Point(w, h - 0.5));
+        if (_count < 2) return;
+
+        for (int c = 0; c < _coreCount; c++) DrawLine(dc, _cores[c], w, h, _corePen);
+        DrawLine(dc, _total, w, h, _totalPen);   // opaque, on top
+    }
+
+    private void DrawLine(DrawingContext dc, float[] v, double w, double h, Pen pen)
+    {
+        double dx = w / (Capacity - 1);
+        double x0 = w - (_count - 1) * dx;
+        double Y(int i) => h - 1 - Math.Clamp(v[i] / 100.0, 0, 1) * (h - 5);
+
+        var line = new StreamGeometry();
+        using (var lc = line.Open())
+        {
+            lc.BeginFigure(new Point(x0, Y(0)), false, false);
+            for (int i = 1; i < _count; i++) lc.LineTo(new Point(x0 + i * dx, Y(i)), true, false);
+        }
+        line.Freeze();
         dc.DrawGeometry(null, pen, line);
     }
 }

@@ -15,6 +15,10 @@
     <!-- WPF: no AOT, and it cannot run globalization-invariant (font cache builds CultureInfo). -->
     <IsAotCompatible>false</IsAotCompatible>
     <InvariantGlobalization>false</InvariantGlobalization>
+
+    <!-- WFO0003: WinForms wants DPI configured via its API. We keep PerMonitorV2 in the manifest
+         for the WPF window; WinForms is only the tray icon, which renders no DPI-sensitive UI. -->
+    <NoWarn>$(NoWarn);WFO0003</NoWarn>
   </PropertyGroup>
 
   <!-- UseWindowsForms adds System.Drawing and System.Windows.Forms as global usings, whose

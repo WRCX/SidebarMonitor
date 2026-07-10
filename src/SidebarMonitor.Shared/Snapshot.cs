@@ -10,7 +10,7 @@ public static class SnapshotLayout
     public const uint Signature = 0x4E4D4253;
 
     /// <summary>Bump on any layout change. The reader refuses anything it does not know.</summary>
-    public const uint Version = 4;
+    public const uint Version = 5;
 
     /// <summary>
     /// Local\, not Global\. Creating a Global\ kernel object requires SeCreateGlobalPrivilege,
@@ -72,6 +72,8 @@ public struct NicInfo
     public Name32 Name;
     public double RxBytesPerSec, TxBytesPerSec;
     public ulong LinkBitsPerSec;
+    /// <summary>The adapter the default route actually uses, per GetBestInterface.</summary>
+    public bool IsPrimary;
 }
 
 public enum DiskMedia : byte { Unknown = 0, Hdd = 1, Ssd = 2 }

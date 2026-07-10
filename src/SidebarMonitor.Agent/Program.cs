@@ -21,6 +21,19 @@ internal static class Program
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GlobalMemoryStatusEx(ref MemoryStatusEx buffer);
 
+    [DllImport("iphlpapi.dll")]
+    private static extern int GetBestInterface(uint destAddr, out uint bestIfIndex);
+
+    /// <summary>
+    /// Which adapter the default route would pick for an outside address. Guessing by
+    /// "has a gateway" misfires: Tailscale and the Hyper-V switches also have one.
+    /// </summary>
+    private static uint PrimaryInterfaceIndex()
+    {
+        // 8.8.8.8 — the value is a palindrome, so byte order does not matter here.
+        return GetBestInterface(0x08080808, out uint index) == 0 ? index : 0;
+    }
+
     private static int Main(string[] args)
     {
         Console.OutputEncoding = System.Text.Encoding.UTF8;
@@ -274,6 +287,8 @@ internal static class Program
         prevStamp = Stopwatch.GetTimestamp();
         if (secs <= 0) secs = 1;
 
+        uint primary = PrimaryInterfaceIndex();
+
         for (int i = 0; i < nics.Length; i++)
         {
             var now = Stats(nics[i]);
@@ -282,9 +297,16 @@ internal static class Program
             nic.RxBytesPerSec = (now.Rx - prev[i].Rx) / secs;
             nic.TxBytesPerSec = (now.Tx - prev[i].Tx) / secs;
             nic.LinkBitsPerSec = (ulong)Math.Max(0, nics[i].Speed);
+            nic.IsPrimary = InterfaceIndex(nics[i]) == primary && primary != 0;
             prev[i] = now;
         }
         s.NicCount = nics.Length;
+    }
+
+    private static uint InterfaceIndex(NetworkInterface nic)
+    {
+        try { return (uint)nic.GetIPProperties().GetIPv4Properties().Index; }
+        catch { return 0; }   // IPv6-only adapter, or no IPv4 properties
     }
 
     private static void FillProcs(ref Snapshot s, Processes procs, bool group)

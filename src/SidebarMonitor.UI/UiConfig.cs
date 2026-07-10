@@ -10,6 +10,9 @@ public sealed class UiConfig
     public int RefreshMs { get; set; } = 1000;
     public bool Topmost { get; set; } = true;
 
+    /// <summary>CPU graph: false = single total line, true = one faint line per core overlaid.</summary>
+    public bool CpuPerCoreGraph { get; set; }
+
     /// <summary>Docked reserves desktop space via an AppBar. Floating can be dragged anywhere.</summary>
     public bool Docked { get; set; } = true;
 
