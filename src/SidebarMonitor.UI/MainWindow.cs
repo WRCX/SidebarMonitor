@@ -30,7 +30,7 @@ internal sealed class MainWindow : AppBarWindow
     private readonly TextBlock _cpuTemp = Stat();
     private readonly TextBlock _cpuPct;
     private readonly Sparkline _cpuSpark = new(Theme.SeriesCpu) { FixedMax = 100 };
-    private readonly CoreBars _coreBars = new();
+    private readonly CoreRows _coreRows = new();
 
     // RAM
     private readonly BarMeter _ramMeter = new(Theme.SeriesCpu);
@@ -125,8 +125,8 @@ internal sealed class MainWindow : AppBarWindow
         var panel = new StackPanel();
         panel.Children.Add(StatRow(("GHz", _cpuFreq), ("W", _cpuWatts), ("°C", _cpuTemp)));
         panel.Children.Add(Overlay(_cpuSpark, _cpuPct));
-        _coreBars.Margin = new Thickness(0, 4, 0, 0);
-        panel.Children.Add(_coreBars);
+        _coreRows.Margin = new Thickness(0, 5, 0, 0);
+        panel.Children.Add(_coreRows);
         return panel;
     }
 
@@ -309,7 +309,7 @@ internal sealed class MainWindow : AppBarWindow
             _status.Text = $"agente sin publicar ({age.TotalSeconds:F0} s)";
             return;
         }
-        _status.Text = s.HwiNfoAvailable ? "" : "sin HWiNFO";
+        _status.Text = !s.HwiNfoAvailable ? "sin HWiNFO" : !s.EtwAvailable ? "sin ETW" : "";
 
         var ci = CultureInfo.InvariantCulture;
         ref var c = ref s.Cpu;
@@ -322,9 +322,7 @@ internal sealed class MainWindow : AppBarWindow
             _cpuWatts.Text = float.IsNaN(c.PackagePowerW) ? "—" : string.Create(ci, $"{c.PackagePowerW:F1}");
             _cpuTemp.Text = float.IsNaN(c.TempC) ? "—" : string.Create(ci, $"{c.TempC:F1}");
             _cpuSpark.Push(c.TotalUsagePct);
-            Span<float> cores = stackalloc float[c.CoreCount];
-            for (int i = 0; i < c.CoreCount; i++) cores[i] = c.CoreUsagePct[i];
-            _coreBars.Update(cores);
+            _coreRows.Update(ref s);
         }
 
         double ramFrac = s.Mem.PhysTotal > 0 ? (double)s.Mem.PhysUsed / s.Mem.PhysTotal : 0;

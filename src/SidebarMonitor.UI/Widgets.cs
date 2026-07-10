@@ -121,41 +121,6 @@ internal sealed class Sparkline : FrameworkElement
     }
 }
 
-/// <summary>Per-core vertical bars: magnitude is height, one hue, 2px gaps.</summary>
-internal sealed class CoreBars : FrameworkElement
-{
-    private float[] _values = [];
-    private readonly Brush _fill = Theme.SeriesBrush(Theme.SeriesCpu);
-
-    public CoreBars() { Height = 26; SnapsToDevicePixels = true; }
-
-    public void Update(ReadOnlySpan<float> values)
-    {
-        if (_values.Length != values.Length) _values = new float[values.Length];
-        values.CopyTo(_values);
-        InvalidateVisual();
-    }
-
-    protected override void OnRender(DrawingContext dc)
-    {
-        double w = ActualWidth, h = ActualHeight;
-        if (w <= 0 || h <= 0 || _values.Length == 0) return;
-
-        dc.DrawRoundedRectangle(Theme.Surface, null, new System.Windows.Rect(0, 0, w, h), 3, 3);
-
-        double gap = 2;
-        double bw = (w - 6 - gap * (_values.Length - 1)) / _values.Length;
-        for (int i = 0; i < _values.Length; i++)
-        {
-            double x = 3 + i * (bw + gap);
-            double bh = Math.Clamp(_values[i] / 100.0, 0, 1) * (h - 6);
-            dc.DrawRectangle(Theme.Grid, null, new System.Windows.Rect(x, 3, bw, h - 6));
-            if (bh >= 1)
-                dc.DrawRectangle(_fill, null, new System.Windows.Rect(x, h - 3 - bh, bw, bh));
-        }
-    }
-}
-
 /// <summary>Horizontal capacity meter. Turns status-critical near exhaustion, label alongside.</summary>
 internal sealed class BarMeter : FrameworkElement
 {

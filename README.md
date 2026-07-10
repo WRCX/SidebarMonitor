@@ -237,8 +237,32 @@ Seis secciones — CPU, MEMORIA, GPU, RED, DISCOS, PROCESOS — en un AppBar de 
   abarata la UI de verdad, no solo visualmente.
 
 Gráficas solo donde aportan: sparkline para lo que varía en el tiempo (uso de CPU y GPU,
-red, disco), barras por core, y medidores para lo que es una fracción de un total (RAM, VRAM).
+red, disco), filas por core, y medidores para lo que es una fracción de un total (RAM, VRAM).
 El resto son cifras. Nada de ejes ni rejillas: el valor actual va etiquetado al lado.
+
+### Filas de core
+
+Una fila por core: índice, barra horizontal segmentada por los procesos que lo ocupan, el `%`,
+y el proceso dominante **nombrado en texto**. Verticales no caben: 16 barras en 280 px son
+16,5 px cada una, y «100» no entra.
+
+- **La longitud de la barra viene de PDH. Los segmentos solo la subdividen**, con las cuotas de
+  muestras de ETW. Derivar la longitud de las muestras pintaría todos los cores en reposo al
+  95 % (ver la trampa del C-state, más arriba).
+- Color estable por **entidad**, vía FNV-1a del nombre: un proceso conserva su tono aunque
+  cambie de puesto en el ranking, entre cores y entre reinicios. Si se coloreara por posición,
+  las barras parpadearían cada segundo.
+- El **azul está excluido** de la paleta de procesos: es el color de la serie CPU de la
+  sparkline justo encima, y un proceso azul se leería como «la serie CPU».
+- `System`/kernel usa un neutro reservado, nunca un slot de la paleta. Lo que queda fuera del
+  top-3 va a un gris «otros», elegido para no confundirse con el track vacío (1.9:1 de
+  contraste, comprobado) ni con el neutro del kernel.
+- Separador de 1 px entre segmentos, para que dos tonos contiguos no se fundan.
+- El nombre del dominante va en texto: **la identidad nunca depende solo del color.** Y el
+  tooltip de cada fila desglosa el top-3.
+
+Sin el helper ETW, cada barra es un único segmento azul — exactamente el dibujo anterior — y
+la barra de estado avisa con `sin ETW`.
 
 Color por entidad, nunca por posición: CPU azul, GPU violeta, entrada aqua, salida naranja —
 los slots de la paleta de referencia de `dataviz` en su superficie oscura. Los medidores viran
