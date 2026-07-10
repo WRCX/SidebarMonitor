@@ -37,7 +37,12 @@ src/HwiProbe/bin/Release/net10.0-windows/HwiProbe.exe --bench  # coste de un sna
 src/HwiProbe/bin/Release/net10.0-windows/HwiProbe.exe --watch
 src/HwiProbe/bin/Release/net10.0-windows/HwiProbe.exe --filter=Potencia
 src/NativeProbe/bin/Release/net10.0-windows/NativeProbe.exe    # PDH + RAM + red + procesos + NVML
+src/ShellProbe/bin/Release/net10.0-windows/ShellProbe.exe --monitor=1 --seconds=10
 ```
+
+`ShellProbe` aplica cada comportamiento de ventana y luego **lo lee de vuelta por API**, así
+que su salida es evidencia, no intención. Acepta `--monitor=N`, `--width=`, `--seconds=`,
+`--left` y `--clickthrough`.
 
 `HwiProbe` necesita HWiNFO corriendo con *Settings → Main Settings → Shared Memory Support*
 activado. **En la versión gratuita la SHM se autodesactiva a las 12 h**; sin límite en Pro.
@@ -88,6 +93,39 @@ nombres en inglés en cualquier idioma.
 **4. Usar `% Processor Utility`, no `% Processor Time`**, que subcuenta con turbo/boost. Para
 la frecuencia real: `% Processor Performance` × frecuencia base.
 
+## La ventana: verificado en Windows 11 25H2 (build 26200)
+
+Todo lo que se temía que fuera frágil funciona. Medido con `ShellProbe` sobre el monitor
+secundario:
+
+| Comportamiento | Mecanismo | Resultado |
+|---|---|---|
+| Que las ventanas maximizadas no la tapen | AppBar (`ABM_NEW` + `ABM_QUERYPOS` + `ABM_SETPOS`) | Reservó los 260 px pedidos: la work area pasó de 1920 a 1660 px |
+| No robar el foco | `WS_EX_NOACTIVATE` + `WM_MOUSEACTIVATE` → `MA_NOACTIVATE` | El foreground siguió siendo otra ventana |
+| No salir en Alt+Tab | `WS_EX_TOOLWINDOW` + `ShowInTaskbar=false` | OK |
+| Siempre encima | `WS_EX_TOPMOST` | OK |
+| DPI por monitor | `dpiAwareness=PerMonitorV2` en el manifest | `PER_MONITOR_AWARE` |
+| Visible en todos los escritorios virtuales | — | **Ya lo está**, sin hacer nada |
+
+Ese último punto es el hallazgo importante. `GetWindowDesktopId` devuelve `GUID_NULL` para
+nuestra ventana mientras que una ventana normal devuelve un GUID real: la ventana no está
+asociada a ningún escritorio, o sea que aparece en todos. **No hace falta el pinning.**
+
+Y si algún día hiciera falta, también funciona: el COM no documentado (`IServiceProvider` del
+Immersive Shell → `IVirtualDesktopPinnedApps` → `PinAppID`) responde en esta build. Pero es
+un contrato que Microsoft rota entre versiones de Windows, y una vtable mal adivinada es un
+*access violation*, no una excepción. Por eso `ShellProbe` lo prueba **en un proceso aparte**
+(`--pin-probe`): si revienta, no se lleva por delante el resto del diagnóstico.
+
+Dos cosas que hay que respetar sí o sí:
+
+- **Desregistrar el AppBar en todas las salidas**, incluida la caída. Un appbar huérfano deja
+  el escritorio del usuario encogido. Windows lo recupera al morir el `hwnd` (comprobado),
+  pero no dependemos de eso: hay handler en `UnhandledException` y `ProcessExit`.
+- **`InvariantGlobalization=true` rompe WPF.** El font cache construye `CultureInfo` para los
+  idiomas mayoritarios y lanza `CultureNotFoundException` en el primer layout de texto. El
+  valor por defecto del repo es `true` (interesa para el agente); `ShellProbe` lo desactiva.
+
 ## Requisitos
 
 - .NET 10 SDK (fijado en `global.json`).
@@ -101,7 +139,8 @@ sobre Win2D / DirectComposition.
 
 ## Pendiente
 
-- Agente con `ISensorSource` (HWiNFO + hueco para LibreHardwareMonitor).
-- La ventana, que es donde está el riesgo real: AppBar (`SHAppBarMessage`) para que las
-  ventanas maximizadas no la tapen, `WS_EX_NOACTIVATE` para no robar foco, per-monitor DPI
-  v2, y el *pinning* a escritorios virtuales (solo hay COM no documentado).
+- Agente con `ISensorSource` (HWiNFO + hueco para LibreHardwareMonitor), publicando el
+  snapshot para la UI.
+- La UI de verdad: gráficas, layout de paneles, temas.
+- Click-through al pasar el ratón (`WS_EX_TRANSPARENT` alternado), que `ShellProbe` ya
+  soporta con `--clickthrough` pero no está probado en uso real.

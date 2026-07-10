@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>ShellProbe</RootNamespace>
+    <AssemblyName>ShellProbe</AssemblyName>
+
+    <!-- OutputType=Exe (not WinExe) keeps a console attached, so the probe can report
+         what it verified while the window is on screen. -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+
+    <!-- WPF is not AOT-compatible. The UI is expected to stay JIT; only the agent goes AOT. -->
+    <IsAotCompatible>false</IsAotCompatible>
+
+    <!-- WPF cannot run under globalization-invariant mode: its font cache builds CultureInfo
+         instances for the major languages and throws CultureNotFoundException on first text
+         layout. The repo-wide default is true for the agent; the UI must opt out. -->
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+
+</Project>

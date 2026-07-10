@@ -2,5 +2,6 @@
   <Folder Name="/src/">
     <Project Path="src/HwiProbe/HwiProbe.csproj" />
     <Project Path="src/NativeProbe/NativeProbe.csproj" />
+    <Project Path="src/ShellProbe/ShellProbe.csproj" />
   </Folder>
 </Solution>
