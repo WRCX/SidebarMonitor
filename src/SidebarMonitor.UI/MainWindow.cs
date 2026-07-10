@@ -820,24 +820,32 @@ internal sealed class MainWindow : AppBarWindow
                 ref var d = ref s.Disks[visibleDisks[i]];
                 var b = _diskBlocks[i];
 
-                // One labelled partition → its label is the friendly identity (DATOS12TB).
-                // Several partitions → the model, because no single label names the disk (the
-                // FIKWOT holds both C: and juegos). Then the partition line disambiguates.
                 string label = NameField.Get(ref d.Label);
                 string model = NameField.Get(ref d.Model);
-                string title = d.VolumeCount == 1 && label.Length > 0 ? label
-                             : model.Length > 0 ? model
-                             : label.Length > 0 ? label
-                             : NameField.Get(ref d.Name);
-                b.Head.Text = title;
+                string vols = NameField.Get(ref d.Volumes);
+
+                // A single labelled partition would show the label twice — as the title and again
+                // in the volumes line. Merge: the head becomes the richer line (label + letter +
+                // used/total), and the separate volumes row disappears. Several partitions (or an
+                // unlabelled one) aren't redundant: head is the model, volumes lists the rest.
+                if (d.VolumeCount == 1 && label.Length > 0)
+                {
+                    b.Head.Text = vols.Length > 0 ? vols : label;
+                    b.Volumes.Text = "";
+                    b.Volumes.Visibility = Visibility.Collapsed;
+                }
+                else
+                {
+                    b.Head.Text = model.Length > 0 ? model : label.Length > 0 ? label : NameField.Get(ref d.Name);
+                    b.Volumes.Text = vols;
+                    b.Volumes.Visibility = vols.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+                }
 
                 b.Temp.Text = float.IsNaN(d.TempC) ? "" : string.Create(ci, $"{d.TempC:F0} °C");
                 // A spinning disk sits happily at 45-50 °C; alarming there would cry wolf.
                 b.Temp.Foreground = d.TempC >= 60 ? Theme.StatusCritical
                                   : d.TempC >= 52 ? Theme.StatusSerious
                                   : Theme.InkSecondary;
-
-                b.Volumes.Text = NameField.Get(ref d.Volumes);
 
                 string media = d.Media switch { DiskMedia.Ssd => "SSD", DiskMedia.Hdd => "HDD", _ => "" };
                 string size = d.SizeBytes > 0 ? string.Create(ci, $"{d.SizeBytes / 1e12:F1} TB") : "";
