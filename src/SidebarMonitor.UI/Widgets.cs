@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -5,6 +6,35 @@ using System.Windows.Media;
 using SidebarMonitor.Shared;
 
 namespace SidebarMonitor.UI;
+
+/// <summary>Shared helper: the little min/max axis labels every chart draws, with a faint backing
+/// so they stay legible over the line. They update every frame, so a moving max/min is the visible
+/// cue that the axis is auto-scaling up or down.</summary>
+internal static class AxisLabels
+{
+    private static readonly Brush Backing = Freeze(Color.FromArgb(190, 0x1A, 0x1A, 0x19));
+    private static readonly Typeface Face = new(Theme.Mono, FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
+
+    private static Brush Freeze(Color c) { var b = new SolidColorBrush(c); b.Freeze(); return b; }
+
+    public static void Draw(DrawingContext dc, FrameworkElement el, double lo, double hi, double w, double h, Func<float, string> fmt)
+    {
+        double pd = VisualTreeHelper.GetDpi(el).PixelsPerDip;
+        FormattedText Ft(string s) => new(s, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, Face, 8, Theme.InkMuted, pd);
+
+        var top = Ft(fmt((float)hi));
+        var bot = Ft(fmt((float)lo));
+        // Top-left (max) and bottom-left (min); the right edge holds the live value overlay.
+        Put(dc, top, 2, 1);
+        if (h >= 26) Put(dc, bot, 2, h - bot.Height - 1);
+    }
+
+    private static void Put(DrawingContext dc, FormattedText t, double x, double y)
+    {
+        dc.DrawRectangle(Backing, null, new System.Windows.Rect(x - 1, y, t.Width + 2, t.Height));
+        dc.DrawText(t, new Point(x, y));
+    }
+}
 
 /// <summary>
 /// Rolling one- or two-series micro-chart. 2px line, translucent fill to the baseline,
@@ -41,6 +71,9 @@ internal sealed class Sparkline : FrameworkElement
     /// <summary>Smallest Y span the auto scale will zoom to, so a flat line doesn't magnify noise.
     /// In the series' own unit (%, or bytes/s).</summary>
     public double MinRange { get; set; } = 1;
+
+    /// <summary>Draw the min/max axis labels in the corners, so the current range is always visible.</summary>
+    public bool ShowAxis { get; set; } = true;
 
     // The bounds actually drawn this frame, eased toward the target so the axis doesn't snap.
     private double _lo, _hi;
@@ -164,6 +197,8 @@ internal sealed class Sparkline : FrameworkElement
 
         Draw(dc, _a, lo, hi2, w, h, _fillA, _penA);
         if (_b is not null) Draw(dc, _b, lo, hi2, w, h, _fillB!, _penB!);
+
+        if (ShowAxis) AxisLabels.Draw(dc, this, lo, hi2, w, h, Format);
 
         int hoverIdx = HoverIndex(w);
         if (hoverIdx >= 0)
@@ -337,6 +372,8 @@ internal sealed class CoreSparkline : FrameworkElement
         ComputeBounds(out double lo, out double hi);
         for (int c = 0; c < _coreCount; c++) DrawLine(dc, _cores[c], lo, hi, w, h, CorePen(c));
         DrawLine(dc, _total, lo, hi, w, h, _totalPen);   // white, on top
+
+        AxisLabels.Draw(dc, this, lo, hi, w, h, v => v.ToString("F0", CultureInfo.InvariantCulture) + " %");
     }
 
     private void ComputeBounds(out double lo, out double hi)

@@ -420,6 +420,11 @@ gráfica** en vez de quedar pegados a la base — que es lo que las hacía ilegi
 va suavizado (ease ~4 ticks) para que no dé saltos bruscos en un pico. Cada gráfica tiene un
 suelo de rango (`MinRange`) para no hacer zoom sobre el ruido de un sensor plano.
 
+Cada gráfica lleva el **mín y máx del eje** en las esquinas (arriba-izq y abajo-izq), con un
+fondo tenue para leerse sobre la línea. Se actualizan cada frame, así que un máximo que salta de
+`20 %` a `50 %` es la señal visible de que el eje escaló hacia arriba — sin eso no sabrías en qué
+rango estás.
+
 Es configurable por gráfica desde el menú **Gráficas → Auto-escala** (CPU, GPU, Red, Discos).
 Con auto desactivado: las de % vuelven a 0..100 fijo; las de bytes, a base-cero hasta el pico.
 
