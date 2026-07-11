@@ -19,6 +19,18 @@ public sealed class UiConfig
     /// <summary>Which core-clock aggregate to show: 0 best, 1 mean, 2 median. Best by default.</summary>
     public int CpuFreqMode { get; set; }
 
+    /// <summary>
+    /// Per-graph Y-axis auto-scale: fit the axis to the window's min..max so low, flat data still
+    /// fills the chart. Keys: cpu, gpu, net, disk. On by default — the whole reason to have it.
+    /// </summary>
+    public bool CpuGraphAuto { get; set; } = true;
+    public bool GpuGraphAuto { get; set; } = true;
+    public bool NetGraphAuto { get; set; } = true;
+    public bool DiskGraphAuto { get; set; } = true;
+
+    /// <summary>Graph height multiplier: 1.0 small, 1.5 medium, 2.0 large. Bigger = more visible detail.</summary>
+    public double GraphScale { get; set; } = 1.0;
+
     /// <summary>Disk kinds to leave out of the list.</summary>
     public bool HideVirtualDisks { get; set; } = true;
     public bool HideRemovableDisks { get; set; }

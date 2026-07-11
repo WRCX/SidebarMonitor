@@ -276,10 +276,37 @@ internal sealed class MainWindow : AppBarWindow
         double secs = _cfg.RefreshMs / 1000.0;
 
         _cpuSpark.Format = Pct; _cpuSpark.SecondsPerSample = secs;
+        _cpuSpark.AutoScale = _cfg.CpuGraphAuto; _cpuSpark.MinRange = 10;
+        _cpuCoreSpark.AutoScale = _cfg.CpuGraphAuto;
+
         _gpuSpark.Format = Pct; _gpuSpark.SecondsPerSample = secs;
+        _gpuSpark.AutoScale = _cfg.GpuGraphAuto; _gpuSpark.MinRange = 10;
 
         _netSpark.Format = v => Theme.Bytes(v);
         _netSpark.LabelA = "DL"; _netSpark.LabelB = "UL"; _netSpark.SecondsPerSample = secs;
+        _netSpark.AutoScale = _cfg.NetGraphAuto; _netSpark.MinRange = 4096;   // 4 KiB/s floor
+
+        ApplyGraphHeights();
+    }
+
+    /// <summary>Scales every graph's height by the configured multiplier so the user can trade
+    /// desktop space for readable detail.</summary>
+    private void ApplyGraphHeights()
+    {
+        double g = _cfg.GraphScale;
+        _cpuSpark.Height = 36 * g;
+        _cpuCoreSpark.Height = 48 * g;
+        _gpuSpark.Height = 36 * g;
+        _netSpark.Height = 36 * g;
+        foreach (var b in _diskBlocks) b.Spark.Height = 22 * g;
+    }
+
+    private void ApplyAutoScale()
+    {
+        _cpuSpark.AutoScale = _cpuCoreSpark.AutoScale = _cfg.CpuGraphAuto;
+        _gpuSpark.AutoScale = _cfg.GpuGraphAuto;
+        _netSpark.AutoScale = _cfg.NetGraphAuto;
+        foreach (var b in _diskBlocks) b.Spark.AutoScale = _cfg.DiskGraphAuto;
     }
 
     private UIElement BuildRam()
@@ -362,12 +389,14 @@ internal sealed class MainWindow : AppBarWindow
             var activeText = Theme.Text("", 9.5, Theme.InkSecondary, mono: true);
             var active = new BarMeter(Theme.SeriesCpu) { Margin = new Thickness(0, 2, 0, 2) };
 
-            var spark = new Sparkline(Theme.SeriesIn, Theme.SeriesOut, height: 22)
+            var spark = new Sparkline(Theme.SeriesIn, Theme.SeriesOut, height: 22 * _cfg.GraphScale)
             {
                 Margin = new Thickness(0, 2, 0, 2),
                 SecondsPerSample = _cfg.RefreshMs / 1000.0,
                 Format = v => Theme.Bytes(v),
                 LabelA = "R", LabelB = "W",
+                AutoScale = _cfg.DiskGraphAuto,
+                MinRange = 65536,   // 64 KiB/s floor
             };
             var rates = Theme.Text("", 9.5, Theme.InkMuted, mono: true);
 
@@ -547,6 +576,39 @@ internal sealed class MainWindow : AppBarWindow
         }
         ToolTipService.SetToolTip(freqMode, "Mejor núcleo muestra el boost que alcanza el core más rápido (p. ej. 5.05 GHz en juegos).");
         menu.Items.Add(freqMode);
+
+        var graphs = new MenuItem { Header = "Gráficas" };
+
+        var autoScale = new MenuItem { Header = "Auto-escala del eje Y" };
+        ToolTipService.SetToolTip(autoScale, "Ajusta el eje al mín/máx de la ventana (con margen), levantando la base del cero para ver el detalle cuando los valores son bajos. Por gráfica.");
+        void AutoItem(string label, Func<bool> get, Action<bool> set)
+        {
+            var item = new MenuItem { Header = label, IsCheckable = true, IsChecked = get() };
+            item.Click += (_, _) => { set(item.IsChecked); ApplyAutoScale(); _cfg.Save(); };
+            autoScale.Items.Add(item);
+        }
+        AutoItem("CPU", () => _cfg.CpuGraphAuto, v => _cfg.CpuGraphAuto = v);
+        AutoItem("GPU", () => _cfg.GpuGraphAuto, v => _cfg.GpuGraphAuto = v);
+        AutoItem("Red", () => _cfg.NetGraphAuto, v => _cfg.NetGraphAuto = v);
+        AutoItem("Discos", () => _cfg.DiskGraphAuto, v => _cfg.DiskGraphAuto = v);
+        graphs.Items.Add(autoScale);
+
+        var size = new MenuItem { Header = "Tamaño" };
+        foreach (var (label, mult) in new[] { ("Pequeñas", 1.0), ("Medianas", 1.5), ("Grandes", 2.0), ("Enormes", 3.0) })
+        {
+            var item = new MenuItem { Header = label, IsCheckable = true, IsChecked = Math.Abs(_cfg.GraphScale - mult) < 0.01 };
+            item.Click += (_, _) =>
+            {
+                _cfg.GraphScale = mult;
+                foreach (var o in size.Items.OfType<MenuItem>()) o.IsChecked = false;
+                item.IsChecked = true;
+                ApplyGraphHeights();
+                _cfg.Save();
+            };
+            size.Items.Add(item);
+        }
+        graphs.Items.Add(size);
+        menu.Items.Add(graphs);
 
         var disks = new MenuItem { Header = "Discos" };
         void DiskFilter(string label, Func<bool> get, Action<bool> set)

@@ -28,8 +28,23 @@ internal sealed class Sparkline : FrameworkElement
     private double _hoverX = -1;
     private readonly ToolTip _tip = new() { Placement = System.Windows.Controls.Primitives.PlacementMode.Relative };
 
-    /// <summary>0 = autoscale to the window's max (with headroom).</summary>
+    /// <summary>0 = autoscale. A fixed value pins the top of the axis to it (used for %, 0..100).</summary>
     public double FixedMax { get; init; }
+
+    /// <summary>
+    /// Auto fits the Y axis to the min..max of the visible window (plus a margin), lifting the
+    /// baseline off zero so low, flat traffic still fills the chart — the whole point of this
+    /// being readable at 36 px. Fixed pins 0..<see cref="FixedMax"/>. Toggled per graph.
+    /// </summary>
+    public bool AutoScale { get; set; } = true;
+
+    /// <summary>Smallest Y span the auto scale will zoom to, so a flat line doesn't magnify noise.
+    /// In the series' own unit (%, or bytes/s).</summary>
+    public double MinRange { get; set; } = 1;
+
+    // The bounds actually drawn this frame, eased toward the target so the axis doesn't snap.
+    private double _lo, _hi;
+    private bool _boundsInit;
 
     /// <summary>How far apart samples are, for the hover tooltip's "hace N s".</summary>
     public double SecondsPerSample { get; set; } = 1;
@@ -145,43 +160,78 @@ internal sealed class Sparkline : FrameworkElement
         dc.DrawLine(new Pen(Theme.Baseline, 1), new System.Windows.Point(0, h - 0.5), new System.Windows.Point(w, h - 0.5));
         if (_count < 2) return;
 
-        double max = FixedMax;
-        if (max <= 0)
-        {
-            for (int i = 0; i < _count; i++)
-            {
-                max = Math.Max(max, _a[i]);
-                if (_b is not null) max = Math.Max(max, _b[i]);
-            }
-            max = Math.Max(max * 1.15, 1e-6);
-        }
+        ComputeBounds(out double lo, out double hi2);
 
-        Draw(dc, _a, max, w, h, _fillA, _penA);
-        if (_b is not null) Draw(dc, _b, max, w, h, _fillB!, _penB!);
+        Draw(dc, _a, lo, hi2, w, h, _fillA, _penA);
+        if (_b is not null) Draw(dc, _b, lo, hi2, w, h, _fillB!, _penB!);
 
-        int hi = HoverIndex(w);
-        if (hi >= 0)
+        int hoverIdx = HoverIndex(w);
+        if (hoverIdx >= 0)
         {
             double dx = w / (Capacity - 1);
-            double x = w - (_count - 1) * dx + hi * dx;
+            double x = w - (_count - 1) * dx + hoverIdx * dx;
             dc.DrawLine(new Pen(Theme.Grid, 1), new System.Windows.Point(x, 0), new System.Windows.Point(x, h));
-            Dot(dc, x, YOf(_a[hi], max, h), _colorA);
-            if (_b is not null && _colorB is { } cb) Dot(dc, x, YOf(_b[hi], max, h), cb);
+            Dot(dc, x, YOf(_a[hoverIdx], lo, hi2, h), _colorA);
+            if (_b is not null && _colorB is { } cb) Dot(dc, x, YOf(_b[hoverIdx], lo, hi2, h), cb);
         }
     }
 
-    private static double YOf(float v, double max, double h) => h - 1 - Math.Clamp(v / max, 0, 1) * (h - 5);
+    /// <summary>Target Y bounds, eased toward so the axis glides instead of snapping each tick.</summary>
+    private void ComputeBounds(out double lo, out double hi)
+    {
+        double dLo = double.MaxValue, dHi = double.MinValue;
+        for (int i = 0; i < _count; i++)
+        {
+            dLo = Math.Min(dLo, _a[i]); dHi = Math.Max(dHi, _a[i]);
+            if (_b is not null) { dLo = Math.Min(dLo, _b[i]); dHi = Math.Max(dHi, _b[i]); }
+        }
+        if (dHi < dLo) { dLo = 0; dHi = MinRange; }
+
+        double tLo, tHi;
+        if (AutoScale)
+        {
+            // Fit min..max of the window, lifting the baseline off zero to zoom into the detail.
+            double range = Math.Max(dHi - dLo, MinRange);
+            double margin = range * 0.18;
+            tHi = dHi + margin;
+            tLo = Math.Max(0, dLo - margin);
+            if (tHi - tLo < MinRange) tHi = tLo + MinRange;
+        }
+        else if (FixedMax > 0)
+        {
+            tLo = 0; tHi = FixedMax;                 // %: a fixed 0..100 axis
+        }
+        else
+        {
+            tLo = 0; tHi = Math.Max(dHi * 1.15, MinRange);   // zero-anchored to the window peak
+        }
+
+        if (!_boundsInit) { _lo = tLo; _hi = tHi; _boundsInit = true; }
+        else { _lo += (tLo - _lo) * 0.25; _hi += (tHi - _hi) * 0.25; }   // ~4-tick ease
+        lo = _lo; hi = _hi;
+
+        // Keep easing until settled; otherwise a one-shot Push wouldn't finish the glide.
+        if (Math.Abs(_lo - tLo) > 1e-4 || Math.Abs(_hi - tHi) > 1e-4)
+            Dispatcher.BeginInvoke(InvalidateVisual, System.Windows.Threading.DispatcherPriority.Background);
+    }
+
+    private static double YOf(float v, double lo, double hi, double h)
+    {
+        double span = hi - lo;
+        double t = span > 1e-9 ? (v - lo) / span : 0;
+        return h - 1 - Math.Clamp(t, 0, 1) * (h - 5);
+    }
 
     private static void Dot(DrawingContext dc, double x, double y, Color c)
     {
         dc.DrawEllipse(Theme.Surface, new Pen(Theme.SeriesBrush(c), 1.5), new System.Windows.Point(x, y), 2.5, 2.5);
     }
 
-    private void Draw(DrawingContext dc, float[] values, double max, double w, double h, Brush fill, Pen pen)
+    private void Draw(DrawingContext dc, float[] values, double lo, double hi, double w, double h, Brush fill, Pen pen)
     {
         double dx = w / (Capacity - 1);
         double x0 = w - (_count - 1) * dx;   // history grows from the right edge leftwards
-        double Y(int i) => h - 1 - Math.Clamp(values[i] / max, 0, 1) * (h - 5);
+        double Y(int i) => YOf(values[i], lo, hi, h);
 
         var line = new StreamGeometry();
         var area = new StreamGeometry();
@@ -222,6 +272,13 @@ internal sealed class CoreSparkline : FrameworkElement
 
     private readonly List<Pen> _corePens = [];
     private readonly Pen _totalPen;
+
+    private double _lo, _hi;
+    private bool _boundsInit;
+
+    /// <summary>Fit the shared axis to the busiest and quietest core in the window, so 16 low
+    /// cores spread across the height instead of hugging the baseline. Off = fixed 0..100.</summary>
+    public bool AutoScale { get; set; } = true;
 
     public CoreSparkline(double height = 48)
     {
@@ -277,15 +334,41 @@ internal sealed class CoreSparkline : FrameworkElement
         dc.DrawLine(new Pen(Theme.Baseline, 1), new Point(0, h - 0.5), new Point(w, h - 0.5));
         if (_count < 2) return;
 
-        for (int c = 0; c < _coreCount; c++) DrawLine(dc, _cores[c], w, h, CorePen(c));
-        DrawLine(dc, _total, w, h, _totalPen);   // white, on top
+        ComputeBounds(out double lo, out double hi);
+        for (int c = 0; c < _coreCount; c++) DrawLine(dc, _cores[c], lo, hi, w, h, CorePen(c));
+        DrawLine(dc, _total, lo, hi, w, h, _totalPen);   // white, on top
     }
 
-    private void DrawLine(DrawingContext dc, float[] v, double w, double h, Pen pen)
+    private void ComputeBounds(out double lo, out double hi)
+    {
+        double tLo = 0, tHi = 100;
+        if (AutoScale)
+        {
+            double dLo = double.MaxValue, dHi = double.MinValue;
+            for (int c = 0; c < _coreCount; c++)
+                for (int i = 0; i < _count; i++) { dLo = Math.Min(dLo, _cores[c][i]); dHi = Math.Max(dHi, _cores[c][i]); }
+            for (int i = 0; i < _count; i++) { dLo = Math.Min(dLo, _total[i]); dHi = Math.Max(dHi, _total[i]); }
+            if (dHi < dLo) { dLo = 0; dHi = 10; }
+            double range = Math.Max(dHi - dLo, 8);   // never zoom past an 8-point span
+            double margin = range * 0.15;
+            tHi = Math.Min(100, dHi + margin);
+            tLo = Math.Max(0, dLo - margin);
+        }
+
+        if (!_boundsInit) { _lo = tLo; _hi = tHi; _boundsInit = true; }
+        else { _lo += (tLo - _lo) * 0.25; _hi += (tHi - _hi) * 0.25; }
+        lo = _lo; hi = _hi;
+
+        if (Math.Abs(_lo - tLo) > 1e-4 || Math.Abs(_hi - tHi) > 1e-4)
+            Dispatcher.BeginInvoke(InvalidateVisual, System.Windows.Threading.DispatcherPriority.Background);
+    }
+
+    private void DrawLine(DrawingContext dc, float[] v, double lo, double hi, double w, double h, Pen pen)
     {
         double dx = w / (Capacity - 1);
         double x0 = w - (_count - 1) * dx;
-        double Y(int i) => h - 1 - Math.Clamp(v[i] / 100.0, 0, 1) * (h - 5);
+        double span = hi - lo;
+        double Y(int i) => h - 1 - Math.Clamp(span > 1e-9 ? (v[i] - lo) / span : 0, 0, 1) * (h - 5);
 
         var line = new StreamGeometry();
         using (var lc = line.Open())

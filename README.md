@@ -412,6 +412,20 @@ la UI elige desde el menú **Frecuencia CPU**:
 
 La etiqueta bajo la cifra dice cuál es (`GHz máx` / `GHz medio` / `GHz mediana`).
 
+### Auto-escala del eje Y
+
+Cada sparkline ajusta su eje Y al **min..max de la ventana visible** (con un margen), levantando
+la base del cero. Así, tráfico de red bajo y plano, o cores de CPU al 5–15 %, **llenan la
+gráfica** en vez de quedar pegados a la base — que es lo que las hacía ilegibles a 36 px. El eje
+va suavizado (ease ~4 ticks) para que no dé saltos bruscos en un pico. Cada gráfica tiene un
+suelo de rango (`MinRange`) para no hacer zoom sobre el ruido de un sensor plano.
+
+Es configurable por gráfica desde el menú **Gráficas → Auto-escala** (CPU, GPU, Red, Discos).
+Con auto desactivado: las de % vuelven a 0..100 fijo; las de bytes, a base-cero hasta el pico.
+
+Y **Gráficas → Tamaño** (Pequeñas/Medianas/Grandes/Enormes) multiplica la altura de todas, para
+cambiar espacio de escritorio por detalle visible.
+
 ### Sparklines interactivas
 
 Al pasar el ratón por cualquier gráfica: cruceta vertical, un punto en cada serie y un tooltip
