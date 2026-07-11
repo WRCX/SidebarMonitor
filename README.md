@@ -313,6 +313,11 @@ De HWiNFO solo salían tres cosas: potencia de CPU, temperatura de CPU y tempera
 Todas se sacan ya sin él:
 
 - **Temp de disco NVMe**: nuestra, sin admin (`DiskTemps.cs`, IOCTL del log SMART).
+- **Temp de disco SATA**: del helper elevado (`DiskTempsWmi.cs`), por el reliability counter del
+  stack de almacenamiento (`MSFT_StorageReliabilityCounter` vía WMI — lo mismo que
+  `Get-StorageReliabilityCounter`). Necesita admin, que el helper ya tiene. Poll cada 10 s (la
+  temp cambia despacio) y keyed por número de disco físico. El ATA pass-through directo se probó
+  antes pero los controladores SATA daban error; WMI funciona fiable.
 - **Temp y potencia de CPU**: del **AMD Ryzen Master Monitoring SDK**, vía el helper elevado.
   La temp real (Tctl) y la potencia (PPT) necesitan ring0, pero AMD tiene un driver **firmado y
   compatible con HVCI** (el de Ryzen Master). WinRing0/LibreHardwareMonitor está bloqueado por la
@@ -326,8 +331,10 @@ de C++ y la SDK de AMD instalada) y se copia junto al helper. Da temp, PPT, Fmax
 temp/frecuencia por core. Consulta bajo demanda: **sin el límite de 12 h, sin el ~6 % de overhead
 de HWiNFO**. Verificado con HWiNFO muerto: 43 W / 77 °C / 4.84 GHz, cambiando en vivo.
 
-Con el helper elevado corriendo, HWiNFO ya no hace falta para nada de CPU; solo quedaría para las
-temps de disco **SATA** (ATA pass-through, admin), que se pueden mover al helper más adelante.
+**Con el helper elevado corriendo, HWiNFO ya no hace falta para nada.** CPU temp/potencia del SDK
+de AMD, temp NVMe del agente, temp SATA del helper. `HwiSensors` se mantiene solo como último
+recurso para la CPU si corres HWiNFO pero no el helper; se puede cerrar/desinstalar HWiNFO sin
+perder nada mientras el helper esté activo.
 
 ### HWiNFO congelado
 

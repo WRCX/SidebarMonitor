@@ -59,6 +59,10 @@ internal static class Program
         var ryzen = RyzenSdk.TryOpen(out string? ryzenErr);
         Console.WriteLine($"AMD Ryzen SDK: {(ryzen is not null ? "OK" : $"no disponible - {ryzenErr}")}");
 
+        // Drive temps (SATA + NVMe) from the storage stack; needs admin, which we have.
+        using var diskTemps = new DiskTempsWmi();
+        Console.WriteLine("Temps de disco: por WMI (storage reliability counter)");
+
         var names = new ProcessNames();
         var gate = new Lock();
 
@@ -157,6 +161,8 @@ internal static class Program
                 snapshot.CpuFmaxMhz = rm.FmaxMhz;
             }
             else snapshot.CpuSdkOk = 0;
+
+            diskTemps.Fill(ref snapshot);
 
             writer.Publish(snapshot);
             published++;

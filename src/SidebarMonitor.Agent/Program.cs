@@ -90,6 +90,12 @@ internal static class Program
             long lastNicRefresh = prevNetStamp;
 
             var snapshot = default(Snapshot);
+
+            // Drive temps the elevated helper reads (SATA + NVMe via the storage stack), by
+            // physical disk number. Updated from the ETW snapshot each tick; FillDisks uses it as
+            // the fallback for disks our own unelevated NVMe IOCTL can't read.
+            var etwDiskTemps = new float[SnapshotLayout.MaxDisks];
+            Array.Fill(etwDiskTemps, float.NaN);
             long ticks = 0;
             double worstMs = 0;
 
@@ -152,7 +158,7 @@ internal static class Program
                 FillCpu(ref snapshot.Cpu, pdh, hwiLive ? hwi : null);
                 FillMem(ref snapshot.Mem, pdh);
                 FillGpus(ref snapshot, nvml);
-                FillDisks(ref snapshot, pdh, inventory, diskTemps, hwiLive ? hwi : null);
+                FillDisks(ref snapshot, pdh, inventory, diskTemps, etwDiskTemps);
 
                 // Adapters come and go (VPN up, dock unplugged); rescanning every tick is wasteful.
                 if (Stopwatch.GetElapsedTime(lastNicRefresh).TotalSeconds >= 30)
@@ -167,7 +173,7 @@ internal static class Program
                 // On skipped ticks the previous top list stays in the snapshot untouched.
                 if (ticks % procEvery == 0) FillProcs(ref snapshot, procs, groupProcs);
 
-                etw = MergeEtw(ref snapshot, etw);
+                etw = MergeEtw(ref snapshot, etw, etwDiskTemps);
 
                 writer.Publish(snapshot);
 
@@ -196,11 +202,11 @@ internal static class Program
     /// the reader, or null if the helper died (a stale map keeps its last values forever, so the
     /// timestamp is what tells us it is gone).
     /// </summary>
-    private static SeqLockReader<EtwSnapshot>? MergeEtw(ref Snapshot s, SeqLockReader<EtwSnapshot>? etw)
+    private static SeqLockReader<EtwSnapshot>? MergeEtw(ref Snapshot s, SeqLockReader<EtwSnapshot>? etw, float[] diskTemps)
     {
         s.EtwAvailable = false;
         s.CpuFromAmd = false;
-        if (etw is null) return null;
+        if (etw is null) { Array.Fill(diskTemps, float.NaN); return null; }
 
         if (!etw.TryRead(out var e)) return etw;   // caught it mid-write; try again next tick
 
@@ -208,9 +214,12 @@ internal static class Program
         if (age > TimeSpan.FromSeconds(5))
         {
             etw.Dispose();
+            Array.Fill(diskTemps, float.NaN);
             Console.WriteLine("ETW: el helper dejo de publicar.");
             return null;
         }
+
+        for (int i = 0; i < diskTemps.Length; i++) diskTemps[i] = e.DiskTempsC[i];
 
         s.CoreOwners = e.Cores;
         s.CoreOwnerSamples = e.CoreSamples;
@@ -291,7 +300,7 @@ internal static class Program
         for (int i = 0; i < s.GpuCount; i++) nvml!.Fill(i, ref s.Gpus[i]);
     }
 
-    private static void FillDisks(ref Snapshot s, PdhQuery pdh, Dictionary<int, DiskIdentity> inventory, DiskTemps diskTemps, HwiSensors? hwi)
+    private static void FillDisks(ref Snapshot s, PdhQuery pdh, Dictionary<int, DiskIdentity> inventory, DiskTemps diskTemps, float[] helperTemps)
     {
         var read = pdh.DiskRead();
         var write = pdh.DiskWrite();
@@ -326,10 +335,10 @@ internal static class Program
                 d.IsVirtual = (byte)(id.Virtual ? 1 : 0);
                 d.IsSystem = (byte)(id.System ? 1 : 0);
 
-                // Our own NVMe reading first; HWiNFO only as fallback (SATA, or NVMe if the IOCTL
-                // ever fails). This is the first sensor we fully own — no HWiNFO for NVMe temp.
+                // Our own unelevated NVMe IOCTL first; the elevated helper's storage-stack read
+                // (SATA, by physical index) as fallback. No HWiNFO anywhere — this closes it out.
                 double temp = diskTemps.TempC(index);
-                if (double.IsNaN(temp)) temp = hwi?.DriveTempC(id.Model) ?? double.NaN;
+                if (double.IsNaN(temp) && (uint)index < (uint)helperTemps.Length) temp = helperTemps[index];
                 d.TempC = (float)temp;
             }
             else

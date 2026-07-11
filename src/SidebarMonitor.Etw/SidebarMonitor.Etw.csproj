@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="3.1.16" />
+    <PackageReference Include="System.Management" Version="9.0.0" />
     <ProjectReference Include="..\SidebarMonitor.Shared\SidebarMonitor.Shared.csproj" />
   </ItemGroup>
 

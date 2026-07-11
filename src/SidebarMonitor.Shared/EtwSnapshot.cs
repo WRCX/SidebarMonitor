@@ -72,7 +72,14 @@ public struct EtwSnapshot
     public double CpuTempC;
     public float CpuPackageW;
     public float CpuFmaxMhz;
+
+    /// <summary>Drive temperatures (°C) by physical disk number, from the storage stack (admin).
+    /// NaN = unknown. Covers the SATA disks the agent's unelevated NVMe path can't reach, closing
+    /// the last thing HWiNFO was for.</summary>
+    public DiskTempArray DiskTempsC;
 }
+
+[InlineArray(SnapshotLayout.MaxDisks)] public struct DiskTempArray { private float _element0; }
 
 [InlineArray(SnapshotLayout.MaxCores)] public struct CoreSampleArray { private int _element0; }
 
