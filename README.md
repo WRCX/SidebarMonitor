@@ -85,6 +85,12 @@ CPU sensors are enabled. Uninstall from Add/Remove Programs.
 *(A developer `install.ps1` in the repo root does the same from a source checkout, installing to
 `%LOCALAPPDATA%`; `uninstall.ps1 -Purge` also deletes the saved config.)*
 
+### Code signing
+
+The Windows installers are code-signed. Free code signing is provided by
+[SignPath.io](https://about.signpath.io/), with a certificate from the
+[SignPath Foundation](https://signpath.org/).
+
 ## How it works
 
 Three cooperating processes, each chosen for a reason:
