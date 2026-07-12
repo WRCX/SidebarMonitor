@@ -49,11 +49,11 @@ Leída la EULA local (`C:\Program Files\AMD\RyzenMasterMonitoringSDK\License.rtf
 - [ ] **Nombre/marca**: verificar que "SidebarMonitor" no colisiona (hay "Sidebar Diagnostics", "System Monitor II"…). Icono definitivo + `AppUserModelID` correcto.
 
 ### P1 — importante para adopción
-- [ ] **UI en inglés** (i18n; mantener español). Es un mercado global.
-- [ ] **Ventana de ajustes** de verdad (el menú contextual actual es potente pero denso para un recién llegado).
+- [ ] **UI en inglés** (i18n; mantener español). Es un mercado global. *(siguiente en la cola de P1)*
+- [x] **Ventana de ajustes** de verdad — `SettingsWindow.cs`, reemplaza el menú (podado a accesos rápidos).
 - [ ] **Instalador** propio (Inno Setup / WiX-MSI) con: EULA AMD, autostart opcional, tarea del helper elevado, desinstalación limpia. + **manifiesto winget**. Valorar **Microsoft Store** (canal de pago de baja fricción: 2-5 €).
 - [ ] **Autoactualización** o al menos aviso de versión nueva desde GitHub Releases (comparar con `AppVersion`).
-- [ ] **README** con el pitch anti-WinRing0, tabla de features, requisitos (Ryzen para CPU-deep, NVIDIA para GPU-full), **capturas + GIF de demo**.
+- [x] **README** con el pitch anti-WinRing0, tabla de features, requisitos y **capturas** (hero + secciones). En inglés (estándar OSS). El deep-dive técnico se movió a `docs/ARCHITECTURE.md`. *(pendiente: GIF de demo)*
 - [ ] **Landing** (GitHub Pages) + botón **café** (GitHub Sponsors / Buy Me a Coffee).
 - [ ] **Política sin telemetría**, dicho explícito (los entusiastas lo valoran).
 - [ ] **CI** (GitHub Actions): build AOT del agente + publish + firmar + crear Release. (Ojo: el AOT necesita el toolchain C++ y `vswhere` en PATH.)
@@ -97,14 +97,14 @@ Leída la EULA local (`C:\Program Files\AMD\RyzenMasterMonitoringSDK\License.rtf
 | Componente | Vía limpia (ships-with-driver / HVCI) | ¿Dependencia de driver propio? | Estado |
 |---|---|---|---|
 | GPU NVIDIA | ✅ NVML | No (dll del sistema) | **Hecho** |
-| GPU AMD | ✅ ADLX | No (dll del sistema) | Pendiente (hoy solo engines D3DKMT) |
+| GPU AMD | ✅ ADLX | No (dll del sistema) | **Hecho** (AdlxShim: temp/W/fan/relojes/VRAM) |
 | GPU Intel | ✅ IGCL | No (dll del sistema) | Pendiente |
 | CPU AMD | ✅ Ryzen Master SDK | Sí, pero **firmado + HVCI-safe** (empaquetado) | **Hecho** |
 | CPU Intel | ⚠️ PawnIO + MSR | Sí — PawnIO (firmado, HVCI-safe, **instalación aparte**) | No; lift grande |
 
 ### 3.4 Recomendación de expansión (por ROI)
 
-1. **ADLX** (AMD GPU: temp/W/fan) — **bajo esfuerzo, alto valor**: completa la **iGPU del Ryzen** y cualquier Radeon dGPU sin driver nuevo. Encaja con el foco AMD.
+1. ~~**ADLX** (AMD GPU: temp/W/fan)~~ — **HECHO** (2026-07-12, `AdlxShim`): la iGPU del Ryzen y cualquier Radeon dGPU tienen temp/W/fan/relojes/VRAM sin driver nuevo. Verificado en la iGPU del 7800X3D.
 2. **IGCL** (Intel Arc) — esfuerzo medio, limpio, abre el mercado Intel-GPU.
 3. **NVML por-proceso** — pulir el "qué proceso usa la GPU" en NVIDIA con `nvmlDeviceGetProcessUtilization` (más preciso que el PDH GPU Engine actual, que es la vía neutral — mantener PDH como fallback).
 4. **CPU Intel vía PawnIO** — **solo si el mercado Intel lo pide**. Mayor esfuerzo + dependencia de driver aparte. Mantén **AMD como la experiencia premium** ("hecho para Ryzen").
