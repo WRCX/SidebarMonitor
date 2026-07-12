@@ -91,6 +91,7 @@ Leída la EULA local (`C:\Program Files\AMD\RyzenMasterMonitoringSDK\License.rtf
 - Temperatura Intel = **DTS** vía MSR `IA32_THERM_STATUS`. Potencia = **RAPL** MSR. Ambos = ring0.
 - **La vía limpia moderna: [PawnIO](https://poorlydocumented.com/2025/09/replacing-winring0-in-fan-control-with-pawnio/) + módulos MSR** — driver **firmado, HVCI-safe, no blocklisted**. **[CapFrameX](https://github.com/CXWorld/CapFrameX) ya lo usa** ("PawnIO wrapper for MSR and OC mailbox with updated Intel MSR IDs").
 - **Conclusión Intel CPU:** posible, **pero con dependencia de PawnIO** (instalación aparte, más trabajo, ecosistema joven). NO tan limpio como AMD (cuyo SDK es autocontenido). **Refuerza el posicionamiento "Ryzen-first".**
+- **Plan de diseño + implementación de referencia (sin probar, no hay HW Intel): [`docs/intel-pawnio.md`](docs/intel-pawnio.md)** — módulo Pawn (`ioctl_read_msr`), interop C# (`PawnIo`/`IntelMsr`), MSRs (IA32_THERM_STATUS 0x19C, MSR_TEMPERATURE_TARGET 0x1A2, RAPL 0x606/0x611), encaje en el helper (sin cambio de contrato) y flujo de consentimiento (rama Intel del 1er arranque → instalar PawnIO firmado). **XTU descartado** (Intel no da SDK público). Est.: ~1-2 días en una máquina Intel real.
 
 ### 3.3 Matriz resumen
 
