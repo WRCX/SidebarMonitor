@@ -1,5 +1,5 @@
 # winget version manifest (schema 1.6).
-PackageIdentifier: Rubenarbos.SidebarMonitor
+PackageIdentifier: WRCX.SidebarMonitor
 PackageVersion: 1.2.0
 DefaultLocale: en-US
 ManifestType: version

@@ -62,7 +62,7 @@ Everything renders on any machine, but the **richest data depends on your hardwa
 
 ## Install
 
-Grab the MSI from [Releases](https://github.com/rubenarbos/SidebarMonitor/releases/latest). Two builds
+Grab the MSI from [Releases](https://github.com/WRCX/SidebarMonitor/releases/latest). Two builds
 are offered so you can decide, explicitly, how AMD's proprietary sensor SDK gets onto your machine:
 
 | Download | AMD SDK binaries | Best for |
@@ -74,7 +74,7 @@ Both are identical apart from those few AMD DLLs. GPU sensors (NVML/ADLX) are un
 those ship with your GPU driver. Or install with **winget** (full build):
 
 ```powershell
-winget install Rubenarbos.SidebarMonitor
+winget install WRCX.SidebarMonitor
 ```
 
 The installer puts the three apps in `Program Files\SidebarMonitor`, registers the elevated helper as a
@@ -135,4 +135,4 @@ dotnet build SidebarMonitor.slnx -c Release
 
 ## Licence
 
-SidebarMonitor's own code is **[MIT](LICENSE)** © 2026 Rubén Arbós. It builds on third-party components (AMD Ryzen Master SDK, ADLX, NVML, TraceEvent, the VC++ runtime and .NET), each under its own terms — see **[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)**. AMD's proprietary binaries and SDK headers are never redistributed in this repository.
+SidebarMonitor's own code is **[MIT](LICENSE)** © 2026 WRCX. It builds on third-party components (AMD Ryzen Master SDK, ADLX, NVML, TraceEvent, the VC++ runtime and .NET), each under its own terms — see **[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)**. AMD's proprietary binaries and SDK headers are never redistributed in this repository.

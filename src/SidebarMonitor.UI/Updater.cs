@@ -17,7 +17,7 @@ namespace SidebarMonitor.UI;
 internal static class Updater
 {
     // Placeholder — set to the real GitHub owner/repo once confirmed.
-    private const string Owner = "rubenarbos";
+    private const string Owner = "WRCX";
     private const string Repo = "SidebarMonitor";
 
     /// <summary>How the app is installed. <see cref="FromMsi"/> is false for a dev/LocalAppData install,

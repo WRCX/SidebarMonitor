@@ -1,13 +1,13 @@
 # winget default-locale manifest (schema 1.6).
-PackageIdentifier: Rubenarbos.SidebarMonitor
+PackageIdentifier: WRCX.SidebarMonitor
 PackageVersion: 1.2.0
 PackageLocale: en-US
-Publisher: Rubén Arbós
-PublisherUrl: https://github.com/rubenarbos
+Publisher: WRCX
+PublisherUrl: https://github.com/WRCX
 PackageName: SidebarMonitor
-PackageUrl: https://github.com/rubenarbos/SidebarMonitor
+PackageUrl: https://github.com/WRCX/SidebarMonitor
 License: MIT
-LicenseUrl: https://github.com/rubenarbos/SidebarMonitor/blob/main/LICENSE
+LicenseUrl: https://github.com/WRCX/SidebarMonitor/blob/main/LICENSE
 ShortDescription: A native, always-on system monitor sidebar for Windows 11 — built for Ryzen + NVIDIA, and still working with Memory Integrity (HVCI) enabled.
 Description: |-
   SidebarMonitor is a lean, always-visible monitoring sidebar for Windows 11. Unlike WinRing0-based

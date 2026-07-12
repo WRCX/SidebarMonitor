@@ -10,7 +10,7 @@
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
 
   <Package Name="SidebarMonitor"
-           Manufacturer="Rubén Arbós"
+           Manufacturer="WRCX"
            Version="$(Version)"
            UpgradeCode="5B2D9E14-7C3A-4F6B-9A21-8E4D2C1F0A73"
            Scope="perMachine"
@@ -26,7 +26,7 @@
     <!-- Task Manager / Add-Remove Programs identity. -->
     <Icon Id="AppIcon.ico" SourceFile="$(ProjectRoot)\assets\icon.ico" />
     <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
-    <Property Id="ARPHELPLINK" Value="https://github.com/rubenarbos/SidebarMonitor" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/WRCX/SidebarMonitor" />
 
     <!-- Fixed install location: no directory picker, so the launcher/task paths stay valid. -->
     <StandardDirectory Id="ProgramFiles64Folder">

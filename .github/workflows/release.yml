@@ -13,7 +13,7 @@
 #    Store that zip PRIVATELY (it's ~2 MB, too big for a GitHub secret) and give this workflow a way to
 #    fetch it. Simplest: upload amdsdk.zip as an asset of a release in a PRIVATE companion repo, then set
 #       secret  AMD_SDK_REPO_TOKEN   (a PAT with read access to that private repo)
-#       vars    AMD_SDK_REPO         (e.g. rubenarbos/sidebarmonitor-amdsdk)
+#       vars    AMD_SDK_REPO         (e.g. WRCX/sidebarmonitor-amdsdk)
 #                AMD_SDK_ASSET        (e.g. amdsdk.zip)
 #    and this workflow downloads it with `gh release download`. Swap in any other private retrieval you
 #    prefer (Azure blob + SAS, git-crypt, self-hosted runner with the SDK preinstalled, …).

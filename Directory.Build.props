@@ -13,9 +13,9 @@
        product (icon, company, copyright) in Explorer and Task Manager. -->
   <PropertyGroup>
     <Product>SidebarMonitor</Product>
-    <Company>Rubén Arbós</Company>
-    <Authors>Rubén Arbós</Authors>
-    <Copyright>© 2026 Rubén Arbós</Copyright>
+    <Company>WRCX</Company>
+    <Authors>WRCX</Authors>
+    <Copyright>© 2026 WRCX</Copyright>
     <!-- Version/FileVersion track each release and are what the UI shows (via FileVersion) and what
          Task Manager displays. AssemblyVersion is deliberately PINNED and must NOT change per release:
          the JIT UI binds to SidebarMonitor.Shared by AssemblyVersion, and bumping it would break a
