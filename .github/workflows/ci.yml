@@ -1,0 +1,25 @@
+# Build check on every push/PR. Compiles the whole solution (managed) — no AMD SDK or MSVC needed:
+# the native shims are optional at build time (the csprojs copy AdlxShim.dll / RyzenShim.dll only if
+# present), so this catches C#/WPF regressions fast. The full AOT + MSI packaging lives in release.yml.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Build (Release)
+        run: dotnet build SidebarMonitor.slnx -c Release --nologo

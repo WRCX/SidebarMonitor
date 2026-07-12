@@ -10,7 +10,7 @@
 
   <Package Name="SidebarMonitor"
            Manufacturer="Rubén Arbós"
-           Version="1.2.0.0"
+           Version="$(Version)"
            UpgradeCode="5B2D9E14-7C3A-4F6B-9A21-8E4D2C1F0A73"
            Scope="perMachine"
            InstallerVersion="500"

@@ -7,8 +7,10 @@
 # (native/RyzenSdk/fetch.ps1) and RyzenShim.dll / AdlxShim.dll built.
 #
 # ASCII-only (Windows PowerShell 5.1 reads a BOM-less .ps1 as ANSI).
-param([switch]$SkipPublish)
+param([string]$Version = '1.2.0.0', [switch]$SkipPublish)
 $ErrorActionPreference = 'Stop'
+# Normalise to a 4-part MSI ProductVersion (x.y.z.w). A tag like "1.3.0" becomes "1.3.0.0".
+while (($Version -split '\.').Count -lt 4) { $Version += '.0' }
 
 $here  = $PSScriptRoot
 $root  = Split-Path -Parent $here
@@ -29,16 +31,21 @@ if (-not $SkipPublish) {
     if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
     New-Item -ItemType Directory -Force $stage | Out-Null
 
+    # Version stamping: Version/FileVersion track the release (from the tag in CI); AssemblyVersion
+    # stays pinned in Directory.Build.props (explicitly set there, so -p:Version can't move it), which
+    # keeps a UI-only redeploy binding to Shared.dll. See Directory.Build.props.
+    $ver = @("-p:Version=$Version", "-p:FileVersion=$Version")
+
     # Agent is AOT (always self-contained native). Helper + UI self-contained so the MSI carries the
     # .NET runtime; publishing all three into ONE folder means they share the single runtime copy.
     & dotnet publish (Join-Path $root 'src\SidebarMonitor.Agent\SidebarMonitor.Agent.csproj') `
-        -c Release -r win-x64 -o $stage --nologo -v q
+        -c Release -r win-x64 -o $stage --nologo -v q @ver
     if ($LASTEXITCODE) { throw 'agent publish failed' }
     & dotnet publish (Join-Path $root 'src\SidebarMonitor.Etw\SidebarMonitor.Etw.csproj') `
-        -c Release -r win-x64 --self-contained true -o $stage --nologo -v q
+        -c Release -r win-x64 --self-contained true -o $stage --nologo -v q @ver
     if ($LASTEXITCODE) { throw 'helper publish failed' }
     & dotnet publish (Join-Path $root 'src\SidebarMonitor.UI\SidebarMonitor.UI.csproj') `
-        -c Release -r win-x64 --self-contained true -o $stage --nologo -v q
+        -c Release -r win-x64 --self-contained true -o $stage --nologo -v q @ver
     if ($LASTEXITCODE) { throw 'UI publish failed' }
 }
 
@@ -100,7 +107,7 @@ New-Item -ItemType Directory -Force $out | Out-Null
 $msi = Join-Path $out 'SidebarMonitor.msi'
 & wix build (Join-Path $here 'SidebarMonitor.wxs') `
     -ext WixToolset.UI.wixext `
-    -d "Stage=$stage" -d "ProjectRoot=$root" `
+    -d "Stage=$stage" -d "ProjectRoot=$root" -d "Version=$Version" `
     -arch x64 -o $msi
 if ($LASTEXITCODE) { throw 'wix build failed' }
 
