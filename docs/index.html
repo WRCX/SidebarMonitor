@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SidebarMonitor — native Windows 11 system monitor sidebar, HVCI-safe</title>
+<meta name="description" content="A native, always-on system monitor sidebar for Windows 11 — built for Ryzen + NVIDIA, and still working with Memory Integrity (HVCI) enabled, where WinRing0-based tools broke.">
+<meta property="og:title" content="SidebarMonitor">
+<meta property="og:description" content="The Ryzen sidebar monitor that keeps working after the WinRing0 apocalypse. CPU, per-core, GPU, memory, network, disks, processes — one lean panel.">
+<meta property="og:type" content="website">
+<style>
+  :root{
+    --bg:#141312; --bg2:#1c1b19; --card:#201f1d; --ink:#ece9e4; --mut:#a29a8f; --line:#2e2c29;
+    --blue:#4aa3ff; --aqua:#37d6c0; --orange:#f5a623; --violet:#b18cff;
+    --grad:linear-gradient(90deg,var(--blue),var(--aqua),var(--orange),var(--violet));
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  a{color:var(--aqua);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+  h1,h2,h3{line-height:1.15;letter-spacing:-.01em}
+  code{background:#00000055;padding:.1em .4em;border-radius:5px;font-size:.9em;
+    font-family:ui-monospace,"Cascadia Code",Consolas,monospace}
+
+  /* nav */
+  nav{position:sticky;top:0;z-index:10;background:#141312e6;backdrop-filter:blur(8px);
+    border-bottom:1px solid var(--line)}
+  nav .wrap{display:flex;align-items:center;gap:16px;height:60px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.02em}
+  .logo{width:22px;height:22px;border-radius:6px;background:var(--grad)}
+  nav .sp{flex:1}
+  nav a{color:var(--mut);font-size:14px}
+  nav a:hover{color:var(--ink);text-decoration:none}
+  .btn{display:inline-block;background:var(--grad);color:#141312;font-weight:700;
+    padding:10px 18px;border-radius:9px;font-size:14px}
+  .btn:hover{text-decoration:none;filter:brightness(1.08)}
+  .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+
+  /* hero */
+  header.hero{padding:72px 0 40px;position:relative;overflow:hidden}
+  header.hero::before{content:"";position:absolute;inset:-40% 0 auto -10%;height:420px;
+    background:radial-gradient(60% 60% at 30% 0%,#4aa3ff22,transparent 70%);pointer-events:none}
+  .hero .wrap{display:grid;grid-template-columns:1.1fr .9fr;gap:40px;align-items:center;position:relative}
+  .tag{display:inline-block;font-size:12.5px;color:var(--aqua);border:1px solid #37d6c055;
+    background:#37d6c012;padding:4px 11px;border-radius:999px;margin-bottom:18px}
+  header h1{font-size:44px;margin:.1em 0 .35em}
+  .grad{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+  header p.lead{font-size:18px;color:var(--mut);margin:0 0 26px}
+  .cta{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+  .cta .note{font-size:12.5px;color:var(--mut)}
+  .shot{width:100%;border-radius:12px;border:1px solid var(--line);
+    box-shadow:0 30px 60px -20px #000a, 0 0 0 1px #ffffff08}
+
+  /* sections */
+  section{padding:52px 0;border-top:1px solid var(--line)}
+  .eyebrow{color:var(--orange);font-size:12.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+  section h2{font-size:30px;margin:.25em 0 .5em}
+  .lede{color:var(--mut);max-width:70ch}
+
+  .pitch{background:linear-gradient(180deg,#1c1b1900,#4aa3ff08)}
+  .pitch strong{color:var(--ink)}
+
+  .grid{display:grid;gap:18px;grid-template-columns:repeat(3,1fr);margin-top:26px}
+  .feat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 18px 20px}
+  .feat .ic{font-size:20px}
+  .feat h3{font-size:16px;margin:.5em 0 .3em}
+  .feat p{margin:0;color:var(--mut);font-size:14px}
+
+  .shots{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:24px}
+  .shots figure{margin:0}
+  .shots img{width:100%;border-radius:12px;border:1px solid var(--line);box-shadow:0 20px 40px -22px #000b}
+  .shots figcaption{color:var(--mut);font-size:13px;margin-top:10px}
+
+  table{width:100%;border-collapse:collapse;margin-top:22px;font-size:14.5px}
+  th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--mut);font-weight:600}
+  td:first-child{font-weight:600}
+
+  .callout{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:22px 24px;margin-top:8px}
+  .callout h2{margin-top:0}
+
+  footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--mut);font-size:14px}
+  footer .wrap{display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+  footer .sp{flex:1}
+
+  @media(max-width:820px){
+    .hero .wrap{grid-template-columns:1fr}
+    header h1{font-size:34px}
+    .grid{grid-template-columns:1fr}
+    .shots{grid-template-columns:1fr}
+    nav a.hide{display:none}
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <span class="brand"><span class="logo"></span>SidebarMonitor</span>
+    <span class="sp"></span>
+    <a class="hide" href="#features">Features</a>
+    <a class="hide" href="#requirements">Requirements</a>
+    <a class="hide" href="https://github.com/rubenarbos/SidebarMonitor/blob/main/docs/FAQ.md">FAQ</a>
+    <a href="https://github.com/rubenarbos/SidebarMonitor">GitHub</a>
+    <a class="btn" href="https://github.com/rubenarbos/SidebarMonitor/releases/latest">Download</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <div>
+      <span class="tag">Works with Memory Integrity (HVCI) on</span>
+      <h1>The Ryzen sidebar monitor that <span class="grad">survived the WinRing0 apocalypse</span>.</h1>
+      <p class="lead">A native, always-on system monitor for Windows 11 — CPU, per-core, GPU, memory,
+        network, disks and processes in one lean panel on your second screen. No HWiNFO, no dubious
+        drivers, no telemetry.</p>
+      <div class="cta">
+        <a class="btn" href="https://github.com/rubenarbos/SidebarMonitor/releases/latest">Download for Windows 11</a>
+        <a class="btn ghost" href="https://github.com/rubenarbos/SidebarMonitor">View source</a>
+        <span class="note">Free &amp; open source (MIT) · x64</span>
+      </div>
+    </div>
+    <div>
+      <img class="shot" src="img/hero.png" alt="SidebarMonitor panel: CPU, memory and dual-GPU sections">
+    </div>
+  </div>
+</header>
+
+<section class="pitch" id="why">
+  <div class="wrap">
+    <div class="eyebrow">Why it exists</div>
+    <h2>When Windows blocklisted WinRing0, most monitors broke. This one didn't.</h2>
+    <p class="lede">In 2025 Windows added the WinRing0 kernel driver to its vulnerable-driver blocklist.
+      Overnight, hardware monitors that read sensors through it — including Sidebar Diagnostics —
+      stopped working on machines with <strong>Memory Integrity / Core Isolation (HVCI)</strong> enabled.
+      SidebarMonitor takes a different route <strong>by design</strong>: it ships no kernel driver of
+      its own and reads sensors through paths that are signed and HVCI-safe — the AMD Ryzen Master
+      Monitoring SDK, NVML, ADLX and native Windows APIs.</p>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <div class="eyebrow">What you get</div>
+    <h2>Depth where it counts.</h2>
+    <div class="grid">
+      <div class="feat"><div class="ic">🧊</div><h3>HVCI-safe</h3><p>Runs with Memory Integrity on — the whole reason it exists. No WinRing0, no kernel driver of ours.</p></div>
+      <div class="feat"><div class="ic">⚡</div><h3>Tiny &amp; fast</h3><p>The sampling agent is a NativeAOT binary: ~2&nbsp;MB, ~60&nbsp;ms cold start, allocation-free hot path.</p></div>
+      <div class="feat"><div class="ic">🔴</div><h3>Deep Ryzen</h3><p>Per-core frequency, temperature and C0/sleep residency; best-core ★; power caps (PPT/TDC/EDC); throttle state.</p></div>
+      <div class="feat"><div class="ic">🎮</div><h3>Dual-vendor GPU</h3><p>Full telemetry for NVIDIA (NVML) and AMD (ADLX), plus per-engine activity for any GPU via D3DKMT.</p></div>
+      <div class="feat"><div class="ic">🌐</div><h3>Per-process &amp; per-disk</h3><p>Network bandwidth by process, disk temperature (NVMe + SATA), SSD/HDD, activity graphs.</p></div>
+      <div class="feat"><div class="ic">🔒</div><h3>No telemetry</h3><p>Nothing leaves your machine. No analytics, no crash reporting, no network activity in normal use.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="screens">
+  <div class="wrap">
+    <div class="eyebrow">A look inside</div>
+    <h2>One panel, everything at a glance.</h2>
+    <div class="shots">
+      <figure>
+        <img src="img/hero.png" alt="CPU, memory and GPU sections">
+        <figcaption>Per-core bars coloured by process (svchost broken out by service), per-core clock/temp, best-core ★, power/thermal limits — plus NVIDIA and the Ryzen iGPU with real ADLX sensors.</figcaption>
+      </figure>
+      <figure>
+        <img src="img/sections.png" alt="Network, disks and processes sections">
+        <figcaption>Per-adapter and per-process network, per-disk temperature and activity, and top processes by CPU and RAM.</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section id="requirements">
+  <div class="wrap">
+    <div class="eyebrow">Requirements</div>
+    <h2>Runs anywhere; richest on Ryzen + NVIDIA/AMD.</h2>
+    <p class="lede">Everything renders on any Windows 11 x64 machine, and the app degrades gracefully
+      when a source is missing.</p>
+    <table>
+      <tr><th>Feature</th><th>Needs</th><th>Without it</th></tr>
+      <tr><td>CPU temp / power / per-core temp / throttle</td><td>AMD Ryzen + Ryzen Master SDK (accepted on first run)</td><td>Those fields show “—”; Intel is detected and explained.</td></tr>
+      <tr><td>NVIDIA GPU temp/power/fan/VRAM</td><td>NVIDIA driver (NVML)</td><td>Per-engine activity via D3DKMT.</td></tr>
+      <tr><td>AMD GPU temp/power/fan/clocks/VRAM</td><td>AMD Adrenalin driver (ADLX)</td><td>Per-engine activity via D3DKMT.</td></tr>
+      <tr><td>Per-core process colours, per-process network</td><td>The elevated helper</td><td>Bars still show usage; no per-process attribution.</td></tr>
+    </table>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <div class="eyebrow">How it works</div>
+    <h2>Three small processes, each chosen for a reason.</h2>
+    <p class="lede">A <strong>NativeAOT agent</strong> samples sensors unelevated and publishes to shared
+      memory via a lock-free seqlock. An optional <strong>elevated helper</strong> runs the kernel ETW
+      session and the AMD SDK. The <strong>WPF panel</strong> renders it — docked or floating,
+      resizable, click-through. WPF can’t be AOT-compiled and the helper needs a different elevation
+      manifest, so keeping them separate keeps the agent native and unelevated.
+      <a href="https://github.com/rubenarbos/SidebarMonitor/blob/main/docs/ARCHITECTURE.md">Read the architecture →</a></p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="callout">
+      <h2>🔒 No telemetry. Ever.</h2>
+      <p class="lede" style="margin-bottom:0">SidebarMonitor collects nothing and sends nothing. It
+        samples local hardware and renders it — no analytics, no crash reporting, no sockets to any
+        server. Your settings and logs stay on your disk.
+        <a href="https://github.com/rubenarbos/SidebarMonitor/blob/main/PRIVACY.md">Privacy policy →</a></p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap" style="text-align:center">
+    <div class="eyebrow">Get it</div>
+    <h2>Free, open source, and it just works.</h2>
+    <p class="lede" style="margin:0 auto 26px">Download the installer, or grab it with
+      <code>winget install Rubenarbos.SidebarMonitor</code>.</p>
+    <div class="cta" style="justify-content:center">
+      <a class="btn" href="https://github.com/rubenarbos/SidebarMonitor/releases/latest">Download</a>
+      <a class="btn ghost" href="https://github.com/rubenarbos/SidebarMonitor">Star on GitHub</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span class="brand"><span class="logo"></span>SidebarMonitor</span>
+    <span class="sp"></span>
+    <span>MIT · © 2026 Rubén Arbós</span>
+    <a href="https://github.com/rubenarbos/SidebarMonitor">GitHub</a>
+    <a href="https://github.com/rubenarbos/SidebarMonitor/blob/main/docs/FAQ.md">FAQ</a>
+    <a href="https://github.com/sponsors/rubenarbos">Sponsor</a>
+  </div>
+</footer>
+
+</body>
+</html>

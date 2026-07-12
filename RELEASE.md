@@ -54,9 +54,9 @@ Leída la EULA local (`C:\Program Files\AMD\RyzenMasterMonitoringSDK\License.rtf
 - [x] **Instalador** propio **WiX-MSI** (`installer/`, WiX v5): 3 apps self-contained a Program Files (sin prerequisito .NET), helper como tarea programada elevada, UI en Run key, shortcut, desinstalación limpia. EULA AMD se acepta in-app en 1er arranque (no en el MSI). + **manifiesto winget** (`installer/winget/`, plantilla con URL/hash a rellenar en release). Microsoft Store descartada por ahora (el sandbox MSIX choca con el helper elevado + tarea programada). *(pendiente: probar el MSI en VM; firma de código)*
 - [ ] **Autoactualización** o al menos aviso de versión nueva desde GitHub Releases (comparar con `AppVersion`).
 - [x] **README** con el pitch anti-WinRing0, tabla de features, requisitos y **capturas** (hero + secciones). En inglés (estándar OSS). El deep-dive técnico se movió a `docs/ARCHITECTURE.md`. *(pendiente: GIF de demo)*
-- [ ] **Landing** (GitHub Pages) + botón **café** (GitHub Sponsors / Buy Me a Coffee).
+- [x] **Landing** (GitHub Pages) → `docs/index.html` (self-contained, oscura, pitch anti-WinRing0 + capturas + features + requisitos + CTA de descarga). Activar en *Settings → Pages → Source: main / docs*. Botón **Sponsor** (GitHub Sponsors) en el footer. *(pendiente: dominio propio opcional; confirmar el usuario de GitHub en los enlaces — hoy placeholder `rubenarbos`)*
 - [x] **Política sin telemetría**, dicho explícito → `PRIVACY.md` + destacado en README/FAQ.
-- [ ] **CI** (GitHub Actions): build AOT del agente + publish + firmar + crear Release. (Ojo: el AOT necesita el toolchain C++ y `vswhere` en PATH.)
+- [x] **CI** (GitHub Actions): `.github/workflows/ci.yml` (build en push/PR) + `release.yml` (tag `v*` → AOT + shims + MSI + firma SignPath + GitHub Release draft). El AOT usa el toolchain C++ de `windows-latest`; el SDK de AMD (no commiteable) se baja de un repo privado en CI. Firma opcional (SignPath OSS). *(pendiente: dar de alta SignPath + repo privado del SDK + probar el pipeline en GitHub)*
 - [x] **Docs**: cómo funciona → `docs/ARCHITECTURE.md` (deep-dive) + `docs/FAQ.md` (FAQ ampliada: SDK AMD, helper elevado, telemetría, Intel, HVCI, matriz por hardware, config, idioma, 3 procesos). README con "How it works" + FAQ.
 
 ### P2 — nice-to-have / futuro
