@@ -55,6 +55,9 @@ internal sealed class CsvLogger : IDisposable
         {
             if (_cores < 0)
             {
+                // Wait for the first populated snapshot: if CoreCount is still 0 (agent read before PDH
+                // filled the per-core counter), latching it now would give every row zero core columns.
+                if (s.Cpu.CoreCount <= 0) return;
                 _cores = Math.Clamp(s.Cpu.CoreCount, 0, SnapshotLayout.MaxCores);
                 WriteHeader();
             }

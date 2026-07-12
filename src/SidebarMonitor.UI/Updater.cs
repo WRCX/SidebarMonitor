@@ -61,7 +61,7 @@ internal static class Updater
             var root = doc.RootElement;
 
             string tag = root.GetProperty("tag_name").GetString() ?? "";
-            if (!Version.TryParse(tag.TrimStart('v', 'V'), out var ver)) return null;
+            if (!TryParseTag(tag, out var ver)) return null;
             string notes = root.TryGetProperty("body", out var b) ? b.GetString() ?? "" : "";
             string html = root.TryGetProperty("html_url", out var h) ? h.GetString() ?? "" : "";
 
@@ -70,7 +70,10 @@ internal static class Updater
             if (root.TryGetProperty("assets", out var assets))
                 foreach (var a in assets.EnumerateArray())
                     if (string.Equals(a.GetProperty("name").GetString(), wanted, StringComparison.OrdinalIgnoreCase))
-                        asset = a.GetProperty("browser_download_url").GetString();
+                    {
+                        string? u = a.GetProperty("browser_download_url").GetString();
+                        if (IsTrustedGitHubUrl(u)) asset = u;   // reject non-HTTPS / non-GitHub hosts
+                    }
 
             return new Release(ver, notes, html, asset);
         }
@@ -83,6 +86,26 @@ internal static class Updater
         static Version N(Version v) => new(v.Major, v.Minor, Math.Max(0, v.Build));
         return N(latest) > N(current);
     }
+
+    /// <summary>Formats a version as "vMajor.Minor.Patch" (revision ignored — AssemblyVersion is pinned).</summary>
+    public static string Format(Version v) => $"v{v.Major}.{v.Minor}.{Math.Max(0, v.Build)}";
+
+    /// <summary>Parses a release tag ("v1.2.3", or "v1.2.3-rc1" with the pre-release suffix stripped).</summary>
+    private static bool TryParseTag(string tag, out Version ver)
+    {
+        string t = tag.TrimStart('v', 'V');
+        int dash = t.IndexOf('-');
+        if (dash >= 0) t = t[..dash];
+        if (Version.TryParse(t, out var v)) { ver = v; return true; }
+        ver = new Version(0, 0, 0);
+        return false;
+    }
+
+    /// <summary>Only accept an asset URL over HTTPS from a GitHub host — its MSI is later run elevated.</summary>
+    private static bool IsTrustedGitHubUrl(string? url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var u) && u.Scheme == Uri.UriSchemeHttps &&
+        (u.Host == "github.com" || u.Host.EndsWith(".github.com", StringComparison.OrdinalIgnoreCase)
+                                || u.Host.EndsWith(".githubusercontent.com", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Downloads the release's MSI and hands off to msiexec via a hidden relauncher, then invokes
@@ -98,21 +121,27 @@ internal static class Updater
         string dir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SidebarMonitor", "update");
         Directory.CreateDirectory(dir);
-        string msi = Path.Combine(dir, Path.GetFileName(new Uri(r.AssetUrl).LocalPath));
+        // Local name from our own flavour constant, never from the (attacker-influenceable) URL path.
+        string msi = Path.Combine(dir, install.Flavor == "lite" ? "SidebarMonitor-lite.msi" : "SidebarMonitor.msi");
 
         using (var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) })
         {
             http.DefaultRequestHeaders.UserAgent.ParseAdd("SidebarMonitor-Updater");
-            using var resp = await http.GetAsync(r.AssetUrl, HttpCompletionOption.ResponseHeadersRead, ct);
+            // HttpClient.Timeout only bounds the headers with ResponseHeadersRead; cap the streaming
+            // body separately so a stalled connection can't hang "Instalando…" forever.
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromMinutes(10));
+            var dct = cts.Token;
+            using var resp = await http.GetAsync(r.AssetUrl, HttpCompletionOption.ResponseHeadersRead, dct);
             resp.EnsureSuccessStatusCode();
             long? total = resp.Content.Headers.ContentLength;
-            await using var src = await resp.Content.ReadAsStreamAsync(ct);
+            await using var src = await resp.Content.ReadAsStreamAsync(dct);
             await using var dst = File.Create(msi);
             var buf = new byte[81920];
             long got = 0; int lastPct = -1, n;
-            while ((n = await src.ReadAsync(buf, ct)) > 0)
+            while ((n = await src.ReadAsync(buf, dct)) > 0)
             {
-                await dst.WriteAsync(buf.AsMemory(0, n), ct);
+                await dst.WriteAsync(buf.AsMemory(0, n), dct);
                 got += n;
                 if (total is > 0 && progress is not null)
                 {

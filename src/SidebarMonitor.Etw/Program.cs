@@ -171,8 +171,15 @@ internal static class Program
         // Game frame-timing via the bundled PresentMon CLI (only spawns while the marker is present).
         using var frameStats = new FrameStats(AppContext.BaseDirectory);
 
+        int publishing = 0;
         using var publish = new Timer(_ =>
         {
+            // System.Threading.Timer is reentrant: if a callback outlasts the window (WMI can stall), a
+            // second fires on another pool thread and two writers would race Publish and tear the
+            // seqlock payload. Drop any overlapping tick — a skipped window is harmless.
+            if (Interlocked.Exchange(ref publishing, 1) == 1) return;
+            try
+            {
             lock (gate)
             {
                 double seconds = Stopwatch.GetElapsedTime(windowStart).TotalSeconds;
@@ -222,14 +229,17 @@ internal static class Program
                 // Best-core current clock from the SDK's per-core dCurrentFreq — the real boost clock
                 // (reaches ~5040), which Windows' averaged % Processor Performance never catches.
                 double bestCur = 0;
-                for (int i = 0; i < rm.CoreCount && i < 16; i++) bestCur = Math.Max(bestCur, rm.CoreFreqMhz[i]);
+                // Ignore glitch reads (>6 GHz is impossible): a stray spike would otherwise pin the UI's
+                // session boost-peak forever and skew the boost ratio.
+                for (int i = 0; i < rm.CoreCount && i < 16; i++)
+                    if (rm.CoreFreqMhz[i] < 6000) bestCur = Math.Max(bestCur, rm.CoreFreqMhz[i]);
                 snapshot.CpuBestFreqMhz = (float)bestCur;
                 snapshot.CpuVidV = rm.VidV;
                 snapshot.CpuTjMaxC = rm.TjMaxC;
                 snapshot.CpuPptPct = rm.PptPct;
                 snapshot.CpuTdcPct = rm.TdcPct;
                 snapshot.CpuEdcPct = rm.EdcPct;
-                snapshot.CpuPhysicalCores = rm.CoreCount;
+                snapshot.CpuPhysicalCores = Math.Min(rm.CoreCount, 16);   // CpuCoreTempsC/C0Pct are 16-wide
                 int ntemp = Math.Min(rm.CoreCount, 16);
                 for (int i = 0; i < ntemp; i++) snapshot.CpuCoreTempsC[i] = (float)rm.CoreTempC[i];
                 // C0 residency is indexed by physical core (uncompacted in the shim), so fill all 16.
@@ -274,6 +284,8 @@ internal static class Program
                 Console.WriteLine($"pub {published,4}  {snapshot.WindowSeconds:F2}s  " +
                                   $"netEvents_total={Interlocked.Read(ref netEvents)}  netProcs={snapshot.NetProcCount}  top: {netTop}");
             }
+            }
+            finally { Volatile.Write(ref publishing, 0); }
         }, null, windowMs, windowMs);
 
         Console.WriteLine($"Helper ETW en marcha. {EtwLayout.MapName}, {writer.SizeBytes} B, ventana {windowMs} ms, {cores} cores.");

@@ -205,13 +205,18 @@ internal sealed class Sparkline : FrameworkElement
         InvalidateVisual();
     }
 
+    // Immutable pens — built once and frozen, not rebuilt every OnRender (many sparklines are live).
+    private static readonly Pen BaselinePen = FrozenPen(Theme.Baseline);
+    private static readonly Pen GridPen = FrozenPen(Theme.Grid);
+    private static Pen FrozenPen(Brush b) { var p = new Pen(b, 1); p.Freeze(); return p; }
+
     protected override void OnRender(DrawingContext dc)
     {
         double w = ActualWidth, h = ActualHeight;
         if (w <= 0 || h <= 0) return;
 
         dc.DrawRoundedRectangle(Theme.Surface, null, new System.Windows.Rect(0, 0, w, h), 3, 3);
-        dc.DrawLine(new Pen(Theme.Baseline, 1), new System.Windows.Point(0, h - 0.5), new System.Windows.Point(w, h - 0.5));
+        dc.DrawLine(BaselinePen, new System.Windows.Point(0, h - 0.5), new System.Windows.Point(w, h - 0.5));
         if (_count < 2) return;
 
         ComputeBounds(out double lo, out double hi2);
@@ -226,7 +231,7 @@ internal sealed class Sparkline : FrameworkElement
         {
             double dx = w / (Capacity - 1);
             double x = w - (_count - 1) * dx + hoverIdx * dx;
-            dc.DrawLine(new Pen(Theme.Grid, 1), new System.Windows.Point(x, 0), new System.Windows.Point(x, h));
+            dc.DrawLine(GridPen, new System.Windows.Point(x, 0), new System.Windows.Point(x, h));
             Dot(dc, x, YOf(_a[hoverIdx], lo, hi2, h), _colorA);
             if (_b is not null && _colorB is { } cb) Dot(dc, x, YOf(_b[hoverIdx], lo, hi2, h), cb);
         }

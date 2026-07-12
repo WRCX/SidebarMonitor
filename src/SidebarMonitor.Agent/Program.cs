@@ -229,7 +229,9 @@ internal static class Program
             int tpc = phys > 0 ? Math.Max(1, s.Cpu.CoreCount / phys) : 1;
             for (int i = 0; i < s.Cpu.CoreCount && i < SnapshotLayout.MaxCores; i++)
             {
-                int p = phys > 0 ? Math.Min(phys - 1, i / tpc) : i;
+                // Clamp to 15: CpuCoreTempsC/C0Pct are 16-wide, so a CPU reporting >16 physical cores
+                // (Threadripper/EPYC) must never index past the inline array.
+                int p = Math.Min(15, phys > 0 ? Math.Min(phys - 1, i / tpc) : i);
                 s.Cpu.CoreTempC[i] = e.CpuCoreTempsC[p];
                 // C0 residency maps the same way: both SMT siblings inherit the physical core's
                 // awake-fraction, so a parked physical core shows both its logical rows asleep.
@@ -557,8 +559,10 @@ internal static class Program
             var now = Stats(nics[i]);
             ref var nic = ref s.Nics[i];
             NameField.Set(ref nic.Name, nics[i].Name);
-            nic.RxBytesPerSec = (now.Rx - prev[i].Rx) / secs;
-            nic.TxBytesPerSec = (now.Tx - prev[i].Tx) / secs;
+            // Clamp negatives: a counter wrap (32-bit driver rollover) or an interface reset makes
+            // now < prev, which would otherwise show a huge negative spike.
+            nic.RxBytesPerSec = Math.Max(0, now.Rx - prev[i].Rx) / secs;
+            nic.TxBytesPerSec = Math.Max(0, now.Tx - prev[i].Tx) / secs;
             nic.LinkBitsPerSec = (ulong)Math.Max(0, nics[i].Speed);
             nic.IsPrimary = InterfaceIndex(nics[i]) == primary && primary != 0;
             prev[i] = now;

@@ -12,7 +12,7 @@ using SidebarMonitor.Shared;
 
 namespace SidebarMonitor.UI;
 
-internal sealed class MainWindow : AppBarWindow
+internal sealed partial class MainWindow : AppBarWindow
 {
     private readonly UiConfig _cfg;
     private readonly List<(IntPtr Handle, MonitorInfo Info)> _monitors;
@@ -27,6 +27,7 @@ internal sealed class MainWindow : AppBarWindow
     private TrayIcon? _tray;
 
     private readonly List<Section> _sections = [];
+    private readonly Dictionary<string, Section> _byKey = [];   // O(1) Find (called ~18× per tick)
     private readonly StackPanel _stack = new();
     private readonly TextBlock _status;
     private readonly CsvLogger _csv = new();
@@ -214,85 +215,11 @@ internal sealed class MainWindow : AppBarWindow
         tray.UpdateRequested += () => ApplyUpdate();
     }
 
-    // ---------------------------------------------------------------- updates
-    private readonly Updater.Install _install = Updater.CurrentInstall();
-    private Updater.Release? _latest;
-
-    /// <summary>Current build version as "vMajor.Minor.Patch", for the Settings page.</summary>
-    public string CurrentVersionText => $"v{Updater.CurrentVersion().Major}.{Updater.CurrentVersion().Minor}.{Math.Max(0, Updater.CurrentVersion().Build)}";
-
-    /// <summary>Checks GitHub for a newer release. Auto (fromUser=false) only runs when the user has
-    /// opted in. A newer version surfaces in the tray; <paramref name="onResult"/> reports status text
-    /// to the Settings page. Runs off the UI thread, marshals results back.</summary>
-    public async void RunUpdateCheck(bool fromUser, Action<string>? onResult = null)
-    {
-        if (!fromUser && !_cfg.CheckUpdates) return;
-        onResult?.Invoke(Loc.T("Buscando…"));
-        var rel = await Updater.CheckAsync(_install.Flavor);
-        void Report(string s) => Dispatcher.Invoke(() => onResult?.Invoke(s));
-
-        if (rel is null) { Report(Loc.T("No se pudo comprobar (sin conexión o sin releases).")); return; }
-        if (!Updater.IsNewer(rel.Version, Updater.CurrentVersion()))
-        {
-            _latest = null;
-            Report(Loc.T("Estás en la última versión."));
-            if (fromUser) _tray?.Notify(Loc.T("Estás en la última versión."));
-            return;
-        }
-
-        _latest = rel;
-        string ver = $"v{rel.Version.Major}.{rel.Version.Minor}.{Math.Max(0, rel.Version.Build)}";
-        Dispatcher.Invoke(() => _tray?.SetUpdateAvailable(ver));
-
-        // Zero-friction path: if the user opted into automatic install and this is an MSI install with a
-        // matching asset, download + install it silently right now — no prompt, no progress window, no
-        // browser. (Truly hands-off only where elevation is silent; elsewhere msiexec still elevates.)
-        if (_cfg.AutoInstallUpdates && _install.FromMsi && rel.AssetUrl is not null)
-        {
-            Report(Loc.T("Instalando {0} automáticamente…", ver));
-            Dispatcher.Invoke(() => _tray?.Notify(Loc.T("Actualizando a {0}…", ver)));
-            try { await Updater.ApplyAsync(rel, _install, () => Dispatcher.Invoke(Close), silent: true); }
-            catch { Report(Loc.T("No se pudo actualizar automáticamente.")); }
-            return;
-        }
-
-        Report(Loc.T("Disponible {0} — pulsa «Actualizar».", ver));
-    }
-
-    /// <summary>Applies the pending update: MSI installs update in place (one UAC prompt, then the UI
-    /// relaunches); dev/non-MSI installs just open the release page in the browser.</summary>
-    public async void ApplyUpdate(Action<string>? onProgress = null)
-    {
-        if (_latest is null) return;
-        string ver = $"v{_latest.Version.Major}.{_latest.Version.Minor}.{Math.Max(0, _latest.Version.Build)}";
-
-        if (!_install.FromMsi || _latest.AssetUrl is null)
-        {
-            // Not an MSI install (or no matching asset): send them to the release page.
-            try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(_latest.HtmlUrl) { UseShellExecute = true }); } catch { }
-            return;
-        }
-
-        // Default flow: always confirm first, and reassure that nothing is lost. Config, layout and
-        // logs live in %LOCALAPPDATA% and are never touched by the MSI (it only replaces Program Files).
-        var ok = MessageBox.Show(
-            Loc.T("Se descargará e instalará {0}.\n\nSe conserva toda tu configuración (panel, ajustes, colocación, historial) — no se pierde nada. El panel se cerrará y se volverá a abrir solo, ya en la versión nueva.\n\n¿Actualizar ahora?", ver),
-            "SidebarMonitor", MessageBoxButton.OKCancel, MessageBoxImage.Question);
-        if (ok != MessageBoxResult.OK) return;
-
-        // Visual feedback through every phase: Downloading %… → Installing… (msiexec shows its own
-        // progress bar too) → the panel closes and relaunches into the new version.
-        void Report(string s) { onProgress?.Invoke(s); _tray?.Notify(s); }
-        var progress = new Progress<string>(Report);
-        Report(Loc.T("Descargando {0}…", ver));
-        try { await Updater.ApplyAsync(_latest, _install, Close, silent: false, progress: progress); }
-        catch { Report(Loc.T("No se pudo actualizar. Prueba a descargarlo manualmente.")); }
-    }
-
     private void Register(Section s)
     {
         s.StateChanged += SaveSections;
         _sections.Add(s);
+        _byKey[s.Key] = s;
     }
 
     /// <summary>The sections in display order: those named in the saved order first, then any
@@ -1381,7 +1308,7 @@ internal sealed class MainWindow : AppBarWindow
         }
     }
 
-    private Section Find(string key) => _sections.First(s => s.Key == key);
+    private Section Find(string key) => _byKey[key];
 
     private static void SyncRows(StackPanel host, int count)
     {

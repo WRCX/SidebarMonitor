@@ -242,9 +242,9 @@ internal sealed class GpuSection : StackPanel
 
             if (block.HasDetail && block.Watts is not null)
             {
-                block.Watts.Text = string.Create(ci, $"{g.PowerW:F1}");
-                block.Temp!.Text = string.Create(ci, $"{g.TempC:F0}");
-                block.Fan!.Text = string.Create(ci, $"{g.FanPct}");
+                block.Watts.Text = float.IsNaN(g.PowerW) ? "—" : string.Create(ci, $"{g.PowerW:F1}");
+                block.Temp!.Text = float.IsNaN(g.TempC) ? "—" : string.Create(ci, $"{g.TempC:F0}");
+                block.Fan!.Text = g.FanPct < 0 ? "—" : string.Create(ci, $"{g.FanPct}");
                 block.Vram!.Text = string.Create(ci, $"VRAM {Theme.Gib(g.VramUsed)} / {Theme.Gib(g.VramTotal)} GiB");
                 block.VramMeter!.Update(g.VramTotal > 0 ? (double)g.VramUsed / g.VramTotal : 0);
                 block.Clocks!.Text = string.Create(ci, $"{g.CoreClockMhz} / {g.MemClockMhz} MHz   PCIe x{g.PcieWidth}");

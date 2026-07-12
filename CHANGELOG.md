@@ -8,6 +8,41 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 _Nothing yet._
 
+## [1.2.4] — 2026-07-13
+
+Security, correctness and performance hardening from a full audit, plus a maintainability refactor. No
+user-facing feature changes.
+
+### Security
+
+- Updater validates the download URL is **HTTPS from a GitHub host**, and derives the local MSI filename
+  from a fixed constant rather than the (attacker-influenceable) release URL.
+
+### Fixed
+
+- **Helper**: the publish timer is now **non-reentrant** — an overlong callback (e.g. a slow WMI query)
+  can no longer let two threads race the single-writer seqlock and tear the published snapshot.
+- **CPUs with >16 physical cores** (Threadripper/EPYC): per-core temperature/C0 mapping is clamped to the
+  16-wide array — no out-of-bounds read.
+- **Updater**: a reentrancy guard prevents a double-apply or a concurrent check nulling the pending
+  release mid-install; pre-release tags (`v1.2.3-rc1`) now parse; the download body has a timeout; a
+  glitch >6 GHz clock read no longer pins the session boost peak.
+- **Config**: `ui.json` is written **atomically** (temp file + swap) with a `.bak` fallback, so a crash
+  mid-write can't silently reset every setting.
+- **CSV logging**: the header waits for a populated core count (no zero-core columns); a NIC counter wrap
+  no longer produces a negative-rate spike.
+- GPU detail fields show "—" instead of "NaN" when a sensor is unsupported.
+
+### Performance
+
+- O(1) section lookup (was a LINQ scan ~18×/tick); cached frozen pens and typefaces in the chart
+  renderers instead of rebuilding them every frame.
+
+### Maintainability
+
+- Split the update code out of `MainWindow.cs` into a partial file; centralized the version-string
+  format.
+
 ## [1.2.3] — 2026-07-13
 
 ### Changed
@@ -82,7 +117,8 @@ First public release.
 
 > Not code-signed yet, so Windows SmartScreen may warn on first run — choose **More info → Run anyway**.
 
-[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.2.3...HEAD
+[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.2.4...HEAD
+[1.2.4]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.2.4
 [1.2.3]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.2.3
 [1.2.2]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.2.2
 [1.2.1]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.2.1

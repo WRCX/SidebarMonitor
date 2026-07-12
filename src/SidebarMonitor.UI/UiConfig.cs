@@ -202,17 +202,19 @@ public sealed class UiConfig
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "SidebarMonitor", "ui.json");
 
-    public static UiConfig Load()
+    public static UiConfig Load() => TryLoad(Path) ?? TryLoad(Path + ".bak") ?? new UiConfig();
+
+    // An older build wrote a bare {"cpu":2,...} map here; deserializing it into UiConfig yields
+    // defaults, which is the right outcome. Returns null on missing/corrupt so Load falls to the backup.
+    private static UiConfig? TryLoad(string path)
     {
         try
         {
-            // An older build wrote a bare {"cpu":2,...} map here; deserializing it into UiConfig
-            // yields defaults, which is the right outcome.
-            if (File.Exists(Path))
-                return JsonSerializer.Deserialize(File.ReadAllText(Path), UiConfigContext.Default.UiConfig) ?? new UiConfig();
+            if (File.Exists(path))
+                return JsonSerializer.Deserialize(File.ReadAllText(path), UiConfigContext.Default.UiConfig);
         }
-        catch { /* corrupt or first run */ }
-        return new UiConfig();
+        catch { /* corrupt */ }
+        return null;
     }
 
     public void Save()
@@ -221,7 +223,13 @@ public sealed class UiConfig
         try
         {
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Path)!);
-            File.WriteAllText(Path, JsonSerializer.Serialize(this, UiConfigContext.Default.UiConfig));
+            // Write to a temp file then atomically swap it in, keeping the prior good copy as .bak. A
+            // crash or two writers mid-write can no longer leave a truncated ui.json that would silently
+            // reset every setting on next load.
+            string tmp = Path + ".tmp";
+            File.WriteAllText(tmp, JsonSerializer.Serialize(this, UiConfigContext.Default.UiConfig));
+            if (File.Exists(Path)) File.Replace(tmp, Path, Path + ".bak", ignoreMetadataErrors: true);
+            else File.Move(tmp, Path);
         }
         catch { /* non-fatal */ }
     }

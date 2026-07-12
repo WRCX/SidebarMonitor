@@ -83,7 +83,8 @@ public struct CpuInfo
     /// <summary>Thermal limit (cHTC), °C — the temperature the CPU throttles at.</summary>
     public float TjMaxC;
     /// <summary>Dynamic global frequency limit, MHz (HWiNFO's "Límite de frecuencia: Global"): the
-    /// current max boost the CPU allows, which drops under all-core load. Not the static rated cap.</summary>
+    /// current max boost the CPU allows, which drops under all-core load. Not the static rated cap.
+    /// Reserved: currently unpopulated — the future PawnIO PM_Table source will fill it (docs/amd-advanced-pawnio.md).</summary>
     public float LimitMhz;
     /// <summary>Limit utilisation (HWiNFO's "Limits"): PPT power, TDC/EDC current, as % of cap.</summary>
     public float PptPct, TdcPct, EdcPct;

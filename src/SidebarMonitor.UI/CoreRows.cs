@@ -219,14 +219,18 @@ internal sealed class CoreRows : FrameworkElement
         ((ToolTip)ToolTip).Content = tb;
     }
 
+    // Constant typefaces — cached, not rebuilt on every CPU-tick render.
+    private static readonly Typeface MonoFace = new(Theme.Mono, FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
+    private static readonly Typeface UiFace = new(Theme.Ui, FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
+
     protected override void OnRender(DrawingContext dc)
     {
         double w = ActualWidth;
         if (w <= 0 || _rows.Length == 0) return;
 
         var dpi = VisualTreeHelper.GetDpi(this);
-        var monoFace = new Typeface(Theme.Mono, FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
-        var uiFace = new Typeface(Theme.Ui, FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
+        var monoFace = MonoFace;
+        var uiFace = UiFace;
 
         // marker (best-core star) | index | bar | [metric] | pct | dominant process
         const double markerW = 11, indexW = 15, pctW = 34;
