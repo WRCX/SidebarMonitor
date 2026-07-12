@@ -5,6 +5,7 @@
   Start-menu shortcut. The install path is fixed so the launcher and task XML can hardcode it.
   Build with installer/build.ps1 (which stages the self-contained publish + generated files).
 -->
+<?ifndef Flavor ?><?define Flavor = "full" ?><?endif?>
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
 
@@ -36,7 +37,17 @@
     <Feature Id="Main" Title="SidebarMonitor" Level="1">
       <ComponentGroupRef Id="AppFiles" />
       <ComponentRef Id="AutostartAndShortcut" />
+      <ComponentRef Id="InstallInfo" />
     </Feature>
+
+    <!-- Install metadata the in-app updater reads (per-machine, so it survives a %LOCALAPPDATA% wipe
+         and is written elevated by the MSI, read unelevated by the UI): where we installed, which
+         version, and which flavour (full/lite) so the updater downloads the matching MSI. -->
+    <Component Id="InstallInfo" Directory="INSTALLFOLDER" Guid="C4E1B7A0-9D62-4F38-8B15-6A2E7C0D9F41">
+      <RegistryValue Root="HKLM" Key="Software\SidebarMonitor" Name="InstallPath" Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
+      <RegistryValue Root="HKLM" Key="Software\SidebarMonitor" Name="Version" Type="string" Value="$(Version)" />
+      <RegistryValue Root="HKLM" Key="Software\SidebarMonitor" Name="Flavor" Type="string" Value="$(Flavor)" />
+    </Component>
 
     <!-- Autostart (UI under the per-user Run key) + Start-menu shortcut, keyed per-user. -->
     <Component Id="AutostartAndShortcut" Directory="ProgramMenuFolder" Guid="7A1C4E88-2B93-4D5F-B0E6-1F3A9C2D4E57">

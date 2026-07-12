@@ -125,6 +125,10 @@ internal static class Program
 
         if (args.Contains("--settings")) win.Loaded += (_, _) => win.OpenSettings();
 
+        // Opt-in update check (no-op unless the user enabled it); skip throwaway/timed runs.
+        if (seconds == 0 && !cfg.Ephemeral)
+            win.Loaded += (_, _) => win.RunUpdateCheck(false);
+
         win.Show();
         app.Run();
         return 0;

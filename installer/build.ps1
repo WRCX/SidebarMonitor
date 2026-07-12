@@ -123,9 +123,10 @@ if ($Lite) {
 Write-Host '== Building MSI with WiX ==' -ForegroundColor Cyan
 New-Item -ItemType Directory -Force $out | Out-Null
 $msi = Join-Path $out ($Lite ? 'SidebarMonitor-lite.msi' : 'SidebarMonitor.msi')
+$flavor = $Lite ? 'lite' : 'full'
 & wix build (Join-Path $here 'SidebarMonitor.wxs') `
     -ext WixToolset.UI.wixext `
-    -d "Stage=$stage" -d "ProjectRoot=$root" -d "Version=$Version" `
+    -d "Stage=$stage" -d "ProjectRoot=$root" -d "Version=$Version" -d "Flavor=$flavor" `
     -arch x64 -o $msi
 if ($LASTEXITCODE) { throw 'wix build failed' }
 

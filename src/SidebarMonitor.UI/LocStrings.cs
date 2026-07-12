@@ -260,6 +260,26 @@ internal static class LocStrings
             = "Under the title: CPU vendor/model, contract versions, SDK/helper status, cadence and CSV status.",
         ["Abrir carpeta de logs"] = "Open logs folder",
 
+        // ── Updates ───────────────────────────────────────────────────────────────────────────
+        ["Actualizaciones"] = "Updates",
+        ["Buscar actualizaciones automáticamente"] = "Check for updates automatically",
+        ["Al arrancar (y a diario) consulta GitHub Releases. Solo se contacta la API pública de GitHub; no se envía nada tuyo."]
+            = "On startup (and daily) checks GitHub Releases. Only GitHub's public API is contacted; nothing about you is sent.",
+        ["Versión actual: {0}"] = "Current version: {0}",
+        ["Buscar ahora"] = "Check now",
+        ["Actualizar ahora"] = "Update now",
+        ["Actualizar a {0}"] = "Update to {0}",
+        ["Hay una versión nueva disponible ({0}). Clic para actualizar."]
+            = "A new version is available ({0}). Click to update.",
+        ["Buscando…"] = "Checking…",
+        ["No se pudo comprobar (sin conexión o sin releases)."] = "Couldn't check (offline or no releases).",
+        ["Estás en la última versión."] = "You're on the latest version.",
+        ["Disponible {0} — pulsa «Actualizar»."] = "{0} available — click «Update».",
+        ["Se descargará e instalará {0}. Windows pedirá permiso de administrador y el panel se reiniciará. ¿Continuar?"]
+            = "{0} will be downloaded and installed. Windows will ask for administrator permission and the panel will restart. Continue?",
+        ["Descargando {0}…"] = "Downloading {0}…",
+        ["No se pudo actualizar. Prueba a descargarlo manualmente."] = "Update failed. Try downloading it manually.",
+
         // ── First-run dialog ──────────────────────────────────────────────────────────────────
         ["SidebarMonitor — activar sensores de tu Ryzen"] = "SidebarMonitor — enable your Ryzen's sensors",
         ["Para leer temperatura, vatios, residencia C0 y el boost por núcleo de tu Ryzen, SidebarMonitor usa el AMD Ryzen Master Monitoring SDK: el driver oficial de AMD, firmado y compatible con Integridad de Memoria (HVCI). No usa WinRing0 ni drivers dudosos."]

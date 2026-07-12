@@ -14,6 +14,11 @@ public sealed class UiConfig
     /// "en" force it. Applied at startup by <see cref="Loc.Init"/>; changing it relaunches the UI.</summary>
     public string Language { get; set; } = "auto";
 
+    /// <summary>Check GitHub Releases for a newer version on startup (then daily). Off by default to
+    /// honour the no-network-in-normal-use privacy stance; a manual "Check now" always works. When on,
+    /// the only network call is to GitHub's public API — nothing about you is sent. See PRIVACY.md.</summary>
+    public bool CheckUpdates { get; set; }
+
     // ── First-run / platform consent ──────────────────────────────────────────────────────────
     /// <summary>The vendor-specific first-run notice (AMD EULA or Intel ring0 info) has been shown.</summary>
     public bool FirstRunNoticeShown { get; set; }

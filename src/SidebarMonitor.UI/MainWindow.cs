@@ -208,6 +208,63 @@ internal sealed class MainWindow : AppBarWindow
         tray.ToggleRequested += () => Visibility = Visibility == Visibility.Visible ? Visibility.Hidden : Visibility.Visible;
         tray.ConfigRequested += () => { if (ContextMenu is not null) ContextMenu.IsOpen = true; };
         tray.ExitRequested += Close;
+        tray.UpdateRequested += ApplyUpdate;
+    }
+
+    // ---------------------------------------------------------------- updates
+    private readonly Updater.Install _install = Updater.CurrentInstall();
+    private Updater.Release? _latest;
+
+    /// <summary>Current build version as "vMajor.Minor.Patch", for the Settings page.</summary>
+    public string CurrentVersionText => $"v{Updater.CurrentVersion().Major}.{Updater.CurrentVersion().Minor}.{Math.Max(0, Updater.CurrentVersion().Build)}";
+
+    /// <summary>Checks GitHub for a newer release. Auto (fromUser=false) only runs when the user has
+    /// opted in. A newer version surfaces in the tray; <paramref name="onResult"/> reports status text
+    /// to the Settings page. Runs off the UI thread, marshals results back.</summary>
+    public async void RunUpdateCheck(bool fromUser, Action<string>? onResult = null)
+    {
+        if (!fromUser && !_cfg.CheckUpdates) return;
+        onResult?.Invoke(Loc.T("Buscando…"));
+        var rel = await Updater.CheckAsync(_install.Flavor);
+        void Report(string s) => Dispatcher.Invoke(() => onResult?.Invoke(s));
+
+        if (rel is null) { Report(Loc.T("No se pudo comprobar (sin conexión o sin releases).")); return; }
+        if (!Updater.IsNewer(rel.Version, Updater.CurrentVersion()))
+        {
+            _latest = null;
+            Report(Loc.T("Estás en la última versión."));
+            if (fromUser) _tray?.Notify(Loc.T("Estás en la última versión."));
+            return;
+        }
+
+        _latest = rel;
+        string ver = $"v{rel.Version.Major}.{rel.Version.Minor}.{Math.Max(0, rel.Version.Build)}";
+        Dispatcher.Invoke(() => _tray?.SetUpdateAvailable(ver));
+        Report(Loc.T("Disponible {0} — pulsa «Actualizar».", ver));
+    }
+
+    /// <summary>Applies the pending update: MSI installs update in place (one UAC prompt, then the UI
+    /// relaunches); dev/non-MSI installs just open the release page in the browser.</summary>
+    public async void ApplyUpdate()
+    {
+        if (_latest is null) return;
+        string ver = $"v{_latest.Version.Major}.{_latest.Version.Minor}.{Math.Max(0, _latest.Version.Build)}";
+
+        if (!_install.FromMsi || _latest.AssetUrl is null)
+        {
+            // Not an MSI install (or no matching asset): send them to the release page.
+            try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(_latest.HtmlUrl) { UseShellExecute = true }); } catch { }
+            return;
+        }
+
+        var ok = MessageBox.Show(
+            Loc.T("Se descargará e instalará {0}. Windows pedirá permiso de administrador y el panel se reiniciará. ¿Continuar?", ver),
+            "SidebarMonitor", MessageBoxButton.OKCancel, MessageBoxImage.Information);
+        if (ok != MessageBoxResult.OK) return;
+
+        _tray?.Notify(Loc.T("Descargando {0}…", ver));
+        try { await Updater.ApplyAsync(_latest, _install, Close); }
+        catch { _tray?.Notify(Loc.T("No se pudo actualizar. Prueba a descargarlo manualmente.")); }
     }
 
     private void Register(Section s)

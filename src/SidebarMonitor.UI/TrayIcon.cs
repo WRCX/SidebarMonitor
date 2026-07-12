@@ -17,6 +17,9 @@ internal sealed class TrayIcon : IDisposable
     public event Action? ToggleRequested;
     public event Action? ExitRequested;
     public event Action? ConfigRequested;
+    public event Action? UpdateRequested;
+
+    private ToolStripItem? _updateItem;
 
     public TrayIcon()
     {
@@ -42,6 +45,25 @@ internal sealed class TrayIcon : IDisposable
         _icon.BalloonTipTitle = "SidebarMonitor";
         _icon.BalloonTipText = text;
         _icon.ShowBalloonTip(3000);
+    }
+
+    /// <summary>Surfaces an available update: a highlighted menu item at the top + a balloon whose
+    /// click also applies it. Idempotent — refreshes the version text if called again.</summary>
+    public void SetUpdateAvailable(string version)
+    {
+        string text = Loc.T("Actualizar a {0}", version);
+        if (_updateItem is null)
+        {
+            _updateItem = new ToolStripMenuItem(text, null, (_, _) => UpdateRequested?.Invoke()) { Font = new Font(_icon.ContextMenuStrip!.Font, FontStyle.Bold) };
+            _icon.ContextMenuStrip!.Items.Insert(0, _updateItem);
+            _icon.ContextMenuStrip.Items.Insert(1, new ToolStripSeparator());
+            _icon.BalloonTipClicked += (_, _) => UpdateRequested?.Invoke();
+        }
+        else _updateItem.Text = text;
+
+        _icon.BalloonTipTitle = "SidebarMonitor";
+        _icon.BalloonTipText = Loc.T("Hay una versión nueva disponible ({0}). Clic para actualizar.", version);
+        _icon.ShowBalloonTip(5000);
     }
 
     private static Icon BuildIcon()

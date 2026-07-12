@@ -79,6 +79,7 @@ internal sealed class SettingsWindow : Window
         AddPage(Loc.T("Refresco"), BuildRefresh);
         AddPage(Loc.T("Colocación"), BuildPlacement);
         AddPage(Loc.T("Diagnóstico"), BuildDiagnostics);
+        AddPage(Loc.T("Actualizaciones"), BuildUpdates);
     }
 
     private void AddPage(string name, Func<UIElement> build)
@@ -382,6 +383,34 @@ internal sealed class SettingsWindow : Window
             catch { }
         };
         p.Children.Add(open);
+        return p;
+    }
+
+    private UIElement BuildUpdates()
+    {
+        var p = Page(Loc.T("Actualizaciones"));
+        p.Children.Add(Toggle(Loc.T("Buscar actualizaciones automáticamente"),
+            Loc.T("Al arrancar (y a diario) consulta GitHub Releases. Solo se contacta la API pública de GitHub; no se envía nada tuyo."),
+            () => _cfg.CheckUpdates, v => { _cfg.CheckUpdates = v; _cfg.Save(); }));
+
+        p.Children.Add(SubHeader(Loc.T("Versión actual: {0}", _host.CurrentVersionText)));
+
+        var status = new TextBlock
+        {
+            Foreground = Theme.InkSecondary, FontFamily = Theme.Ui, FontSize = 12.5,
+            Margin = new Thickness(0, 12, 0, 0), TextWrapping = TextWrapping.Wrap,
+        };
+        var check = TextButton(Loc.T("Buscar ahora"));
+        check.Click += (_, _) => _host.RunUpdateCheck(true, s => status.Text = s);
+        var apply = TextButton(Loc.T("Actualizar ahora"));
+        apply.Margin = new Thickness(8, 12, 0, 0);
+        apply.Click += (_, _) => _host.ApplyUpdate();
+
+        var row = new StackPanel { Orientation = Orientation.Horizontal };
+        row.Children.Add(check);
+        row.Children.Add(apply);
+        p.Children.Add(row);
+        p.Children.Add(status);
         return p;
     }
 

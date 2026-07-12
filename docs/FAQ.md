@@ -33,9 +33,10 @@ still show usage, but without per-process attribution or CPU temperature/power.
 
 ## Does it need an internet connection?
 
-No. It runs fully offline. The only network access is if you later add optional update-checking
-against GitHub Releases (not enabled by default), or use `winget`/the installer to download it in the
-first place.
+No. It runs fully offline. The only optional network access is the **update check** (Settings →
+Updates), which is **off by default** and, when enabled, only asks GitHub's public Releases API whether
+a newer version exists — see [PRIVACY.md](../PRIVACY.md). Downloading the app via `winget`/the installer
+is the other obvious time bytes move, and that's you initiating it.
 
 ## What works on my hardware?
 
