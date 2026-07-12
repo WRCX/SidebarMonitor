@@ -45,6 +45,16 @@ below, each under its own terms. Their inclusion does **not** place them under t
 - **Source:** https://developer.nvidia.com/management-library-nvml
 - © NVIDIA Corporation.
 
+## Intel PresentMon
+
+- **Used for:** game frame-timing (FPS, frametime, 1%/0.1% lows, GPU busy, latency, animation error),
+  measured from ETW with no injection, via the elevated helper.
+- **Distribution:** the `PresentMon.exe` console app is redistributed with the installer and spawned by
+  the helper. Fetched by `native/PresentMon/fetch.ps1`.
+- **License:** MIT.
+- **Source:** https://github.com/GameTechDev/PresentMon
+- © Intel Corporation.
+
 ## Microsoft.Diagnostics.Tracing.TraceEvent
 
 - **Used for:** the kernel ETW session in the elevated helper (per-core process attribution and

@@ -1,8 +1,9 @@
 # FPS & frame-timing in the sidebar via ETW (PresentMon) — design & plan
 
-> **Status: design/plan, not implemented.** The goal is to show *real* frame-timing metrics for the
-> foreground game **in the sidebar panel** — FPS, 1% lows, frametime, GPU busy, latency, stutter
-> ("animation error"), and AI-frame-generation awareness — **without injecting into games**.
+> **Status: backend implemented and verified; UI section pending.** The data pipeline (PresentMon →
+> helper → agent → snapshot) works end-to-end — FPS, frametime, 1%/0.1% lows, GPU busy, latency,
+> stutter ("animation error") and the displayed-vs-presented frame-generation split — measured **without
+> injecting into games**. What remains is the on-panel GAME section that renders it.
 
 ## The line we do NOT cross: no in-game overlay
 

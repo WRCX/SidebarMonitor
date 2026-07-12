@@ -92,6 +92,12 @@ jobs:
           call native\RyzenShim\build.cmd || exit /b 1
           call native\AdlxShim\build.cmd  || exit /b 1
 
+      - name: Fetch PresentMon (MIT)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./native/PresentMon/fetch.ps1
+
       - name: Build MSIs (full + lite)
         shell: pwsh
         run: |
