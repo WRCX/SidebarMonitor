@@ -111,7 +111,7 @@ internal sealed class MainWindow : AppBarWindow
 
         _cpuPct = Theme.Text("", 16, Theme.InkPrimary, mono: true);
         _cpuPct.FontWeight = FontWeights.Bold;
-        _status = Theme.Text("esperando al agente…", 10, Theme.InkMuted);
+        _status = Theme.Text(Loc.T("esperando al agente…"), 10, Theme.InkMuted);
         _minButton = Theme.Text("»", 11, Theme.InkMuted);
         _tabArrow = Theme.Text("‹", 12, Theme.InkMuted);
         _topRows = new (TextBlock, TextBlock, TextBlock)[8];
@@ -120,14 +120,14 @@ internal sealed class MainWindow : AppBarWindow
         _titleBar = BuildTitleBar();   // hosts _debug so it survives ApplySectionOrder's rebuild
         _stack.Children.Add(_titleBar);
         if (_cfg.LogCsv) _csv.Start(DateTime.Now);
-        Register(new Section("cpu", "CPU", BuildCpu()));
-        Register(new Section("ram", "MEMORIA", BuildRam()));
-        Register(new Section("gpu", "GPU", BuildGpu()));
-        Register(new Section("net", "RED", BuildNet()));
-        Register(new Section("disk", "DISCOS", BuildDisks()));
-        Register(new Section("top", "PROCESOS", BuildTop()));
-        Register(new Section("docker", "DOCKER", BuildGuest(_dockerRows)));
-        Register(new Section("wsl", "WSL", BuildGuest(_wslRows)));
+        Register(new Section("cpu", Loc.T("CPU"), BuildCpu()));
+        Register(new Section("ram", Loc.T("MEMORIA"), BuildRam()));
+        Register(new Section("gpu", Loc.T("GPU"), BuildGpu()));
+        Register(new Section("net", Loc.T("RED"), BuildNet()));
+        Register(new Section("disk", Loc.T("DISCOS"), BuildDisks()));
+        Register(new Section("top", Loc.T("PROCESOS"), BuildTop()));
+        Register(new Section("docker", Loc.T("DOCKER"), BuildGuest(_dockerRows)));
+        Register(new Section("wsl", Loc.T("WSL"), BuildGuest(_wslRows)));
         // Docker/WSL are opt-in: hidden by default so we never spawn docker/wsl unless asked.
         // A saved state (LoadSections) overrides this.
         Find("docker").Visibility = Visibility.Collapsed;
@@ -145,7 +145,7 @@ internal sealed class MainWindow : AppBarWindow
         _tabArrow.VerticalAlignment = VerticalAlignment.Center;
         _tab = new Border { Background = Theme.Page, Child = _tabArrow, Cursor = Cursors.Hand, Visibility = Visibility.Collapsed };
         _tab.MouseLeftButtonUp += (_, _) => SetMinimized(false);
-        ToolTipService.SetToolTip(_tab, "Abrir SidebarMonitor");
+        ToolTipService.SetToolTip(_tab, Loc.T("Abrir SidebarMonitor"));
 
         var root = new Grid();
         root.Children.Add(_body);
@@ -193,7 +193,7 @@ internal sealed class MainWindow : AppBarWindow
         if (_ramModules.ToolTip is ToolTip tt && detail.Length > 0)
         {
             var tb = Theme.TipBlock();
-            tb.Inlines.Add(Theme.TipHead("Módulos de memoria"));
+            tb.Inlines.Add(Theme.TipHead(Loc.T("Módulos de memoria")));
             tb.Inlines.Add(new System.Windows.Documents.LineBreak());
             tb.Inlines.Add(new System.Windows.Documents.Run(detail));
             tt.Content = tb;
@@ -387,7 +387,7 @@ internal sealed class MainWindow : AppBarWindow
         var ver = Theme.Text(AppVersion, 9, Theme.InkMuted, mono: true);
         ver.Margin = new Thickness(5, 0, 0, 0);
         ver.VerticalAlignment = VerticalAlignment.Center;
-        ToolTipService.SetToolTip(ver, "Versión de SidebarMonitor (UI). Debe coincidir con la del agente/helper instalados.");
+        ToolTipService.SetToolTip(ver, Loc.T("Versión de SidebarMonitor (UI). Debe coincidir con la del agente/helper instalados."));
 
         var titleRow = new StackPanel { Orientation = Orientation.Horizontal };
         titleRow.Children.Add(title);
@@ -399,7 +399,7 @@ internal sealed class MainWindow : AppBarWindow
         _minButton.Cursor = Cursors.Hand;
         _minButton.Padding = new Thickness(4, 0, 2, 0);
         _minButton.MouseLeftButtonUp += (_, e) => { e.Handled = true; SetMinimized(true); };
-        ToolTipService.SetToolTip(_minButton, "Minimizar a pestaña");
+        ToolTipService.SetToolTip(_minButton, Loc.T("Minimizar a pestaña"));
         Grid.SetColumn(_minButton, 2);
 
         grid.Children.Add(titleRow);
@@ -674,7 +674,7 @@ internal sealed class MainWindow : AppBarWindow
         hdr.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         hdr.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(52) });
         hdr.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(62) });
-        var hName = Theme.Text("proceso", 9, Theme.InkMuted);
+        var hName = Theme.Text(Loc.T("proceso"), 9, Theme.InkMuted);
         var hCpu = Theme.Text("CPU", 9, Theme.InkMuted);
         var hMem = Theme.Text("RAM", 9, Theme.InkMuted);
         hCpu.HorizontalAlignment = HorizontalAlignment.Right;
@@ -714,7 +714,7 @@ internal sealed class MainWindow : AppBarWindow
     private UIElement BuildGuest(StackPanel rows)
     {
         var panel = new StackPanel();
-        var hdr = Theme.Text("nombre            CPU  RAM", 9, Theme.InkMuted, mono: true);
+        var hdr = Theme.Text(Loc.T("nombre            CPU  RAM"), 9, Theme.InkMuted, mono: true);
         hdr.Margin = new Thickness(0, 0, 0, 2);
         panel.Children.Add(hdr);
         panel.Children.Add(rows);
@@ -732,7 +732,7 @@ internal sealed class MainWindow : AppBarWindow
         if (data.Length == 0)
         {
             SyncRows(rows, 1);
-            ((TextBlock)rows.Children[0]).Text = col.Available == false ? "· no disponible / no responde" : "· leyendo…";
+            ((TextBlock)rows.Children[0]).Text = col.Available == false ? Loc.T("· no disponible / no responde") : Loc.T("· leyendo…");
             return;
         }
 
@@ -779,7 +779,7 @@ internal sealed class MainWindow : AppBarWindow
     private static (TextBlock, TextBlock) Cap(string label, TextBlock value) => (Theme.Text(label, 9, Theme.InkMuted), value);
 
     private void UpdateFreqCaption() =>
-        _cpuFreqCaption.Text = _cfg.CpuFreqMode switch { 1 => "GHz medio", 2 => "GHz mediana", _ => "GHz máx" };
+        _cpuFreqCaption.Text = _cfg.CpuFreqMode switch { 1 => Loc.T("GHz medio"), 2 => Loc.T("GHz mediana"), _ => Loc.T("GHz máx") };
 
     /// <summary>Trim the registry CPU string to what fits a title: "AMD Ryzen 7 7800X3D 8-Core
     /// Processor" → "Ryzen 7 7800X3D". Falls back to the raw string if the pattern isn't there.</summary>
@@ -854,14 +854,14 @@ internal sealed class MainWindow : AppBarWindow
     {
         var menu = new ContextMenu();
 
-        var settings = new MenuItem { Header = "Ajustes…", FontWeight = FontWeights.SemiBold };
+        var settings = new MenuItem { Header = Loc.T("Ajustes…"), FontWeight = FontWeights.SemiBold };
         settings.Click += (_, _) => OpenSettings();
         menu.Items.Add(settings);
 
         menu.Items.Add(new Separator());
 
         // Quick show/hide per section (also in Ajustes → Secciones, but handy from the right-click).
-        var quickSections = new MenuItem { Header = "Secciones" };
+        var quickSections = new MenuItem { Header = Loc.T("Secciones") };
         foreach (var s in _sections)
         {
             var sec = s;
@@ -873,15 +873,15 @@ internal sealed class MainWindow : AppBarWindow
 
         menu.Items.Add(new Separator());
 
-        var minimizeQuick = new MenuItem { Header = "Minimizar a pestaña" };
+        var minimizeQuick = new MenuItem { Header = Loc.T("Minimizar a pestaña") };
         minimizeQuick.Click += (_, _) => SetMinimized(true);
         menu.Items.Add(minimizeQuick);
 
-        var hideQuick = new MenuItem { Header = "Ocultar (queda en la bandeja)" };
+        var hideQuick = new MenuItem { Header = Loc.T("Ocultar (queda en la bandeja)") };
         hideQuick.Click += (_, _) => Visibility = Visibility.Hidden;
         menu.Items.Add(hideQuick);
 
-        var exitQuick = new MenuItem { Header = "Salir" };
+        var exitQuick = new MenuItem { Header = Loc.T("Salir") };
         exitQuick.Click += (_, _) => Close();
         menu.Items.Add(exitQuick);
 
@@ -922,8 +922,8 @@ internal sealed class MainWindow : AppBarWindow
             {
                 TryLaunchAgent();
                 _status.Text = err is not null && err.Contains("versi", StringComparison.OrdinalIgnoreCase)
-                    ? "agente desfasado"
-                    : "esperando al agente…";
+                    ? Loc.T("agente desfasado")
+                    : Loc.T("esperando al agente…");
                 return;
             }
         }
@@ -934,14 +934,14 @@ internal sealed class MainWindow : AppBarWindow
         var age = DateTime.UtcNow - new DateTime(s.TimestampUtcTicks, DateTimeKind.Utc);
         if (age > TimeSpan.FromSeconds(10))
         {
-            _status.Text = $"agente parado ({age.TotalSeconds:F0} s)";
+            _status.Text = Loc.T("agente parado ({0:F0} s)", age.TotalSeconds);
             return;
         }
         // The elevated helper carries CPU temp/power (AMD SDK), SATA temps and per-process
         // attribution. When it is up we say nothing; when it is down, that is the only thing worth
         // flagging — everything else the unelevated agent covers on its own.
         _status.Text = s.CpuFromAmd ? ""
-                     : !s.EtwAvailable ? "sin helper (lanza SidebarMonitor.Etw)"
+                     : !s.EtwAvailable ? Loc.T("sin helper (lanza SidebarMonitor.Etw)")
                      : "";
 
         // Diagnostics run regardless of minimised state: CSV keeps recording while tucked away, and
@@ -1004,7 +1004,7 @@ internal sealed class MainWindow : AppBarWindow
                 double cur = c.FreqBestMhz / 1000.0, peak = _bestFreqPeakMhz / 1000.0;
                 // "mejor núcleo" is only meaningful with the AMD SDK's per-core boost clock. Without it
                 // (Intel, or AMD with no helper) FreqBest is just the fastest core by PDH — say so honestly.
-                string bestLabel = s.CpuFromAmd ? " (mejor núcleo)" : "";
+                string bestLabel = s.CpuFromAmd ? Loc.T(" (mejor núcleo)") : "";
                 _cpuBoost.Text = string.Create(ci, $"boost {cur:F2} / {peak:F2} GHz{bestLabel}");
                 _cpuBoost.Visibility = Visibility.Visible;
             }
@@ -1019,11 +1019,11 @@ internal sealed class MainWindow : AppBarWindow
             if (_cfg.ShowCpuVid && c.VidV > 0) extra.Add(string.Create(ci, $"VID {c.VidV:F3}V"));
             if (_cfg.ShowCpuLimits)
             {
-                if (throttle) extra.Add("⚠ throttle térmico");
+                if (throttle) extra.Add(Loc.T("⚠ throttle térmico"));
                 if (c.PptPct > 0) extra.Add(string.Create(ci, $"PPT {c.PptPct:F0}%"));
                 if (c.TdcPct > 0) extra.Add(string.Create(ci, $"TDC {c.TdcPct:F0}%"));
                 if (c.EdcPct > 0) extra.Add(string.Create(ci, $"EDC {c.EdcPct:F0}%"));
-                if (c.TjMaxC > 0 && !float.IsNaN(c.TempC)) extra.Add(string.Create(ci, $"térm {c.TempC / c.TjMaxC * 100:F0}%"));
+                if (c.TjMaxC > 0 && !float.IsNaN(c.TempC)) extra.Add(Loc.T("térm {0:F0}%", c.TempC / c.TjMaxC * 100));
             }
             _cpuExtra.Text = string.Join("  ·  ", extra);
             _cpuExtra.Foreground = throttle && _cfg.ShowCpuLimits ? Theme.StatusCritical : Theme.InkMuted;
@@ -1094,7 +1094,7 @@ internal sealed class MainWindow : AppBarWindow
                 string link = n.LinkBitsPerSec > 0 ? $" · {n.LinkBitsPerSec / 1_000_000:F0} Mbps" : "";
                 _netPrimary.Text = $"{NameField.Get(ref n.Name)}{link}";
             }
-            else _netPrimary.Text = "sin interfaz activa";
+            else _netPrimary.Text = Loc.T("sin interfaz activa");
 
             // Per-process breakdown from ETW; without the helper there is nothing to attribute.
             // The row count is fixed (padded with blank rows) so the sections below never shift as
@@ -1103,7 +1103,7 @@ internal sealed class MainWindow : AppBarWindow
             SyncRows(_netProcRows, netRows);
             if (!s.EtwAvailable)
             {
-                if (netRows > 0) ((TextBlock)_netProcRows.Children[0]).Text = "· ETW para ver el tráfico por proceso";
+                if (netRows > 0) ((TextBlock)_netProcRows.Children[0]).Text = Loc.T("· ETW para ver el tráfico por proceso");
                 for (int i = 1; i < netRows; i++) ((TextBlock)_netProcRows.Children[i]).Text = " ";
             }
             else
@@ -1174,12 +1174,12 @@ internal sealed class MainWindow : AppBarWindow
                 b.Sub.Text = string.Join("  ·  ", new[] { media, NameField.Get(ref d.Bus), size }.Where(x => x.Length > 0));
 
                 float active = float.IsNaN(d.ActivePct) ? 0 : d.ActivePct;
-                b.ActiveText.Text = string.Create(ci, $"actividad {active:F0} %");
+                b.ActiveText.Text = Loc.T("actividad {0:F0} %", active);
                 b.Active.Update(active / 100.0);
 
                 b.Spark.Push((float)d.ReadBytesPerSec, (float)d.WriteBytesPerSec);
-                b.Rates.Text = string.Create(ci,
-                    $"R {Theme.BytesShort(d.ReadBytesPerSec, diskBin),-6} W {Theme.BytesShort(d.WriteBytesPerSec, diskBin),-6} cola {d.QueueLength:F2}");
+                b.Rates.Text = Loc.T("R {0,-6} W {1,-6} cola {2:F2}",
+                    Theme.BytesShort(d.ReadBytesPerSec, diskBin), Theme.BytesShort(d.WriteBytesPerSec, diskBin), d.QueueLength);
             }
         }
 
@@ -1197,11 +1197,11 @@ internal sealed class MainWindow : AppBarWindow
                 _topRows[i].Cpu.Text = string.Create(ci, $"{p.CpuPct:F1}%");
                 _topRows[i].Mem.Text = string.Create(ci, $"{p.WorkingSet / (1024.0 * 1024):F0} MB");
             }
-            _totals.Text = $"{s.TotalProcesses} procesos · {s.TotalThreads} threads";
+            _totals.Text = Loc.T("{0} procesos · {1} threads", s.TotalProcesses, s.TotalThreads);
         }
 
-        if (SectionDue("docker") && Find("docker").IsUpdateWorthy()) UpdateGuest(_docker, _dockerRows, "docker", "cont.");
-        if (SectionDue("wsl") && Find("wsl").IsUpdateWorthy()) UpdateGuest(_wsl, _wslRows, "wsl", "proc.");
+        if (SectionDue("docker") && Find("docker").IsUpdateWorthy()) UpdateGuest(_docker, _dockerRows, "docker", Loc.T("cont."));
+        if (SectionDue("wsl") && Find("wsl").IsUpdateWorthy()) UpdateGuest(_wsl, _wslRows, "wsl", Loc.T("proc."));
     }
 
     /// <summary>The heaviest process, for the folded header.</summary>
@@ -1242,13 +1242,13 @@ internal sealed class MainWindow : AppBarWindow
         var warn = new List<string>(3);
         bool haveTemp = c.TjMaxC > 0 && !float.IsNaN(c.TempC);
 
-        if (c.PptPct >= 99) hard.Add("POT"); else if (c.PptPct >= 95) warn.Add("POT");
-        if (c.TdcPct >= 99 || c.EdcPct >= 99) hard.Add("CORR"); else if (c.TdcPct >= 95 || c.EdcPct >= 95) warn.Add("CORR");
-        if (haveTemp && c.TempC >= c.TjMaxC - 3) hard.Add("TÉRM"); else if (haveTemp && c.TempC >= c.TjMaxC - 7) warn.Add("TÉRM");
+        if (c.PptPct >= 99) hard.Add(Loc.T("POT")); else if (c.PptPct >= 95) warn.Add(Loc.T("POT"));
+        if (c.TdcPct >= 99 || c.EdcPct >= 99) hard.Add(Loc.T("CORR")); else if (c.TdcPct >= 95 || c.EdcPct >= 95) warn.Add(Loc.T("CORR"));
+        if (haveTemp && c.TempC >= c.TjMaxC - 3) hard.Add(Loc.T("TÉRM")); else if (haveTemp && c.TempC >= c.TjMaxC - 7) warn.Add(Loc.T("TÉRM"));
 
-        if (hard.Count > 0) return ($"throttle: {string.Join("+", hard)}", 2);
-        if (warn.Count > 0) return ($"cerca de throttle: {string.Join("+", warn)}", 1);
-        return ("sin throttle", 0);
+        if (hard.Count > 0) return (Loc.T("throttle: {0}", string.Join("+", hard)), 2);
+        if (warn.Count > 0) return (Loc.T("cerca de throttle: {0}", string.Join("+", warn)), 1);
+        return (Loc.T("sin throttle"), 0);
     }
 
     private bool _tempBlink;

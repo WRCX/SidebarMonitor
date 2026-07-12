@@ -58,7 +58,7 @@ internal static class RamInfo
         foreach (var s in _sticks)
         {
             if (det.Length > 0) det.Append('\n');
-            det.Append(Ci, $"{(s.Slot.Length > 0 ? s.Slot : "Módulo")}: {Size(s.Bytes)}");
+            det.Append(Ci, $"{(s.Slot.Length > 0 ? s.Slot : Loc.T("Módulo"))}: {Size(s.Bytes)}");
             if (s.Type.Length > 0) det.Append(Ci, $" {s.Type}");
             if (s.Speed > 0) det.Append(Ci, $"-{s.Speed} MT/s");
             string who = string.Join(' ', new[] { s.Maker, s.Part }.Where(x => x.Length > 0));

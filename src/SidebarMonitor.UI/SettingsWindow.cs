@@ -32,7 +32,7 @@ internal sealed class SettingsWindow : Window
         _host = host;
         _cfg = host.Config;
 
-        Title = "SidebarMonitor — Ajustes";
+        Title = Loc.T("SidebarMonitor — Ajustes");
         Background = Theme.Page;
         Foreground = Theme.InkPrimary;
         Width = 780;
@@ -69,16 +69,16 @@ internal sealed class SettingsWindow : Window
     // ── page registry ─────────────────────────────────────────────────────────────────────────
     private void BuildPages()
     {
-        AddPage("Apariencia", BuildAppearance);
-        AddPage("Secciones", BuildSections);
-        AddPage("CPU", BuildCpu);
-        AddPage("Memoria", BuildMemory);
-        AddPage("GPU", BuildGpu);
-        AddPage("Red", BuildNet);
-        AddPage("Discos", BuildDisks);
-        AddPage("Refresco", BuildRefresh);
-        AddPage("Colocación", BuildPlacement);
-        AddPage("Diagnóstico", BuildDiagnostics);
+        AddPage(Loc.T("Apariencia"), BuildAppearance);
+        AddPage(Loc.T("Secciones"), BuildSections);
+        AddPage(Loc.T("CPU"), BuildCpu);
+        AddPage(Loc.T("Memoria"), BuildMemory);
+        AddPage(Loc.T("GPU"), BuildGpu);
+        AddPage(Loc.T("Red"), BuildNet);
+        AddPage(Loc.T("Discos"), BuildDisks);
+        AddPage(Loc.T("Refresco"), BuildRefresh);
+        AddPage(Loc.T("Colocación"), BuildPlacement);
+        AddPage(Loc.T("Diagnóstico"), BuildDiagnostics);
     }
 
     private void AddPage(string name, Func<UIElement> build)
@@ -115,36 +115,47 @@ internal sealed class SettingsWindow : Window
     // ── category pages ────────────────────────────────────────────────────────────────────────
     private UIElement BuildAppearance()
     {
-        var p = Page("Apariencia");
-        p.Children.Add(Choice("Tamaño de todas las gráficas", "Alto por defecto de las gráficas. Cada una puede sobreescribirlo abajo.",
-            [("Pequeñas", 100), ("Medianas", 150), ("Grandes", 200), ("Enormes", 300)],
+        var p = Page(Loc.T("Apariencia"));
+        p.Children.Add(Choice(Loc.T("Idioma"), Loc.T("Idioma de la interfaz. Al cambiarlo se reinicia el panel."),
+            [(Loc.T("Automático"), 0), (Loc.T("Español"), 1), (Loc.T("English"), 2)],
+            () => _cfg.Language switch { "es" => 1, "en" => 2, _ => 0 },
+            v =>
+            {
+                string lang = v switch { 1 => "es", 2 => "en", _ => "auto" };
+                if (lang == _cfg.Language) return;
+                _cfg.Language = lang;
+                _cfg.Save();
+                Restart.Relaunch();   // labels are built once at startup, so re-read them on a fresh launch
+            }));
+        p.Children.Add(Choice(Loc.T("Tamaño de todas las gráficas"), Loc.T("Alto por defecto de las gráficas. Cada una puede sobreescribirlo abajo."),
+            [(Loc.T("Pequeñas"), 100), (Loc.T("Medianas"), 150), (Loc.T("Grandes"), 200), (Loc.T("Enormes"), 300)],
             () => (int)Math.Round(_cfg.GraphScale * 100),
             v => { _cfg.GraphScale = v / 100.0; _host.ApplyLive("graphheights"); }));
 
-        p.Children.Add(SubHeader("Alto por gráfica (sobreescribe el global)"));
+        p.Children.Add(SubHeader(Loc.T("Alto por gráfica (sobreescribe el global)")));
         void Override(string label, string key) => p.Children.Add(Choice(label, null,
-            [("Global", -1), ("P", 100), ("M", 150), ("G", 200), ("E", 300)],
+            [(Loc.T("Global"), -1), (Loc.T("P"), 100), (Loc.T("M"), 150), (Loc.T("G"), 200), (Loc.T("E"), 300)],
             () => _cfg.GraphScales.TryGetValue(key, out double v) ? (int)Math.Round(v * 100) : -1,
             val => { if (val < 0) _cfg.GraphScales.Remove(key); else _cfg.GraphScales[key] = val / 100.0; _host.ApplyLive("graphheights"); }));
-        Override("CPU", "cpu");
-        Override("GPU", "gpu");
-        Override("Red", "net");
-        Override("Discos", "disk");
+        Override(Loc.T("CPU"), "cpu");
+        Override(Loc.T("GPU"), "gpu");
+        Override(Loc.T("Red"), "net");
+        Override(Loc.T("Discos"), "disk");
 
-        p.Children.Add(SubHeader("Auto-escala del eje Y"));
-        p.Children.Add(Note("Ajusta cada eje al mín/máx de su ventana para ver el detalle cuando los valores son bajos."));
-        p.Children.Add(Toggle("CPU", null, () => _cfg.CpuGraphAuto, v => { _cfg.CpuGraphAuto = v; _host.ApplyLive("autoscale"); }));
-        p.Children.Add(Toggle("GPU", null, () => _cfg.GpuGraphAuto, v => { _cfg.GpuGraphAuto = v; _host.ApplyLive("autoscale"); }));
-        p.Children.Add(Toggle("Red", null, () => _cfg.NetGraphAuto, v => { _cfg.NetGraphAuto = v; _host.ApplyLive("autoscale"); }));
-        p.Children.Add(Toggle("Discos", null, () => _cfg.DiskGraphAuto, v => { _cfg.DiskGraphAuto = v; _host.ApplyLive("autoscale"); }));
+        p.Children.Add(SubHeader(Loc.T("Auto-escala del eje Y")));
+        p.Children.Add(Note(Loc.T("Ajusta cada eje al mín/máx de su ventana para ver el detalle cuando los valores son bajos.")));
+        p.Children.Add(Toggle(Loc.T("CPU"), null, () => _cfg.CpuGraphAuto, v => { _cfg.CpuGraphAuto = v; _host.ApplyLive("autoscale"); }));
+        p.Children.Add(Toggle(Loc.T("GPU"), null, () => _cfg.GpuGraphAuto, v => { _cfg.GpuGraphAuto = v; _host.ApplyLive("autoscale"); }));
+        p.Children.Add(Toggle(Loc.T("Red"), null, () => _cfg.NetGraphAuto, v => { _cfg.NetGraphAuto = v; _host.ApplyLive("autoscale"); }));
+        p.Children.Add(Toggle(Loc.T("Discos"), null, () => _cfg.DiskGraphAuto, v => { _cfg.DiskGraphAuto = v; _host.ApplyLive("autoscale"); }));
 
-        p.Children.Add(SubHeader("Colores"));
+        p.Children.Add(SubHeader(Loc.T("Colores")));
         var palettes = Theme.CorePaletteNames.Select((name, i) => (name, i)).ToArray();
-        p.Children.Add(Choice("Colores de núcleos", "Paleta para las barras, líneas y mini-gráficas por núcleo.",
+        p.Children.Add(Choice(Loc.T("Colores de núcleos"), Loc.T("Paleta para las barras, líneas y mini-gráficas por núcleo."),
             palettes, () => _cfg.CorePalette, v => { _cfg.CorePalette = v; _host.ApplyLive("palette"); }));
 
-        p.Children.Add(SubHeader("Tooltips"));
-        p.Children.Add(Slider("Opacidad de tooltips", "Transparencia del fondo de los tooltips (1 = opaco).",
+        p.Children.Add(SubHeader(Loc.T("Tooltips")));
+        p.Children.Add(Slider(Loc.T("Opacidad de tooltips"), Loc.T("Transparencia del fondo de los tooltips (1 = opaco)."),
             0.5, 1.0, 0.05, () => _cfg.TooltipOpacity, v => { _cfg.TooltipOpacity = v; _host.ApplyLive("tooltip"); }, "P0"));
         return p;
     }
@@ -153,8 +164,8 @@ internal sealed class SettingsWindow : Window
 
     private UIElement BuildSections()
     {
-        var p = Page("Secciones");
-        p.Children.Add(Note("Muestra u oculta cada sección."));
+        var p = Page(Loc.T("Secciones"));
+        p.Children.Add(Note(Loc.T("Muestra u oculta cada sección.")));
         foreach (var s in _host.SectionsRO)
         {
             var sec = s;
@@ -163,7 +174,7 @@ internal sealed class SettingsWindow : Window
                 v => _host.SetSectionShown(sec, v)));
         }
 
-        p.Children.Add(SubHeader("Orden (arriba = primera)"));
+        p.Children.Add(SubHeader(Loc.T("Orden (arriba = primera)")));
         _orderPanel = new StackPanel();
         p.Children.Add(_orderPanel);
         PopulateOrder();
@@ -221,14 +232,14 @@ internal sealed class SettingsWindow : Window
 
     private UIElement BuildRefresh()
     {
-        var p = Page("Refresco");
-        (string L, int V)[] rates = [("0,5 s", 500), ("1 s", 1000), ("2 s", 2000), ("5 s", 5000)];
-        p.Children.Add(Choice("Global", "Ritmo de muestreo por defecto. Reinicia el agente para muestrear al nuevo ritmo.",
+        var p = Page(Loc.T("Refresco"));
+        (string L, int V)[] rates = [(Loc.T("0,5 s"), 500), (Loc.T("1 s"), 1000), (Loc.T("2 s"), 2000), (Loc.T("5 s"), 5000)];
+        p.Children.Add(Choice(Loc.T("Global"), Loc.T("Ritmo de muestreo por defecto. Reinicia el agente para muestrear al nuevo ritmo."),
             rates.Select(r => (r.L, r.V)).ToArray(), () => _cfg.RefreshMs, v => _host.SetGlobalRefresh(v)));
 
-        p.Children.Add(SubHeader("Por sección (sobreescribe el global)"));
-        p.Children.Add(Note("«Global» = seguir el ritmo de arriba. Útil para tener la CPU rápida y los discos lentos."));
-        (string L, int V)[] perOpts = [("Global", -1), .. rates];
+        p.Children.Add(SubHeader(Loc.T("Por sección (sobreescribe el global)")));
+        p.Children.Add(Note(Loc.T("«Global» = seguir el ritmo de arriba. Útil para tener la CPU rápida y los discos lentos.")));
+        (string L, int V)[] perOpts = [(Loc.T("Global"), -1), .. rates];
         foreach (var s in _host.SectionsRO)
         {
             string key = s.Key;
@@ -241,103 +252,103 @@ internal sealed class SettingsWindow : Window
 
     private UIElement BuildCpu()
     {
-        var p = Page("CPU");
-        p.Children.Add(Choice("Gráfica principal", "Una línea de uso total, líneas por núcleo superpuestas, o una mini-gráfica por núcleo en rejilla.",
-            [("Total", 0), ("Superpuesta", 1), ("Separada", 2)], () => _cfg.CpuGraphMode,
+        var p = Page(Loc.T("CPU"));
+        p.Children.Add(Choice(Loc.T("Gráfica principal"), Loc.T("Una línea de uso total, líneas por núcleo superpuestas, o una mini-gráfica por núcleo en rejilla."),
+            [(Loc.T("Total"), 0), (Loc.T("Superpuesta"), 1), (Loc.T("Separada"), 2)], () => _cfg.CpuGraphMode,
             v => { _cfg.CpuGraphMode = v; _cfg.CpuPerCoreGraph = v == 1; _host.ApplyLive("cpugraph"); }));
-        p.Children.Add(Choice("Columnas (gráfica separada)", "Cuántas mini-gráficas por fila en el modo «Separada».",
+        p.Children.Add(Choice(Loc.T("Columnas (gráfica separada)"), Loc.T("Cuántas mini-gráficas por fila en el modo «Separada»."),
             [("4", 4), ("3", 3), ("2", 2), ("1", 1)], () => _cfg.CpuGraphColumns,
             v => { _cfg.CpuGraphColumns = v; _host.ApplyLive("cpucols"); }));
-        p.Children.Add(Choice("Eje Y de las mini-gráficas", "Fijo 0-100 = todos los núcleos comparables de un vistazo. Autoescala = cada núcleo a su rango (detalle en núcleos ociosos, pero no comparable).",
-            [("Fijo 0-100", 0), ("Autoescala", 1)], () => _cfg.CpuGridAutoScale ? 1 : 0,
+        p.Children.Add(Choice(Loc.T("Eje Y de las mini-gráficas"), Loc.T("Fijo 0-100 = todos los núcleos comparables de un vistazo. Autoescala = cada núcleo a su rango (detalle en núcleos ociosos, pero no comparable)."),
+            [(Loc.T("Fijo 0-100"), 0), (Loc.T("Autoescala"), 1)], () => _cfg.CpuGridAutoScale ? 1 : 0,
             v => { _cfg.CpuGridAutoScale = v == 1; _host.ApplyLive("cpugridaxis"); }));
 
-        p.Children.Add(Choice("Frecuencia mostrada (GHz)", "Qué agregado del reloj por núcleo se muestra arriba.",
-            [("Mejor", 0), ("Media", 1), ("Mediana", 2)], () => _cfg.CpuFreqMode,
+        p.Children.Add(Choice(Loc.T("Frecuencia mostrada (GHz)"), Loc.T("Qué agregado del reloj por núcleo se muestra arriba."),
+            [(Loc.T("Mejor"), 0), (Loc.T("Media"), 1), (Loc.T("Mediana"), 2)], () => _cfg.CpuFreqMode,
             v => { _cfg.CpuFreqMode = v; _host.ApplyLive("freqcaption"); }));
 
-        p.Children.Add(SubHeader("Filas por núcleo"));
-        p.Children.Add(Toggle("Mostrar frecuencia", null, () => _cfg.ShowCoreFreq, v => { _cfg.ShowCoreFreq = v; _host.ApplyLive("cpugraph"); }));
-        p.Children.Add(Toggle("Mostrar temperatura", "Del SDK de AMD; colorea hacia rojo cerca del Tjmax.", () => _cfg.ShowCoreTemp, v => { _cfg.ShowCoreTemp = v; _host.ApplyLive("cpugraph"); }));
-        p.Children.Add(Choice("Posición de la métrica", "Dónde va la frecuencia/temperatura en la fila.",
-            [("Dentro", 0), ("Al final", 1), ("Fuera", 2)], () => _cfg.CoreMetricPos,
+        p.Children.Add(SubHeader(Loc.T("Filas por núcleo")));
+        p.Children.Add(Toggle(Loc.T("Mostrar frecuencia"), null, () => _cfg.ShowCoreFreq, v => { _cfg.ShowCoreFreq = v; _host.ApplyLive("cpugraph"); }));
+        p.Children.Add(Toggle(Loc.T("Mostrar temperatura"), Loc.T("Del SDK de AMD; colorea hacia rojo cerca del Tjmax."), () => _cfg.ShowCoreTemp, v => { _cfg.ShowCoreTemp = v; _host.ApplyLive("cpugraph"); }));
+        p.Children.Add(Choice(Loc.T("Posición de la métrica"), Loc.T("Dónde va la frecuencia/temperatura en la fila."),
+            [(Loc.T("Dentro"), 0), (Loc.T("Al final"), 1), (Loc.T("Fuera"), 2)], () => _cfg.CoreMetricPos,
             v => { _cfg.CoreMetricPos = v; _host.ApplyLive("cpugraph"); }));
-        p.Children.Add(Choice("Barra por núcleo", "Uso (%Util), residencia C0 (despierto), ambas superpuestas, o uso + marca de C0.",
-            [("Uso", 0), ("C0", 1), ("Combinada", 2), ("Uso+tick", 3)], () => _cfg.CoreBarMode,
+        p.Children.Add(Choice(Loc.T("Barra por núcleo"), Loc.T("Uso (%Util), residencia C0 (despierto), ambas superpuestas, o uso + marca de C0."),
+            [(Loc.T("Uso"), 0), ("C0", 1), (Loc.T("Combinada"), 2), (Loc.T("Uso+tick"), 3)], () => _cfg.CoreBarMode,
             v => { _cfg.CoreBarMode = v; _host.ApplyLive("cpugraph"); }));
-        p.Children.Add(Toggle("Marcar núcleos dormidos", "Atenúa y etiqueta «sleep» los núcleos aparcados (C0≈0), como Ryzen Master.", () => _cfg.MarkSleepCores, v => { _cfg.MarkSleepCores = v; _host.ApplyLive("cpugraph"); }));
+        p.Children.Add(Toggle(Loc.T("Marcar núcleos dormidos"), Loc.T("Atenúa y etiqueta «sleep» los núcleos aparcados (C0≈0), como Ryzen Master."), () => _cfg.MarkSleepCores, v => { _cfg.MarkSleepCores = v; _host.ApplyLive("cpugraph"); }));
 
-        p.Children.Add(SubHeader("Modelo e indicadores"));
-        p.Children.Add(Choice("Modelo de CPU", "Dónde mostrar el nombre del procesador.",
-            [("No", 0), ("En título", 1), ("Dentro", 2)], () => _cfg.CpuNameMode, v => { _cfg.CpuNameMode = v; _cfg.Save(); }));
-        p.Children.Add(Toggle("Indicador de throttle (POT/CORR/TÉRM)", "Qué tope duro frena el boost ahora. Del SDK de AMD.", () => _cfg.ShowThrottle, v => { _cfg.ShowThrottle = v; _cfg.Save(); }));
-        p.Children.Add(Toggle("Boost logrado / pico", "Frecuencia del mejor núcleo vs su pico de sesión.", () => _cfg.ShowBoost, v => { _cfg.ShowBoost = v; _cfg.Save(); }));
-        p.Children.Add(Toggle("Mostrar VID (voltaje)", null, () => _cfg.ShowCpuVid, v => { _cfg.ShowCpuVid = v; _cfg.Save(); }));
-        p.Children.Add(Toggle("Mostrar límites (PPT/TDC/EDC/térmico)", null, () => _cfg.ShowCpuLimits, v => { _cfg.ShowCpuLimits = v; _cfg.Save(); }));
+        p.Children.Add(SubHeader(Loc.T("Modelo e indicadores")));
+        p.Children.Add(Choice(Loc.T("Modelo de CPU"), Loc.T("Dónde mostrar el nombre del procesador."),
+            [(Loc.T("No"), 0), (Loc.T("En título"), 1), (Loc.T("Dentro"), 2)], () => _cfg.CpuNameMode, v => { _cfg.CpuNameMode = v; _cfg.Save(); }));
+        p.Children.Add(Toggle(Loc.T("Indicador de throttle (POT/CORR/TÉRM)"), Loc.T("Qué tope duro frena el boost ahora. Del SDK de AMD."), () => _cfg.ShowThrottle, v => { _cfg.ShowThrottle = v; _cfg.Save(); }));
+        p.Children.Add(Toggle(Loc.T("Boost logrado / pico"), Loc.T("Frecuencia del mejor núcleo vs su pico de sesión."), () => _cfg.ShowBoost, v => { _cfg.ShowBoost = v; _cfg.Save(); }));
+        p.Children.Add(Toggle(Loc.T("Mostrar VID (voltaje)"), null, () => _cfg.ShowCpuVid, v => { _cfg.ShowCpuVid = v; _cfg.Save(); }));
+        p.Children.Add(Toggle(Loc.T("Mostrar límites (PPT/TDC/EDC/térmico)"), null, () => _cfg.ShowCpuLimits, v => { _cfg.ShowCpuLimits = v; _cfg.Save(); }));
         return p;
     }
 
     private UIElement BuildMemory()
     {
-        var p = Page("Memoria");
-        p.Children.Add(Choice("Información de módulos", "Datos de los módulos de RAM leídos por WMI (SMBIOS), sin elevación.",
-            [("No", 0), ("Resumen", 1), ("Detalle", 2)], () => _cfg.RamModulesMode,
+        var p = Page(Loc.T("Memoria"));
+        p.Children.Add(Choice(Loc.T("Información de módulos"), Loc.T("Datos de los módulos de RAM leídos por WMI (SMBIOS), sin elevación."),
+            [(Loc.T("No"), 0), (Loc.T("Resumen"), 1), (Loc.T("Detalle"), 2)], () => _cfg.RamModulesMode,
             v => { _cfg.RamModulesMode = v; _host.ApplyLive("ram"); }));
-        p.Children.Add(Note("Resumen: «2× 16 GiB DDR5-6000». Detalle: una línea por módulo con ranura, tamaño, tipo, frecuencia (MT/s), fabricante y part number. En cualquier caso el detalle está también en el tooltip."));
-        p.Children.Add(Choice("Unidades del uso", "Binario (GiB, 1024) o decimal (GB, 1000) para el uso/total del sistema. El tamaño de los módulos va siempre en GiB (su tamaño real).",
-            [("Binario", 1), ("Decimal", 0)], () => _cfg.MemUnitsBinary ? 1 : 0,
+        p.Children.Add(Note(Loc.T("Resumen: «2× 16 GiB DDR5-6000». Detalle: una línea por módulo con ranura, tamaño, tipo, frecuencia (MT/s), fabricante y part number. En cualquier caso el detalle está también en el tooltip.")));
+        p.Children.Add(Choice(Loc.T("Unidades del uso"), Loc.T("Binario (GiB, 1024) o decimal (GB, 1000) para el uso/total del sistema. El tamaño de los módulos va siempre en GiB (su tamaño real)."),
+            [(Loc.T("Binario"), 1), (Loc.T("Decimal"), 0)], () => _cfg.MemUnitsBinary ? 1 : 0,
             v => { _cfg.MemUnitsBinary = v == 1; _host.ApplyLive("ram"); }));
         return p;
     }
 
     private UIElement BuildGpu()
     {
-        var p = Page("GPU");
-        p.Children.Add(Choice("Mostrar", "Qué GPU(s) ver. La iGPU solo da % y motores (sin sensores propios).",
-            [("NVIDIA", 0), ("AMD iGPU", 1), ("Ambas", 2)], () => _cfg.GpuView,
+        var p = Page(Loc.T("GPU"));
+        p.Children.Add(Choice(Loc.T("Mostrar"), Loc.T("Qué GPU(s) ver. La iGPU solo da % y motores (sin sensores propios)."),
+            [("NVIDIA", 0), ("AMD iGPU", 1), (Loc.T("Ambas"), 2)], () => _cfg.GpuView,
             v => { _cfg.GpuView = v; _host.ApplyLive("gpuview"); }));
-        p.Children.Add(Toggle("Motores (mini-gráficas)", "Una mini-gráfica por motor: 3D, compute/ML, decode/encode…", () => _cfg.ShowGpuEngines, v => { _cfg.ShowGpuEngines = v; _host.ApplyLive("gpuengines"); }));
-        p.Children.Add(Choice("Columnas de motores", "Cuántas mini-gráficas por fila.",
+        p.Children.Add(Toggle(Loc.T("Motores (mini-gráficas)"), Loc.T("Una mini-gráfica por motor: 3D, compute/ML, decode/encode…"), () => _cfg.ShowGpuEngines, v => { _cfg.ShowGpuEngines = v; _host.ApplyLive("gpuengines"); }));
+        p.Children.Add(Choice(Loc.T("Columnas de motores"), Loc.T("Cuántas mini-gráficas por fila."),
             [("4", 4), ("3", 3), ("2", 2), ("1", 1)], () => _cfg.GpuEngineColumns,
             v => { _cfg.GpuEngineColumns = v; _host.ApplyLive("gpucols"); }));
-        p.Children.Add(Choice("Modelo de GPU", "Dónde mostrar el nombre de la GPU primaria.",
-            [("No", 0), ("En título", 1)], () => _cfg.GpuNameMode == 2 ? 0 : _cfg.GpuNameMode,
+        p.Children.Add(Choice(Loc.T("Modelo de GPU"), Loc.T("Dónde mostrar el nombre de la GPU primaria."),
+            [(Loc.T("No"), 0), (Loc.T("En título"), 1)], () => _cfg.GpuNameMode == 2 ? 0 : _cfg.GpuNameMode,
             v => { _cfg.GpuNameMode = v; _cfg.Save(); }));
         return p;
     }
 
     private UIElement BuildNet()
     {
-        var p = Page("Red");
-        p.Children.Add(Choice("Filas de procesos por ancho de banda", "Número fijo de filas en la sección RED (fijo a propósito).",
-            [("Ninguna", 0), ("3", 3), ("4", 4), ("6", 6), ("8", 8)], () => _cfg.NetProcRows,
+        var p = Page(Loc.T("Red"));
+        p.Children.Add(Choice(Loc.T("Filas de procesos por ancho de banda"), Loc.T("Número fijo de filas en la sección RED (fijo a propósito)."),
+            [(Loc.T("Ninguna"), 0), ("3", 3), ("4", 4), ("6", 6), ("8", 8)], () => _cfg.NetProcRows,
             v => { _cfg.NetProcRows = v; _host.ApplyLive("netrows"); }));
-        p.Children.Add(Choice("Unidades", "Binario (KiB/MiB, 1024) o decimal (KB/MB, 1000).",
-            [("Binario", 1), ("Decimal", 0)], () => _cfg.NetUnitsBinary ? 1 : 0,
+        p.Children.Add(Choice(Loc.T("Unidades"), Loc.T("Binario (KiB/MiB, 1024) o decimal (KB/MB, 1000)."),
+            [(Loc.T("Binario"), 1), (Loc.T("Decimal"), 0)], () => _cfg.NetUnitsBinary ? 1 : 0,
             v => { _cfg.NetUnitsBinary = v == 1; _cfg.Save(); }));
         return p;
     }
 
     private UIElement BuildDisks()
     {
-        var p = Page("Discos");
-        p.Children.Add(Toggle("Ocultar discos virtuales", null, () => _cfg.HideVirtualDisks, v => { _cfg.HideVirtualDisks = v; _host.ApplyLive("disks"); }));
-        p.Children.Add(Toggle("Ocultar discos extraíbles", null, () => _cfg.HideRemovableDisks, v => { _cfg.HideRemovableDisks = v; _host.ApplyLive("disks"); }));
-        p.Children.Add(Toggle("Ocultar disco del sistema", null, () => _cfg.HideSystemDisk, v => { _cfg.HideSystemDisk = v; _host.ApplyLive("disks"); }));
-        p.Children.Add(Choice("Unidades de las tasas", "Binario (KiB/MiB) o decimal (KB/MB) para las velocidades de lectura/escritura. La capacidad va siempre en decimal (como se anuncian los discos).",
-            [("Binario", 1), ("Decimal", 0)], () => _cfg.DiskUnitsBinary ? 1 : 0,
+        var p = Page(Loc.T("Discos"));
+        p.Children.Add(Toggle(Loc.T("Ocultar discos virtuales"), null, () => _cfg.HideVirtualDisks, v => { _cfg.HideVirtualDisks = v; _host.ApplyLive("disks"); }));
+        p.Children.Add(Toggle(Loc.T("Ocultar discos extraíbles"), null, () => _cfg.HideRemovableDisks, v => { _cfg.HideRemovableDisks = v; _host.ApplyLive("disks"); }));
+        p.Children.Add(Toggle(Loc.T("Ocultar disco del sistema"), null, () => _cfg.HideSystemDisk, v => { _cfg.HideSystemDisk = v; _host.ApplyLive("disks"); }));
+        p.Children.Add(Choice(Loc.T("Unidades de las tasas"), Loc.T("Binario (KiB/MiB) o decimal (KB/MB) para las velocidades de lectura/escritura. La capacidad va siempre en decimal (como se anuncian los discos)."),
+            [(Loc.T("Binario"), 1), (Loc.T("Decimal"), 0)], () => _cfg.DiskUnitsBinary ? 1 : 0,
             v => { _cfg.DiskUnitsBinary = v == 1; _cfg.Save(); }));
         return p;
     }
 
     private UIElement BuildPlacement()
     {
-        var p = Page("Colocación");
-        p.Children.Add(Toggle("Siempre encima", null, () => _cfg.Topmost, v => { _cfg.Topmost = v; _host.ApplyLive("placement"); }));
-        p.Children.Add(Toggle("Anclado al borde", "Anclado lo pega a un borde; flotante se arrastra por su cabecera.", () => _cfg.Docked, v => { _cfg.Docked = v; _host.ApplyLive("placement"); }));
-        p.Children.Add(Toggle("Reservar espacio (empuja ventanas)", "Solo anclado. Reserva la franja para que nada la tape; maximizar/snap se paran en su borde.", () => _cfg.ReserveSpace, v => { _cfg.ReserveSpace = v; _host.ApplyLive("placement"); }));
-        p.Children.Add(Toggle("Borde izquierdo", "Anclar al borde izquierdo en vez del derecho.", () => _cfg.EdgeLeft, v => { _cfg.EdgeLeft = v; _host.ApplyLive("placement"); }));
-        p.Children.Add(Toggle("Ignorar clics (pasan a través)", "Los clics atraviesan el panel. Reactívalo desde la bandeja.", () => _cfg.ClickThrough, v => { _cfg.ClickThrough = v; _host.ApplyLive("clickthrough"); }));
+        var p = Page(Loc.T("Colocación"));
+        p.Children.Add(Toggle(Loc.T("Siempre encima"), null, () => _cfg.Topmost, v => { _cfg.Topmost = v; _host.ApplyLive("placement"); }));
+        p.Children.Add(Toggle(Loc.T("Anclado al borde"), Loc.T("Anclado lo pega a un borde; flotante se arrastra por su cabecera."), () => _cfg.Docked, v => { _cfg.Docked = v; _host.ApplyLive("placement"); }));
+        p.Children.Add(Toggle(Loc.T("Reservar espacio (empuja ventanas)"), Loc.T("Solo anclado. Reserva la franja para que nada la tape; maximizar/snap se paran en su borde."), () => _cfg.ReserveSpace, v => { _cfg.ReserveSpace = v; _host.ApplyLive("placement"); }));
+        p.Children.Add(Toggle(Loc.T("Borde izquierdo"), Loc.T("Anclar al borde izquierdo en vez del derecho."), () => _cfg.EdgeLeft, v => { _cfg.EdgeLeft = v; _host.ApplyLive("placement"); }));
+        p.Children.Add(Toggle(Loc.T("Ignorar clics (pasan a través)"), Loc.T("Los clics atraviesan el panel. Reactívalo desde la bandeja."), () => _cfg.ClickThrough, v => { _cfg.ClickThrough = v; _host.ApplyLive("clickthrough"); }));
 
         var mons = _host.MonitorsRO;
         if (mons.Count > 1)
@@ -348,23 +359,23 @@ internal sealed class SettingsWindow : Window
                 var r = mons[i].Info.rcMonitor;
                 opts[i] = ($"{i + 1}: {r.Width}×{r.Height}{(mons[i].Info.dwFlags == 1 ? " ★" : "")}", i);
             }
-            p.Children.Add(Choice("Monitor", "En qué pantalla vive el panel.", opts,
+            p.Children.Add(Choice(Loc.T("Monitor"), Loc.T("En qué pantalla vive el panel."), opts,
                 () => Math.Clamp(_cfg.Monitor, 0, mons.Count - 1),
                 v => { _cfg.Monitor = v; _host.ApplyLive("placement"); }));
         }
 
-        p.Children.Add(Slider("Ancho del panel", "Ancho en píxeles (también se arrastra el borde interior).",
+        p.Children.Add(Slider(Loc.T("Ancho del panel"), Loc.T("Ancho en píxeles (también se arrastra el borde interior)."),
             240, 900, 5, () => _cfg.Width, v => { _cfg.Width = (int)Math.Round(v); _host.ApplyLive("placement"); }, "F0", "px"));
         return p;
     }
 
     private UIElement BuildDiagnostics()
     {
-        var p = Page("Diagnóstico");
-        p.Children.Add(Toggle("Registrar a CSV", "Graba una fila por muestra (CPU, límites, por-núcleo, RAM, GPU0, red, disco) a %LOCALAPPDATA%\\SidebarMonitor\\logs.", () => _cfg.LogCsv, v => { _cfg.LogCsv = v; _host.ApplyLive("csv"); }));
-        p.Children.Add(Toggle("Datos de depuración (overlay)", "Bajo el título: fabricante/modelo de CPU, versiones del contrato, estado del SDK/helper, cadencia y estado del CSV.", () => _cfg.LogVerbose, v => { _cfg.LogVerbose = v; _host.ApplyLive("verbose"); }));
+        var p = Page(Loc.T("Diagnóstico"));
+        p.Children.Add(Toggle(Loc.T("Registrar a CSV"), Loc.T("Graba una fila por muestra (CPU, límites, por-núcleo, RAM, GPU0, red, disco) a %LOCALAPPDATA%\\SidebarMonitor\\logs."), () => _cfg.LogCsv, v => { _cfg.LogCsv = v; _host.ApplyLive("csv"); }));
+        p.Children.Add(Toggle(Loc.T("Datos de depuración (overlay)"), Loc.T("Bajo el título: fabricante/modelo de CPU, versiones del contrato, estado del SDK/helper, cadencia y estado del CSV."), () => _cfg.LogVerbose, v => { _cfg.LogVerbose = v; _host.ApplyLive("verbose"); }));
 
-        var open = TextButton("Abrir carpeta de logs");
+        var open = TextButton(Loc.T("Abrir carpeta de logs"));
         open.Click += (_, _) =>
         {
             try { System.IO.Directory.CreateDirectory(CsvLogger.LogDir); System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(CsvLogger.LogDir) { UseShellExecute = true }); }

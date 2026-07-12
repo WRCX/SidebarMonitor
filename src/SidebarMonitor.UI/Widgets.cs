@@ -151,7 +151,7 @@ internal sealed class Sparkline : FrameworkElement
         if (i < 0) { _tip.IsOpen = false; return; }
 
         double ago = (_count - 1 - i) * SecondsPerSample;
-        string when = ago < 0.5 ? "ahora" : $"hace {ago:F0} s";
+        string when = ago < 0.5 ? Loc.T("ahora") : Loc.T("hace {0:F0} s", ago);
 
         var tb = Theme.TipBlock();
         if (_b is null)
@@ -398,11 +398,11 @@ internal sealed class CoreSparkline : FrameworkElement
         if (i < 0) { _tip.IsOpen = false; return; }
 
         double ago = (_count - 1 - i) * SecondsPerSample;
-        string when = ago < 0.5 ? "ahora" : $"hace {ago:F0} s";
+        string when = ago < 0.5 ? Loc.T("ahora") : Loc.T("hace {0:F0} s", ago);
         string Pct(float v) => v.ToString("F0", CultureInfo.InvariantCulture);
 
         var tb = Theme.TipBlock();
-        tb.Inlines.Add(Theme.TipHead(string.Create(CultureInfo.InvariantCulture, $"Total {Pct(_total[i])}%")));
+        tb.Inlines.Add(Theme.TipHead(Loc.T("Total {0}%", Pct(_total[i]))));
         tb.Inlines.Add(Theme.TipDim($"   {when}"));
         for (int c = 0; c < _coreCount; c++)
         {

@@ -92,7 +92,7 @@ internal static class Theme
     }
 
     /// <summary>Friendly names for the palette picker.</summary>
-    public static readonly string[] CorePaletteNames = ["Arcoíris", "Contraste", "Fríos", "Cálidos", "Pastel"];
+    public static readonly string[] CorePaletteNames = [Loc.T("Arcoíris"), Loc.T("Contraste"), Loc.T("Fríos"), Loc.T("Cálidos"), Loc.T("Pastel")];
 
     public static Brush CoreBrush(int index) => SeriesBrush(CoreColor(index));
 

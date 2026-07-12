@@ -24,6 +24,10 @@ internal static class Program
 
         var cfg = UiConfig.Load();
 
+        // Language: config preference ("auto"/"es"/"en"), with a --lang= override for QA/screenshots.
+        string? langArg = args.FirstOrDefault(a => a.StartsWith("--lang="))?["--lang=".Length..];
+        Loc.Init(langArg ?? cfg.Language);
+
         // Command-line overrides are for debugging. Applying one makes the config ephemeral, so
         // a throwaway run never rewrites what the user configured through the menu.
         if (IntArg(args, "--monitor=", -1) is var m and >= 0) { cfg.Monitor = m; cfg.Ephemeral = true; }

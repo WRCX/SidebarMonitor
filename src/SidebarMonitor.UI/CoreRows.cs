@@ -174,16 +174,16 @@ internal sealed class CoreRows : FrameworkElement
         var ci = CultureInfo.InvariantCulture;
 
         var tb = Theme.TipBlock();
-        tb.Inlines.Add(Theme.TipHead($"Core {row}"));
-        tb.Inlines.Add(new Run(string.Create(ci, $"  {r.Usage:F1}% uso")));
+        tb.Inlines.Add(Theme.TipHead(Loc.T("Core {0}", row)));
+        tb.Inlines.Add(new Run(Loc.T("  {0:F1}% uso", r.Usage)));
 
         int phys = _threadsPerCore > 0 ? row / _threadsPerCore : row;
-        if (_bestCore >= 0 && phys == _bestCore) tb.Inlines.Add(Theme.TipColor("   ★ mejor núcleo", StarBest));
-        else if (_secondCore >= 0 && phys == _secondCore) tb.Inlines.Add(Theme.TipColor("   ◆ 2º mejor", StarSecond));
+        if (_bestCore >= 0 && phys == _bestCore) tb.Inlines.Add(Theme.TipColor(Loc.T("   ★ mejor núcleo"), StarBest));
+        else if (_secondCore >= 0 && phys == _secondCore) tb.Inlines.Add(Theme.TipColor(Loc.T("   ◆ 2º mejor"), StarSecond));
 
         // Awake-time (C0, shared by the SMT pair) plus this core's clock and temperature.
         var bits = new List<string>(3);
-        if (r.C0 >= 0) bits.Add(string.Create(ci, $"C0 (despierto) {r.C0:F0}%"));
+        if (r.C0 >= 0) bits.Add(Loc.T("C0 (despierto) {0:F0}%", r.C0));
         if (!float.IsNaN(r.FreqMhz) && r.FreqMhz > 0) bits.Add(string.Create(ci, $"{r.FreqMhz / 1000:F2} GHz"));
         if (!float.IsNaN(r.TempC) && r.TempC > 0) bits.Add(string.Create(ci, $"{r.TempC:F0}°"));
         if (bits.Count > 0)
@@ -195,7 +195,7 @@ internal sealed class CoreRows : FrameworkElement
         tb.Inlines.Add(new LineBreak());
         if (r.Segments.Length == 0)
         {
-            tb.Inlines.Add(Theme.TipDim(r.Attributed ? "sin atribución" : "lanza el helper ETW para ver qué proceso lo ocupa"));
+            tb.Inlines.Add(Theme.TipDim(r.Attributed ? Loc.T("sin atribución") : Loc.T("lanza el helper ETW para ver qué proceso lo ocupa")));
         }
         else
         {

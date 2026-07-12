@@ -29,10 +29,10 @@ internal sealed class TrayIcon : IDisposable
             ContextMenuStrip = new ContextMenuStrip(),
         };
 
-        _icon.ContextMenuStrip.Items.Add("Mostrar / ocultar", null, (_, _) => ToggleRequested?.Invoke());
-        _icon.ContextMenuStrip.Items.Add("Configuración…", null, (_, _) => ConfigRequested?.Invoke());
+        _icon.ContextMenuStrip.Items.Add(Loc.T("Mostrar / ocultar"), null, (_, _) => ToggleRequested?.Invoke());
+        _icon.ContextMenuStrip.Items.Add(Loc.T("Configuración…"), null, (_, _) => ConfigRequested?.Invoke());
         _icon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
-        _icon.ContextMenuStrip.Items.Add("Salir", null, (_, _) => ExitRequested?.Invoke());
+        _icon.ContextMenuStrip.Items.Add(Loc.T("Salir"), null, (_, _) => ExitRequested?.Invoke());
 
         _icon.DoubleClick += (_, _) => ToggleRequested?.Invoke();
     }

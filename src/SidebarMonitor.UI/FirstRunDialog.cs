@@ -59,23 +59,23 @@ internal static class FirstRunDialog
     private static void ShowAmd(UiConfig cfg)
     {
         var body = new StackPanel();
-        body.Children.Add(Para(
+        body.Children.Add(Para(Loc.T(
             "Para leer temperatura, vatios, residencia C0 y el boost por núcleo de tu Ryzen, " +
             "SidebarMonitor usa el AMD Ryzen Master Monitoring SDK: el driver oficial de AMD, " +
-            "firmado y compatible con Integridad de Memoria (HVCI). No usa WinRing0 ni drivers dudosos."));
-        body.Children.Add(Para(
+            "firmado y compatible con Integridad de Memoria (HVCI). No usa WinRing0 ni drivers dudosos.")));
+        body.Children.Add(Para(Loc.T(
             "AMD exige que aceptes la licencia (EULA) de su SDK antes de utilizarlo. Es un software " +
-            "«de evaluación», se ofrece sin garantía y con responsabilidad limitada por parte de AMD."));
-        body.Children.Add(Para(
+            "«de evaluación», se ofrece sin garantía y con responsabilidad limitada por parte de AMD.")));
+        body.Children.Add(Para(Loc.T(
             "Si no la aceptas, la app funciona igual pero en modo básico: uso y frecuencia por núcleo " +
-            "vía Windows (PDH), más red, discos y GPU. Podrás cambiar de opinión más adelante."));
+            "vía Windows (PDH), más red, discos y GPU. Podrás cambiar de opinión más adelante.")));
 
-        var eulaBtn = LinkButton("Ver la licencia completa de AMD (License.rtf) »", OpenAmdEula);
+        var eulaBtn = LinkButton(Loc.T("Ver la licencia completa de AMD (License.rtf) »"), OpenAmdEula);
         body.Children.Add(eulaBtn);
 
         var accept = new CheckBox
         {
-            Content = "He leído y acepto la licencia del SDK de monitorización de AMD.",
+            Content = Loc.T("He leído y acepto la licencia del SDK de monitorización de AMD."),
             Foreground = Theme.InkPrimary,
             FontFamily = Theme.Ui,
             FontSize = 13,
@@ -83,14 +83,14 @@ internal static class FirstRunDialog
         };
         body.Children.Add(accept);
 
-        var win = MakeWindow("SidebarMonitor — activar sensores de tu Ryzen", body,
+        var win = MakeWindow(Loc.T("SidebarMonitor — activar sensores de tu Ryzen"), body,
             out var buttons, out _);
 
-        var ok = PrimaryButton("Aceptar y activar sensores");
+        var ok = PrimaryButton(Loc.T("Aceptar y activar sensores"));
         ok.IsEnabled = false;
         accept.Checked += (_, _) => ok.IsEnabled = true;
         accept.Unchecked += (_, _) => ok.IsEnabled = false;
-        var skip = SecondaryButton("Seguir sin el SDK (modo básico)");
+        var skip = SecondaryButton(Loc.T("Seguir sin el SDK (modo básico)"));
 
         ok.Click += (_, _) =>
         {
@@ -114,23 +114,23 @@ internal static class FirstRunDialog
     private static void ShowIntel(UiConfig cfg)
     {
         var body = new StackPanel();
-        body.Children.Add(Para(
+        body.Children.Add(Para(Loc.T(
             "Tu CPU es Intel. A diferencia de AMD (que publica un SDK oficial firmado), Intel no " +
-            "ofrece una vía oficial y firmada para leer la temperatura y los vatios del procesador."));
-        body.Children.Add(Para(
+            "ofrece una vía oficial y firmada para leer la temperatura y los vatios del procesador.")));
+        body.Children.Add(Para(Loc.T(
             "Esos sensores viven en registros del chip (MSR) a los que solo se llega con un driver a " +
             "nivel de kernel (ring 0), como PawnIO. SidebarMonitor todavía no lo incluye, así que por " +
-            "ahora el detalle profundo de la CPU (temp/vatios/C0/boost por núcleo) no está disponible."));
-        body.Children.Add(Para(
+            "ahora el detalle profundo de la CPU (temp/vatios/C0/boost por núcleo) no está disponible.")));
+        body.Children.Add(Para(Loc.T(
             "Lo que sí verás con normalidad: uso y frecuencia por núcleo (Windows PDH), procesos, red, " +
             "discos y su temperatura, y la GPU — incluida temperatura/vatios si el driver de tu GPU " +
-            "(NVIDIA / AMD / Intel) los expone."));
-        body.Children.Add(Para(
+            "(NVIDIA / AMD / Intel) los expone.")));
+        body.Children.Add(Para(Loc.T(
             "El soporte de sensores Intel (vía ring0/PawnIO) está en la hoja de ruta. Cuando llegue, " +
-            "este mismo aviso te pedirá permiso para instalar ese componente."));
+            "este mismo aviso te pedirá permiso para instalar ese componente.")));
 
-        var win = MakeWindow("SidebarMonitor — nota sobre CPUs Intel", body, out var buttons, out _);
-        var ok = PrimaryButton("Entendido, continuar");
+        var win = MakeWindow(Loc.T("SidebarMonitor — nota sobre CPUs Intel"), body, out var buttons, out _);
+        var ok = PrimaryButton(Loc.T("Entendido, continuar"));
         ok.Click += (_, _) => { cfg.IntelRing0Ack = true; win.DialogResult = true; };
         buttons.Children.Add(ok);
         win.ShowDialog();
@@ -254,9 +254,9 @@ internal static class FirstRunDialog
         if (path is null)
         {
             MessageBox.Show(
-                "No encuentro License.rtf empaquetada. Está en la instalación del SDK de AMD, " +
-                @"normalmente en C:\Program Files\AMD\RyzenMasterMonitoringSDK\License.rtf.",
-                "Licencia de AMD", MessageBoxButton.OK, MessageBoxImage.Information);
+                Loc.T("No encuentro License.rtf empaquetada. Está en la instalación del SDK de AMD, " +
+                @"normalmente en C:\Program Files\AMD\RyzenMasterMonitoringSDK\License.rtf."),
+                Loc.T("Licencia de AMD"), MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
         try { Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }); }

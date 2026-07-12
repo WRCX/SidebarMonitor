@@ -10,6 +10,10 @@ public sealed class UiConfig
     public int RefreshMs { get; set; } = 1000;
     public bool Topmost { get; set; } = true;
 
+    /// <summary>UI language: "auto" follows the OS culture (Spanish on es-*, else English), "es" and
+    /// "en" force it. Applied at startup by <see cref="Loc.Init"/>; changing it relaunches the UI.</summary>
+    public string Language { get; set; } = "auto";
+
     // ── First-run / platform consent ──────────────────────────────────────────────────────────
     /// <summary>The vendor-specific first-run notice (AMD EULA or Intel ring0 info) has been shown.</summary>
     public bool FirstRunNoticeShown { get; set; }
