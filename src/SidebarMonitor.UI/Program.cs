@@ -36,6 +36,7 @@ internal static class Program
         if (args.Contains("--floating")) { cfg.Docked = false; cfg.Ephemeral = true; }
         if (args.Contains("--no-reserve")) { cfg.ReserveSpace = false; cfg.Ephemeral = true; }
         if (args.Contains("--minimized")) { cfg.Minimized = true; cfg.Ephemeral = true; }
+        if (args.Contains("--no-minimized")) { cfg.Minimized = false; cfg.Ephemeral = true; }
         if (args.Contains("--cpu-cores")) { cfg.CpuGraphMode = 1; cfg.Ephemeral = true; }
         if (args.Contains("--cpu-grid")) { cfg.CpuGraphMode = 2; cfg.Ephemeral = true; }
         if (args.Contains("--core-temp")) { cfg.ShowCoreTemp = true; cfg.Ephemeral = true; }
@@ -64,7 +65,7 @@ internal static class Program
         if (seconds == 0 && !cfg.Ephemeral && !args.Contains("--no-firstrun"))
             FirstRunDialog.EnsureShown(cfg);
 
-        var win = new MainWindow(cfg, monitors);
+        var win = new MainWindow(cfg, monitors) { TestFakeFps = args.Contains("--fake-fps") };
 
         TrayIcon? tray = null;
         if (!args.Contains("--no-tray"))

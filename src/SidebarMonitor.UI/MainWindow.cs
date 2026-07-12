@@ -72,6 +72,8 @@ internal sealed class MainWindow : AppBarWindow
 
     // GPU — a self-contained widget: selector for discrete/integrated/both, per-engine mini-graphs.
     private readonly GpuSection _gpuSection = new();
+    private readonly GameSection _gameSection = new();
+    public bool TestFakeFps;   // set by --fake-fps to preview the GAME section
 
     // NET
     private readonly Sparkline _netSpark = new(Theme.SeriesIn, Theme.SeriesOut);
@@ -124,6 +126,7 @@ internal sealed class MainWindow : AppBarWindow
         Register(new Section("cpu", Loc.T("CPU"), BuildCpu()));
         Register(new Section("ram", Loc.T("MEMORIA"), BuildRam()));
         Register(new Section("gpu", Loc.T("GPU"), BuildGpu()));
+        Register(new Section("game", Loc.T("JUEGO"), _gameSection));
         Register(new Section("net", Loc.T("RED"), BuildNet()));
         Register(new Section("disk", Loc.T("DISCOS"), BuildDisks()));
         Register(new Section("top", Loc.T("PROCESOS"), BuildTop()));
@@ -993,6 +996,17 @@ internal sealed class MainWindow : AppBarWindow
 
         if (!_reader.TryRead(out var s)) return;
 
+        if (TestFakeFps)   // --fake-fps: sample data to preview the GAME section without a real game
+        {
+            NameField.Set(ref s.Frame.App, "Cyberpunk2077.exe");
+            float wobble = (float)(12 * Math.Sin(Environment.TickCount64 / 1500.0));
+            s.Frame.FpsPresented = 60 + wobble / 2;
+            s.Frame.FpsDisplayed = 118 + wobble;   // frame generation active
+            s.Frame.FrametimeMs = 1000f / s.Frame.FpsPresented;
+            s.Frame.Low1PctFps = 47; s.Frame.Low01PctFps = 38;
+            s.Frame.GpuBusyPct = 97; s.Frame.AnimationErrorMs = 1.4f; s.Frame.LatencyMs = 32;
+        }
+
         // A dead agent leaves a stale map behind; detect it by the timestamp going flat.
         var age = DateTime.UtcNow - new DateTime(s.TimestampUtcTicks, DateTimeKind.Utc);
         if (age > TimeSpan.FromSeconds(10))
@@ -1125,6 +1139,16 @@ internal sealed class MainWindow : AppBarWindow
         {
             _gpuSection.Update(ref s);
             Find("gpu").SetSummary(_gpuSection.Summary);
+        }
+
+        // GAME/FPS: auto-appears only while a game is presenting (the helper's PresentMon fed data).
+        bool gaming = _gameSection.Update(ref s);
+        var gameSec = Find("game");
+        gameSec.Visibility = gaming ? Visibility.Visible : Visibility.Collapsed;
+        if (gaming)
+        {
+            gameSec.SetSummary(_gameSection.Summary);
+            _gameSection.SecondsPerSample = EffectiveRefresh("game") / 1000.0;
         }
 
         // Only the primary interface — the one the default route uses. The rest (Tailscale,

@@ -14,6 +14,8 @@ internal static class LocStrings
         ["RED"] = "NETWORK",
         ["DISCOS"] = "DISKS",
         ["PROCESOS"] = "PROCESSES",
+        ["JUEGO"] = "GAME",
+        ["{0} reales · frame-gen"] = "{0} real · frame-gen",
         // CPU / GPU / DOCKER / WSL read the same in both languages.
 
         // ── Tray + top-level menu ─────────────────────────────────────────────────────────────
