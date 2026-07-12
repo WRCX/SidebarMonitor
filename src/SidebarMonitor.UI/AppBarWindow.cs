@@ -62,6 +62,15 @@ internal abstract class AppBarWindow : Window
         style |= Native.WS_THICKFRAME;
         Native.SetWindowLongPtr(_hwnd, Native.GWL_STYLE, new IntPtr(style));
 
+        // Commit that style change so Windows re-queries WM_NCCALCSIZE now (our handler returns 0 =>
+        // client area = whole window, borderless). Win32 requires SWP_FRAMECHANGED after any frame
+        // style change; without it the recalc is deferred and, after rapid relaunch/re-placement
+        // sequences, the thick sizing border can stay painted (a visible edge strip) AND the client
+        // area stays inset by the frame — which offsets every hit-test, so right-clicks land on the
+        // wrong element and the context menu never opens. Forcing the recalc here fixes both.
+        Native.SetWindowPos(_hwnd, IntPtr.Zero, 0, 0, 0, 0,
+            Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOZORDER | Native.SWP_NOACTIVATE | Native.SWP_FRAMECHANGED);
+
         _callbackMsg = Native.RegisterWindowMessage("SidebarMonitor_AppBar");
     }
 
