@@ -1,0 +1,6 @@
+# Makes the "Sponsor" button appear on the repo. Fill in the handles for the platforms you set up;
+# remove the lines you don't use. github + one of ko_fi / custom is plenty.
+github: [WRCX]                       # needs GitHub Sponsors enabled for the WRCX account (0% fee)
+# ko_fi: WRCX                        # Ko-fi handle, once you create it (ko-fi.com)
+# buy_me_a_coffee: WRCX              # Buy Me a Coffee handle, once you create it
+# custom: ["https://www.buymeacoffee.com/WRCX"]
