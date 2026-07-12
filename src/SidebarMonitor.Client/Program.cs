@@ -23,6 +23,9 @@ internal static class Program
         {
             if (args.Contains("--bench")) return Bench(reader);
 
+            string? fr = args.FirstOrDefault(a => a.StartsWith("--freshness="));
+            if (fr is not null && int.TryParse(fr["--freshness=".Length..], out int secs)) return Freshness(reader, secs);
+
             bool watch = args.Contains("--watch");
             do
             {
@@ -38,6 +41,31 @@ internal static class Program
             } while (watch && !(Console.KeyAvailable && Console.ReadKey(true).Key == ConsoleKey.Escape));
         }
 
+        return 0;
+    }
+
+    // Samples snapshot freshness (how old the published data is) for N seconds and reports
+    // percentiles — the "does the sidebar keep up under load?" metric.
+    private static int Freshness(SeqLockReader<Snapshot> reader, int seconds)
+    {
+        var ages = new List<double>(seconds * 6);
+        int torn = 0, stale = 0;
+        long end = Environment.TickCount64 + seconds * 1000L;
+        while (Environment.TickCount64 < end)
+        {
+            if (reader.TryRead(out var s))
+            {
+                double ageMs = (DateTime.UtcNow - new DateTime(s.TimestampUtcTicks, DateTimeKind.Utc)).TotalMilliseconds;
+                ages.Add(ageMs);
+                if (ageMs > 3000) stale++;
+            }
+            else torn++;
+            Thread.Sleep(200);
+        }
+        ages.Sort();
+        double P(double p) => ages.Count == 0 ? 0 : ages[Math.Min(ages.Count - 1, (int)(p / 100.0 * ages.Count))];
+        Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+            $"freshness: n={ages.Count} p50={P(50):F0}ms p95={P(95):F0}ms p99={P(99):F0}ms max={(ages.Count > 0 ? ages[^1] : 0):F0}ms  stale(>3s)={stale}  torn={torn}"));
         return 0;
     }
 
