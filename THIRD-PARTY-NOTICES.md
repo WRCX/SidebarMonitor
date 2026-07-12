@@ -22,6 +22,21 @@ below, each under its own terms. Their inclusion does **not** place them under t
 - **Source:** https://www.amd.com/en/developer/ryzen-master-monitoring-sdk.html
 - © Advanced Micro Devices, Inc. All rights reserved.
 
+## AMD Device Library eXtra (ADLX) SDK
+
+- **Used for:** AMD GPU utilisation, temperature, power, fan, clocks and VRAM (Radeon dGPU / Ryzen
+  iGPU), via the unelevated agent and the native bridge `AdlxShim.dll`.
+- **Runtime:** `amdadlx64.dll` ships with the AMD Adrenalin driver and is loaded at runtime;
+  **not** redistributed by SidebarMonitor.
+- **`AdlxShim.dll`** is our own object code, incorporating AMD's ADLX *sample code* (the ADLXHelper
+  and interface headers). The ADLX SDK license permits redistributing sample code in **object-code
+  form only**, for use on AMD systems, under an end-user license — which SidebarMonitor's first-run
+  AMD consent covers. The SDK headers/source are **not** modified or committed to this public
+  repository; they are pulled on demand (`native/AdlxSdk/fetch.ps1`) and only the compiled shim ships.
+- **License:** AMD *Software Development Kit License Agreement (ADLX SDK)*.
+- **Source:** https://github.com/GPUOpen-LibrariesAndSDKs/ADLX
+- © Advanced Micro Devices, Inc. All rights reserved.
+
 ## NVIDIA Management Library (NVML)
 
 - **Used for:** NVIDIA GPU utilisation, temperature, power, clocks, fan and VRAM.

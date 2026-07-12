@@ -62,6 +62,10 @@ internal static class Program
         {
             var nvml = Nvml.TryOpen(out string? nvmlError);
 
+            // AMD GPU telemetry (temp/power/fan/clocks/VRAM) via ADLX — for a Radeon dGPU or Ryzen
+            // iGPU, what NVML is to NVIDIA. Unelevated, ships with the driver; null on a non-AMD box.
+            var adlx = Adlx.TryOpen(out string? adlxError);
+
             // The physical adapters (discrete + iGPU) with their LUIDs, so the GPU Engine counter can
             // be split per GPU. Enumerated once — adapters don't come and go during a session.
             var gpuAdapters = GpuAdapters.Enumerate(SnapshotLayout.MaxGpus);
@@ -77,6 +81,7 @@ internal static class Program
             Console.WriteLine($"Agente en marcha. {SnapshotLayout.MapName}, {writer.SizeBytes} B, cada {intervalMs} ms.");
             Console.WriteLine($"  CPU:    {CpuNameString}");
             Console.WriteLine($"  NVML:   {(nvml is not null ? $"OK ({nvml.Count} GPU)" : $"no disponible - {nvmlError}")}");
+            Console.WriteLine($"  ADLX:   {(adlx is not null ? $"OK ({adlx.Count} GPU AMD)" : $"no disponible - {adlxError}")}");
             Console.WriteLine($"  GPUs:   {(gpuAdapters.Count > 0 ? string.Join(", ", gpuAdapters.Select(a => $"{a.Name}{(a.Integrated ? " [iGPU]" : "")}")) : "D3DKMT sin adaptadores (fallback NVML)")}");
             Console.WriteLine($"  Discos: {inventory.Count} identificados");
             foreach (var (idx, id) in inventory.OrderBy(kv => kv.Key))
@@ -127,7 +132,7 @@ internal static class Program
 
                 FillCpu(ref snapshot.Cpu, pdh);
                 FillMem(ref snapshot.Mem, pdh);
-                FillGpus(ref snapshot, nvml, gpuAdapters, pdh, procs);
+                FillGpus(ref snapshot, nvml, adlx, gpuAdapters, pdh, procs);
                 FillDisks(ref snapshot, pdh, inventory, diskTemps, etwDiskTemps);
 
                 // Adapters come and go (VPN up, dock unplugged); rescanning every tick is wasteful.
@@ -321,7 +326,7 @@ internal static class Program
     /// iGPU), attaching NVML's rich telemetry to the NVIDIA one and deriving the rest from the GPU
     /// Engine counter. Falls back to NVML-only, single GPU, if adapter enumeration came up empty.
     /// </summary>
-    private static void FillGpus(ref Snapshot s, Nvml? nvml, List<GpuAdapters.Adapter> adapters, PdhQuery pdh, Processes procs)
+    private static void FillGpus(ref Snapshot s, Nvml? nvml, Adlx? adlx, List<GpuAdapters.Adapter> adapters, PdhQuery pdh, Processes procs)
     {
         if (adapters.Count == 0)
         {
@@ -338,6 +343,7 @@ internal static class Program
 
         s.GpuCount = adapters.Count;
         int nvmlNext = 0;
+        int amdNext = 0;
         for (int i = 0; i < adapters.Count; i++)
         {
             ref var g = ref s.Gpus[i];
@@ -345,6 +351,8 @@ internal static class Program
             var a = adapters[i];
 
             bool isNvidia = a.Name.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase);
+            bool isAmd = a.Name.Contains("AMD", StringComparison.OrdinalIgnoreCase)
+                      || a.Name.Contains("Radeon", StringComparison.OrdinalIgnoreCase);
             if (isNvidia && nvml is not null && nvmlNext < nvml.Count)
             {
                 nvml.Fill(nvmlNext++, ref g);   // NVML fills the name and every telemetry field
@@ -353,9 +361,16 @@ internal static class Program
             else
             {
                 NameField.Set(ref g.Name, a.Name);
-                g.LoadPct = float.NaN;   // derived from the engines below
+                g.LoadPct = float.NaN;   // derived from the engines below unless ADLX fills it
                 g.TempC = g.PowerW = float.NaN;
                 g.HasDetail = 0;
+
+                // ADLX gives an AMD dGPU/iGPU the same rich telemetry NVML gives NVIDIA.
+                if (isAmd && adlx is not null && adlx.Fill(a.Name, amdNext++, ref g))
+                {
+                    if (a.DedicatedVram > 0) g.VramTotal = a.DedicatedVram;   // used comes from ADLX
+                    g.HasDetail = 1;
+                }
             }
             g.IsIntegrated = (byte)(a.Integrated ? 1 : 0);
         }

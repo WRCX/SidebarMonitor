@@ -29,4 +29,11 @@
     <ProjectReference Include="..\SidebarMonitor.Shared\SidebarMonitor.Shared.csproj" />
   </ItemGroup>
 
+  <!-- Native bridge to AMD's ADLX (GPU telemetry), built by native/AdlxShim/build.cmd (MSVC).
+       Copied next to the agent so its P/Invoke resolves it; it loads amdadlx64.dll from the AMD
+       driver at runtime. Absent (no AMD SDK fetched) = ADLX is simply skipped. -->
+  <ItemGroup Condition="Exists('..\..\native\AdlxShim\AdlxShim.dll')">
+    <None Include="..\..\native\AdlxShim\AdlxShim.dll" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
