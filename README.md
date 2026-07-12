@@ -4,7 +4,7 @@
 
 **A native, always-on system monitor sidebar for Windows 11 — built for Ryzen + NVIDIA, and still working with Memory Integrity (HVCI) enabled.**
 
-*CPU · per-core · GPU · memory · network · disks · processes — one lean panel on your second screen.*
+*CPU · per-core · GPU · memory · network · disks · processes — one lean panel, docked to any monitor's edge or floating wherever you like.*
 
 <img src="docs/img/demo.gif" alt="SidebarMonitor live: CPU per-core, memory and dual-GPU under load" width="380">
 

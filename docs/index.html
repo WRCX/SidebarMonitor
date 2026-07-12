@@ -3,96 +3,153 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SidebarMonitor — native Windows 11 system monitor sidebar, HVCI-safe</title>
-<meta name="description" content="A native, always-on system monitor sidebar for Windows 11 — built for Ryzen + NVIDIA, and still working with Memory Integrity (HVCI) enabled, where WinRing0-based tools broke.">
+<title>SidebarMonitor — native Windows 11 system monitor sidebar (HVCI-safe)</title>
+<meta name="description" content="A lean, native system-monitor sidebar for Windows 11. CPU, per-core, GPU, memory, network, disks, processes and game FPS in one panel — no kernel driver of its own, no telemetry. Keeps working with Memory Integrity (HVCI) enabled.">
 <meta property="og:title" content="SidebarMonitor">
-<meta property="og:description" content="The Ryzen sidebar monitor that keeps working after the WinRing0 apocalypse. CPU, per-core, GPU, memory, network, disks, processes — one lean panel.">
+<meta property="og:description" content="A lean, native system-monitor sidebar for Windows 11 — CPU, per-core, GPU, memory, network, disks, processes and game FPS. HVCI-safe, no telemetry, open source.">
 <meta property="og:type" content="website">
+<meta name="theme-color" content="#0d0e12">
 <style>
   :root{
-    --bg:#141312; --bg2:#1c1b19; --card:#201f1d; --ink:#ece9e4; --mut:#a29a8f; --line:#2e2c29;
-    --blue:#4aa3ff; --aqua:#37d6c0; --orange:#f5a623; --violet:#b18cff;
-    --grad:linear-gradient(90deg,var(--blue),var(--aqua),var(--orange),var(--violet));
+    --bg:#0d0e12; --bg2:#111319; --card:#15171e; --card2:#1a1d25;
+    --line:#232733; --line-soft:#1c2029;
+    --ink:#eef0f4; --ink-dim:#c6cad3; --mut:#8b929f;
+    --accent:#4d8bf5; --accent-hover:#3f7ce6; --accent-soft:#4d8bf51f; --accent-line:#4d8bf540;
+    --radius:14px;
   }
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
   body{margin:0;background:var(--bg);color:var(--ink);
-    font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-    -webkit-font-smoothing:antialiased}
-  a{color:var(--aqua);text-decoration:none}
-  a:hover{text-decoration:underline}
-  .wrap{max-width:1080px;margin:0 auto;padding:0 20px}
-  h1,h2,h3{line-height:1.15;letter-spacing:-.01em}
-  code{background:#00000055;padding:.1em .4em;border-radius:5px;font-size:.9em;
-    font-family:ui-monospace,"Cascadia Code",Consolas,monospace}
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{color:var(--ink)}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+  h1,h2,h3{line-height:1.15;letter-spacing:-.015em;margin:0}
+  .mono{font-family:ui-monospace,"Cascadia Code",Consolas,"SF Mono",monospace}
+  code{background:#00000055;border:1px solid var(--line-soft);padding:.12em .45em;border-radius:6px;
+    font-size:.88em;font-family:ui-monospace,"Cascadia Code",Consolas,monospace;color:var(--ink-dim)}
 
   /* nav */
-  nav{position:sticky;top:0;z-index:10;background:#141312e6;backdrop-filter:blur(8px);
-    border-bottom:1px solid var(--line)}
-  nav .wrap{display:flex;align-items:center;gap:16px;height:60px}
-  .brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.02em}
-  .logo{width:22px;height:22px;border-radius:6px;background:var(--grad)}
+  nav{position:sticky;top:0;z-index:20;background:#0d0e12cc;backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line-soft)}
+  nav .wrap{display:flex;align-items:center;gap:18px;height:62px}
+  .brand{display:flex;align-items:center;gap:11px;font-weight:650;letter-spacing:.01em;font-size:15.5px}
+  .logo{width:26px;height:26px;display:block}
   nav .sp{flex:1}
-  nav a{color:var(--mut);font-size:14px}
-  nav a:hover{color:var(--ink);text-decoration:none}
-  .btn{display:inline-block;background:var(--grad);color:#141312;font-weight:700;
-    padding:10px 18px;border-radius:9px;font-size:14px}
-  .btn:hover{text-decoration:none;filter:brightness(1.08)}
-  .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+  nav .links{display:flex;gap:20px;align-items:center}
+  nav .links a{color:var(--mut);font-size:14px;font-weight:500}
+  nav .links a:hover{color:var(--ink)}
+  nav .links a.btn{color:#fff;font-weight:600}
+  nav .links a.btn:hover{color:#fff}
+
+  .lang{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .lang-btn{background:transparent;color:var(--mut);border:none;padding:6px 11px;font-size:12.5px;
+    font-weight:650;cursor:pointer;font-family:inherit;letter-spacing:.03em}
+  .lang-btn:hover{color:var(--ink)}
+  .lang-btn.active{background:var(--accent-soft);color:var(--accent)}
+  .lang-btn+.lang-btn{border-left:1px solid var(--line)}
+
+  .btn{display:inline-flex;align-items:center;gap:8px;background:var(--accent);color:#fff;font-weight:600;
+    padding:10px 18px;border-radius:10px;font-size:14px;border:1px solid transparent;transition:background .15s,border-color .15s}
+  .btn:hover{background:var(--accent-hover);color:#fff}
+  .btn.ghost{background:transparent;color:var(--ink-dim);border-color:var(--line)}
+  .btn.ghost:hover{background:#ffffff08;color:var(--ink)}
+  .btn.sm{padding:8px 14px;font-size:13.5px}
+  .btn svg{width:16px;height:16px}
 
   /* hero */
-  header.hero{padding:72px 0 40px;position:relative;overflow:hidden}
-  header.hero::before{content:"";position:absolute;inset:-40% 0 auto -10%;height:420px;
-    background:radial-gradient(60% 60% at 30% 0%,#4aa3ff22,transparent 70%);pointer-events:none}
-  .hero .wrap{display:grid;grid-template-columns:1.1fr .9fr;gap:40px;align-items:center;position:relative}
-  .tag{display:inline-block;font-size:12.5px;color:var(--aqua);border:1px solid #37d6c055;
-    background:#37d6c012;padding:4px 11px;border-radius:999px;margin-bottom:18px}
-  header h1{font-size:44px;margin:.1em 0 .35em}
-  .grad{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
-  header p.lead{font-size:18px;color:var(--mut);margin:0 0 26px}
+  header.hero{padding:84px 0 56px;position:relative;overflow:hidden}
+  header.hero::before{content:"";position:absolute;inset:-30% -20% auto 40%;height:520px;
+    background:radial-gradient(50% 55% at 50% 0%,var(--accent-soft),transparent 72%);pointer-events:none}
+  .hero .wrap{display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center;position:relative}
+  .badge{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink-dim);
+    border:1px solid var(--accent-line);background:var(--accent-soft);padding:5px 12px;border-radius:999px;margin-bottom:22px;font-weight:500}
+  .badge .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  header h1{font-size:46px;font-weight:700;margin-bottom:20px}
+  header p.lead{font-size:18px;color:var(--mut);margin:0 0 30px;max-width:38ch}
+  header p.lead strong{color:var(--ink-dim);font-weight:600}
   .cta{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-  .cta .note{font-size:12.5px;color:var(--mut)}
-  .shot{width:100%;border-radius:12px;border:1px solid var(--line);
-    box-shadow:0 30px 60px -20px #000a, 0 0 0 1px #ffffff08}
+  .trust{display:flex;gap:18px;flex-wrap:wrap;margin-top:26px;color:var(--mut);font-size:13px}
+  .trust span.item{display:inline-flex;align-items:center;gap:7px}
+  .trust svg{width:15px;height:15px;color:var(--accent);opacity:.9}
+  .shotwrap{position:relative}
+  .shot{width:100%;border-radius:var(--radius);border:1px solid var(--line);display:block;
+    box-shadow:0 40px 80px -30px #000c, 0 0 0 1px #ffffff06}
 
   /* sections */
-  section{padding:52px 0;border-top:1px solid var(--line)}
-  .eyebrow{color:var(--orange);font-size:12.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
-  section h2{font-size:30px;margin:.25em 0 .5em}
-  .lede{color:var(--mut);max-width:70ch}
+  section{padding:64px 0;border-top:1px solid var(--line-soft)}
+  .eyebrow{color:var(--accent);font-size:12.5px;font-weight:650;letter-spacing:.09em;text-transform:uppercase;margin-bottom:14px}
+  section h2{font-size:31px;font-weight:700;margin-bottom:14px}
+  .lede{color:var(--mut);max-width:68ch;font-size:16.5px;margin:0}
+  .lede strong{color:var(--ink-dim);font-weight:600}
 
-  .pitch{background:linear-gradient(180deg,#1c1b1900,#4aa3ff08)}
-  .pitch strong{color:var(--ink)}
+  .why h2{max-width:22ch}
 
-  .grid{display:grid;gap:18px;grid-template-columns:repeat(3,1fr);margin-top:26px}
-  .feat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 18px 20px}
-  .feat .ic{font-size:20px}
-  .feat h3{font-size:16px;margin:.5em 0 .3em}
-  .feat p{margin:0;color:var(--mut);font-size:14px}
+  .grid{display:grid;gap:16px;grid-template-columns:repeat(3,1fr);margin-top:34px}
+  .feat{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:22px}
+  .feat .ic{width:40px;height:40px;border-radius:11px;background:var(--accent-soft);border:1px solid var(--accent-line);
+    display:flex;align-items:center;justify-content:center;color:var(--accent);margin-bottom:16px}
+  .feat .ic svg{width:20px;height:20px}
+  .feat h3{font-size:16px;font-weight:650;margin-bottom:7px}
+  .feat p{margin:0;color:var(--mut);font-size:14px;line-height:1.6}
 
-  .shots{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:24px}
+  .shots{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:34px}
   .shots figure{margin:0}
-  .shots img{width:100%;border-radius:12px;border:1px solid var(--line);box-shadow:0 20px 40px -22px #000b}
-  .shots figcaption{color:var(--mut);font-size:13px;margin-top:10px}
+  .shots img{width:100%;border-radius:var(--radius);border:1px solid var(--line);box-shadow:0 24px 48px -26px #000b}
+  .shots figcaption{color:var(--mut);font-size:13.5px;margin-top:12px;line-height:1.55}
 
-  table{width:100%;border-collapse:collapse;margin-top:22px;font-size:14.5px}
-  th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:top}
-  th{color:var(--mut);font-weight:600}
-  td:first-child{font-weight:600}
+  table{width:100%;border-collapse:collapse;margin-top:30px;font-size:14.5px}
+  th,td{text-align:left;padding:13px 14px;border-bottom:1px solid var(--line-soft);vertical-align:top}
+  thead th{color:var(--mut);font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.05em}
+  tbody td:first-child{font-weight:600;color:var(--ink-dim)}
+  tbody tr:last-child td{border-bottom:none}
 
-  .callout{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:22px 24px;margin-top:8px}
-  .callout h2{margin-top:0}
+  .callout{background:linear-gradient(180deg,var(--card),var(--bg2));border:1px solid var(--line);
+    border-radius:var(--radius);padding:28px 30px;display:flex;gap:20px;align-items:flex-start}
+  .callout .ic{flex:none;width:44px;height:44px;border-radius:12px;background:var(--accent-soft);
+    border:1px solid var(--accent-line);display:flex;align-items:center;justify-content:center;color:var(--accent)}
+  .callout .ic svg{width:22px;height:22px}
+  .callout h2{font-size:22px;margin-bottom:8px}
 
-  footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--mut);font-size:14px}
-  footer .wrap{display:flex;gap:16px;flex-wrap:wrap;align-items:center}
-  footer .sp{flex:1}
+  /* download */
+  .download{text-align:center}
+  .download h2{font-size:31px;margin-bottom:12px}
+  .download .lede{margin:0 auto 26px}
+  .dlrow{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:14px}
+  .winget{display:inline-flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);
+    border-radius:11px;padding:11px 12px 11px 16px;margin:8px auto 30px;font-size:14px}
+  .winget .mono{color:var(--ink-dim)}
+  .winget .prompt{color:var(--mut);user-select:none}
+  .copy{background:#ffffff0d;border:1px solid var(--line);color:var(--mut);border-radius:7px;
+    padding:5px 10px;font-size:12.5px;cursor:pointer;transition:background .15s,color .15s;font-family:inherit}
+  .copy:hover{background:#ffffff14;color:var(--ink)}
+  .builds{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:620px;margin:0 auto;text-align:left}
+  .build{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px}
+  .build h3{font-size:15px;font-weight:650;margin-bottom:6px;display:flex;align-items:center;gap:9px}
+  .build .pill{font-size:11px;font-weight:600;color:var(--accent);background:var(--accent-soft);
+    border:1px solid var(--accent-line);padding:2px 8px;border-radius:999px;letter-spacing:.02em}
+  .build p{margin:0;color:var(--mut);font-size:13.5px;line-height:1.55}
+  .signnote{color:var(--mut);font-size:13px;margin-top:26px}
 
-  @media(max-width:820px){
-    .hero .wrap{grid-template-columns:1fr}
-    header h1{font-size:34px}
+  footer{border-top:1px solid var(--line-soft);padding:40px 0 64px;color:var(--mut);font-size:14px}
+  .disclaimer{background:var(--card);border:1px solid var(--line-soft);border-radius:12px;
+    padding:16px 18px;font-size:13px;line-height:1.6;color:var(--mut);margin-bottom:28px}
+  .disclaimer strong{color:var(--ink-dim);font-weight:600}
+  footer .foot{display:flex;gap:18px;flex-wrap:wrap;align-items:center}
+  footer .foot .sp{flex:1}
+  footer .foot a{color:var(--mut)}
+  footer .foot a:hover{color:var(--ink)}
+
+  @media(max-width:860px){
+    .hero .wrap{grid-template-columns:1fr;gap:36px}
+    header.hero{padding:56px 0 40px}
+    header h1{font-size:36px}
     .grid{grid-template-columns:1fr}
     .shots{grid-template-columns:1fr}
-    nav a.hide{display:none}
+    .builds{grid-template-columns:1fr}
+    nav .links a.hide{display:none}
+    .callout{flex-direction:column}
   }
 </style>
 </head>
@@ -100,76 +157,127 @@
 
 <nav>
   <div class="wrap">
-    <span class="brand"><span class="logo"></span>SidebarMonitor</span>
+    <span class="brand">
+      <svg class="logo" viewBox="0 0 26 26" aria-hidden="true">
+        <rect x="1" y="1" width="24" height="24" rx="7" fill="var(--accent-soft)" stroke="var(--accent-line)"/>
+        <g fill="var(--accent)">
+          <rect x="6.5" y="14" width="2.6" height="5.5" rx="1.1"/>
+          <rect x="11.7" y="9.5" width="2.6" height="10" rx="1.1" opacity=".78"/>
+          <rect x="16.9" y="6.5" width="2.6" height="13" rx="1.1" opacity=".55"/>
+        </g>
+      </svg>
+      SidebarMonitor
+    </span>
     <span class="sp"></span>
-    <a class="hide" href="#features">Features</a>
-    <a class="hide" href="#requirements">Requirements</a>
-    <a class="hide" href="https://github.com/WRCX/SidebarMonitor/blob/main/docs/FAQ.md">FAQ</a>
-    <a href="https://github.com/WRCX/SidebarMonitor">GitHub</a>
-    <a class="btn" href="https://github.com/WRCX/SidebarMonitor/releases/latest">Download</a>
+    <div class="links">
+      <a class="hide" href="#features" data-i18n="nav.features">Features</a>
+      <a class="hide" href="#requirements" data-i18n="nav.requirements">Requirements</a>
+      <a class="hide" href="https://github.com/WRCX/SidebarMonitor/blob/main/docs/FAQ.md">FAQ</a>
+      <a href="https://github.com/WRCX/SidebarMonitor">GitHub</a>
+      <div class="lang" role="group" aria-label="Language">
+        <button class="lang-btn" data-lang="en" type="button">EN</button>
+        <button class="lang-btn" data-lang="es" type="button">ES</button>
+      </div>
+      <a class="btn sm" href="#download" data-i18n="nav.download">Download</a>
+    </div>
   </div>
 </nav>
 
 <header class="hero">
   <div class="wrap">
     <div>
-      <span class="tag">Works with Memory Integrity (HVCI) on</span>
-      <h1>The Ryzen sidebar monitor that <span class="grad">survived the WinRing0 apocalypse</span>.</h1>
-      <p class="lead">A native, always-on system monitor for Windows 11 — CPU, per-core, GPU, memory,
-        network, disks and processes in one lean panel on your second screen. No HWiNFO, no dubious
-        drivers, no telemetry.</p>
+      <span class="badge"><span class="dot"></span> <span data-i18n="hero.badge">Works with Memory Integrity (HVCI) enabled</span></span>
+      <h1 data-i18n="hero.h1">A lean, native system monitor for Windows 11.</h1>
+      <p class="lead" data-i18n="hero.lead">CPU, per-core, GPU, memory, network, disks, processes and game
+        FPS in one lean panel — dock it to any monitor's edge or float it wherever you like.
+        <strong>No kernel driver of its own, no HWiNFO dependency, no telemetry.</strong></p>
       <div class="cta">
-        <a class="btn" href="https://github.com/WRCX/SidebarMonitor/releases/latest">Download for Windows 11</a>
-        <a class="btn ghost" href="https://github.com/WRCX/SidebarMonitor">View source</a>
-        <span class="note">Free &amp; open source (MIT) · x64</span>
+        <a class="btn" href="#download">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 11l5 5 5-5"/><path d="M5 21h14"/></svg>
+          <span data-i18n="hero.download">Download for Windows</span>
+        </a>
+        <a class="btn ghost" href="https://github.com/WRCX/SidebarMonitor" data-i18n="hero.source">View source</a>
+      </div>
+      <div class="trust">
+        <span class="item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.6-7 9-4-1.4-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg> <span data-i18n="trust.hvci">HVCI-safe</span></span>
+        <span class="item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg> <span data-i18n="trust.telemetry">No telemetry</span></span>
+        <span class="item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8l-4 4 4 4"/><path d="M17 8l4 4-4 4"/><path d="M14 4l-4 16"/></svg> <span data-i18n="trust.oss">Open source · MIT</span></span>
+        <span class="item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.6-7 9-4-1.4-7-4.5-7-9V6z"/></svg> <span data-i18n="trust.signed">Code-signed</span></span>
       </div>
     </div>
-    <div>
-      <img class="shot" src="img/demo.gif" alt="SidebarMonitor live: CPU per-core, memory and dual-GPU under load">
+    <div class="shotwrap">
+      <img id="heroImg" class="shot" src="img/demo-en.gif" alt="SidebarMonitor running: CPU per-core bars, memory and dual-GPU under load">
     </div>
   </div>
 </header>
 
-<section class="pitch" id="why">
+<section class="why" id="why">
   <div class="wrap">
-    <div class="eyebrow">Why it exists</div>
-    <h2>When Windows blocklisted WinRing0, most monitors broke. This one didn't.</h2>
-    <p class="lede">In 2025 Windows added the WinRing0 kernel driver to its vulnerable-driver blocklist.
-      Overnight, hardware monitors that read sensors through it — including Sidebar Diagnostics —
-      stopped working on machines with <strong>Memory Integrity / Core Isolation (HVCI)</strong> enabled.
-      SidebarMonitor takes a different route <strong>by design</strong>: it ships no kernel driver of
-      its own and reads sensors through paths that are signed and HVCI-safe — the AMD Ryzen Master
-      Monitoring SDK, NVML, ADLX and native Windows APIs.</p>
+    <div class="eyebrow" data-i18n="why.eyebrow">Why it exists</div>
+    <h2 data-i18n="why.h2">When Windows blocklisted WinRing0, most monitors broke. This one doesn't use it.</h2>
+    <p class="lede" data-i18n="why.lede">In 2025, Windows added the WinRing0 kernel driver to its
+      vulnerable-driver blocklist. Hardware monitors that read sensors through it stopped working on
+      machines with <strong>Memory Integrity / Core Isolation (HVCI)</strong> enabled. SidebarMonitor
+      takes a different route <strong>by design</strong>: it ships no kernel driver of its own and reads
+      sensors through signed, HVCI-safe paths — the AMD Ryzen Master Monitoring SDK, NVIDIA NVML, AMD
+      ADLX, Intel's PresentMon and native Windows APIs.</p>
   </div>
 </section>
 
 <section id="features">
   <div class="wrap">
-    <div class="eyebrow">What you get</div>
-    <h2>Depth where it counts.</h2>
+    <div class="eyebrow" data-i18n="features.eyebrow">What you get</div>
+    <h2 data-i18n="features.h2">Depth where it counts.</h2>
     <div class="grid">
-      <div class="feat"><div class="ic">🧊</div><h3>HVCI-safe</h3><p>Runs with Memory Integrity on — the whole reason it exists. No WinRing0, no kernel driver of ours.</p></div>
-      <div class="feat"><div class="ic">⚡</div><h3>Tiny &amp; fast</h3><p>The sampling agent is a NativeAOT binary: ~2&nbsp;MB, ~60&nbsp;ms cold start, allocation-free hot path.</p></div>
-      <div class="feat"><div class="ic">🔴</div><h3>Deep Ryzen</h3><p>Per-core frequency, temperature and C0/sleep residency; best-core ★; power caps (PPT/TDC/EDC); throttle state.</p></div>
-      <div class="feat"><div class="ic">🎮</div><h3>Dual-vendor GPU</h3><p>Full telemetry for NVIDIA (NVML) and AMD (ADLX), plus per-engine activity for any GPU via D3DKMT.</p></div>
-      <div class="feat"><div class="ic">🌐</div><h3>Per-process &amp; per-disk</h3><p>Network bandwidth by process, disk temperature (NVMe + SATA), SSD/HDD, activity graphs.</p></div>
-      <div class="feat"><div class="ic">🔒</div><h3>No telemetry</h3><p>Nothing leaves your machine. No analytics, no crash reporting, no network activity in normal use.</p></div>
+      <div class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.6-7 9-4-1.4-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg></div>
+        <h3 data-i18n="feat.hvci.h">HVCI-safe</h3>
+        <p data-i18n="feat.hvci.p">Runs with Memory Integrity on — the whole reason it exists. No WinRing0, no kernel driver of ours.</p>
+      </div>
+      <div class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3L5 13h6l-1 8 8-10h-6z"/></svg></div>
+        <h3 data-i18n="feat.native.h">Native &amp; lightweight</h3>
+        <p data-i18n="feat.native.p">The sampling agent is a NativeAOT binary: ~2&nbsp;MB, ~60&nbsp;ms cold start, allocation-free hot path.</p>
+      </div>
+      <div class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="10" height="10" rx="2"/><rect x="10" y="10" width="4" height="4" rx="1"/><path d="M10 3v2M14 3v2M10 19v2M14 19v2M3 10h2M3 14h2M19 10h2M19 14h2"/></svg></div>
+        <h3 data-i18n="feat.ryzen.h">Deep Ryzen telemetry</h3>
+        <p data-i18n="feat.ryzen.p">Per-core frequency, temperature and C0/sleep residency; best-core marker; power caps (PPT/TDC/EDC); throttle state.</p>
+      </div>
+      <div class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="7" width="19" height="10" rx="2"/><circle cx="8" cy="12" r="2"/><path d="M13 10.5h5M13 13.5h5"/></svg></div>
+        <h3 data-i18n="feat.gpu.h">GPU: NVIDIA &amp; AMD</h3>
+        <p data-i18n="feat.gpu.p">Full telemetry for NVIDIA (NVML) and AMD (ADLX), plus per-engine activity for any GPU via D3DKMT.</p>
+      </div>
+      <div class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2-6 4 13 2.5-7H21"/></svg></div>
+        <h3 data-i18n="feat.fps.h">Game FPS, no injection</h3>
+        <p data-i18n="feat.fps.p">FPS, frametime, 1% and 0.1% lows via Intel's PresentMon (ETW) — no overlay, no anti-cheat trouble.</p>
+      </div>
+      <div class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></div>
+        <h3 data-i18n="feat.priv.h">Private by default</h3>
+        <p data-i18n="feat.priv.p">Nothing leaves your machine. No analytics, no crash reporting, no network activity in normal use.</p>
+      </div>
     </div>
   </div>
 </section>
 
 <section id="screens">
   <div class="wrap">
-    <div class="eyebrow">A look inside</div>
-    <h2>One panel, everything at a glance.</h2>
+    <div class="eyebrow" data-i18n="screens.eyebrow">A look inside</div>
+    <h2 data-i18n="screens.h2">One panel, everything at a glance.</h2>
     <div class="shots">
       <figure>
-        <img src="img/hero.png" alt="CPU, memory and GPU sections">
-        <figcaption>Per-core bars coloured by process (svchost broken out by service), per-core clock/temp, best-core ★, power/thermal limits — plus NVIDIA and the Ryzen iGPU with real ADLX sensors.</figcaption>
+        <img id="shotHero" src="img/hero-en.png" alt="CPU, memory and GPU sections">
+        <figcaption data-i18n="screens.cap1">Per-core bars coloured by process (svchost broken out by
+          service), per-core clock and temperature, best-core marker and power/thermal limits — plus
+          NVIDIA and the Ryzen iGPU with real ADLX sensors.</figcaption>
       </figure>
       <figure>
-        <img src="img/sections.png" alt="Network, disks and processes sections">
-        <figcaption>Per-adapter and per-process network, per-disk temperature and activity, and top processes by CPU and RAM.</figcaption>
+        <img id="shotSections" src="img/sections-en.png" alt="Network, disks and processes sections">
+        <figcaption data-i18n="screens.cap2">Per-adapter and per-process network, per-disk temperature
+          (NVMe + SATA) and activity, and top processes by CPU and RAM.</figcaption>
       </figure>
     </div>
   </div>
@@ -177,29 +285,53 @@
 
 <section id="requirements">
   <div class="wrap">
-    <div class="eyebrow">Requirements</div>
-    <h2>Runs anywhere; richest on Ryzen + NVIDIA/AMD.</h2>
-    <p class="lede">Everything renders on any Windows 11 x64 machine, and the app degrades gracefully
-      when a source is missing.</p>
+    <div class="eyebrow" data-i18n="req.eyebrow">Requirements</div>
+    <h2 data-i18n="req.h2">Runs anywhere; richest on Ryzen + NVIDIA/AMD.</h2>
+    <p class="lede" data-i18n="req.lede">Everything renders on any Windows 11 x64 machine, and the app
+      degrades gracefully when a source is missing.</p>
     <table>
-      <tr><th>Feature</th><th>Needs</th><th>Without it</th></tr>
-      <tr><td>CPU temp / power / per-core temp / throttle</td><td>AMD Ryzen + Ryzen Master SDK (accepted on first run)</td><td>Those fields show “—”; Intel is detected and explained.</td></tr>
-      <tr><td>NVIDIA GPU temp/power/fan/VRAM</td><td>NVIDIA driver (NVML)</td><td>Per-engine activity via D3DKMT.</td></tr>
-      <tr><td>AMD GPU temp/power/fan/clocks/VRAM</td><td>AMD Adrenalin driver (ADLX)</td><td>Per-engine activity via D3DKMT.</td></tr>
-      <tr><td>Per-core process colours, per-process network</td><td>The elevated helper</td><td>Bars still show usage; no per-process attribution.</td></tr>
+      <thead>
+        <tr>
+          <th data-i18n="req.th1">Feature</th>
+          <th data-i18n="req.th2">Needs</th>
+          <th data-i18n="req.th3">Without it</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td data-i18n="req.r1c1">CPU temp / power / per-core temp / throttle</td>
+          <td data-i18n="req.r1c2">AMD Ryzen + Ryzen Master SDK (accepted on first run)</td>
+          <td data-i18n="req.r1c3">Those fields show “—”; Intel is detected and explained.</td>
+        </tr>
+        <tr>
+          <td data-i18n="req.r2c1">NVIDIA GPU temp / power / fan / VRAM</td>
+          <td data-i18n="req.r2c2">NVIDIA driver (NVML)</td>
+          <td data-i18n="req.r2c3">Per-engine activity via D3DKMT.</td>
+        </tr>
+        <tr>
+          <td data-i18n="req.r3c1">AMD GPU temp / power / fan / clocks / VRAM</td>
+          <td data-i18n="req.r3c2">AMD Adrenalin driver (ADLX)</td>
+          <td data-i18n="req.r3c3">Per-engine activity via D3DKMT.</td>
+        </tr>
+        <tr>
+          <td data-i18n="req.r4c1">Per-core process colours, per-process network</td>
+          <td data-i18n="req.r4c2">The elevated helper</td>
+          <td data-i18n="req.r4c3">Bars still show usage; no per-process attribution.</td>
+        </tr>
+      </tbody>
     </table>
   </div>
 </section>
 
 <section id="how">
   <div class="wrap">
-    <div class="eyebrow">How it works</div>
-    <h2>Three small processes, each chosen for a reason.</h2>
-    <p class="lede">A <strong>NativeAOT agent</strong> samples sensors unelevated and publishes to shared
-      memory via a lock-free seqlock. An optional <strong>elevated helper</strong> runs the kernel ETW
-      session and the AMD SDK. The <strong>WPF panel</strong> renders it — docked or floating,
-      resizable, click-through. WPF can’t be AOT-compiled and the helper needs a different elevation
-      manifest, so keeping them separate keeps the agent native and unelevated.
+    <div class="eyebrow" data-i18n="how.eyebrow">How it works</div>
+    <h2 data-i18n="how.h2">Three small processes, each chosen for a reason.</h2>
+    <p class="lede" data-i18n="how.lede">A <strong>NativeAOT agent</strong> samples sensors unelevated and
+      publishes to shared memory via a lock-free seqlock. An optional <strong>elevated helper</strong>
+      runs the kernel ETW session and the AMD SDK. The <strong>WPF panel</strong> renders it — docked or
+      floating, resizable, click-through. WPF can't be AOT-compiled and the helper needs a different
+      elevation manifest, so keeping them separate keeps the agent native and unelevated.
       <a href="https://github.com/WRCX/SidebarMonitor/blob/main/docs/ARCHITECTURE.md">Read the architecture →</a></p>
   </div>
 </section>
@@ -207,47 +339,231 @@
 <section>
   <div class="wrap">
     <div class="callout">
-      <h2>🔒 No telemetry. Ever.</h2>
-      <p class="lede" style="margin-bottom:0">SidebarMonitor collects nothing and sends nothing. It
-        samples local hardware and renders it — no analytics, no crash reporting, no sockets to any
-        server. Your settings and logs stay on your disk.
-        <a href="https://github.com/WRCX/SidebarMonitor/blob/main/PRIVACY.md">Privacy policy →</a></p>
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></div>
+      <div>
+        <h2 data-i18n="callout.h2">No telemetry. Ever.</h2>
+        <p class="lede" style="margin:0" data-i18n="callout.p">SidebarMonitor collects nothing and sends
+          nothing. It samples local hardware and renders it — no analytics, no crash reporting, no
+          sockets to any server. Your settings and logs stay on your disk.
+          <a href="https://github.com/WRCX/SidebarMonitor/blob/main/PRIVACY.md">Privacy policy →</a></p>
+      </div>
     </div>
   </div>
 </section>
 
-<section>
-  <div class="wrap" style="text-align:center">
-    <div class="eyebrow">Get it</div>
-    <h2>Free, open source, and it just works.</h2>
-    <p class="lede" style="margin:0 auto 26px">Download the installer, or grab it with
-      <code>winget install WRCX.SidebarMonitor</code>. Two builds, your choice:
-      <strong>full</strong> bundles AMD's sensor SDK (works offline), <strong>lite</strong> ships none
-      of AMD's binaries and uses the SDK you install yourself. The installers are code-signed — free
+<section id="download">
+  <div class="wrap download">
+    <div class="eyebrow" data-i18n="dl.eyebrow">Get it</div>
+    <h2 data-i18n="dl.h2">Free, open source, and it just works.</h2>
+    <p class="lede" data-i18n="dl.lede">Download the signed installer, or install it from the command line.</p>
+    <div class="dlrow">
+      <a class="btn" href="https://github.com/WRCX/SidebarMonitor/releases/latest">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 11l5 5 5-5"/><path d="M5 21h14"/></svg>
+        <span data-i18n="dl.btn">Download installer</span>
+      </a>
+      <a class="btn ghost" href="https://github.com/WRCX/SidebarMonitor" data-i18n="dl.star">Star on GitHub</a>
+    </div>
+    <div class="winget">
+      <span class="prompt mono">&gt;</span>
+      <span class="mono" id="wgt">winget install WRCX.SidebarMonitor</span>
+      <button class="copy" id="copyBtn" type="button" data-i18n="dl.copy">Copy</button>
+    </div>
+    <div class="builds">
+      <div class="build">
+        <h3 data-i18n="build.full.h">Full <span class="pill">recommended</span></h3>
+        <p data-i18n="build.full.p">Bundles AMD's sensor SDK, so full CPU telemetry works offline with no extra steps. This is what <code>winget</code> installs.</p>
+      </div>
+      <div class="build">
+        <h3 data-i18n="build.lite.h">Lite</h3>
+        <p data-i18n="build.lite.p">Ships none of AMD's binaries — it uses the Ryzen Master SDK you install yourself. Smaller download; CPU falls back to basic metrics without it.</p>
+      </div>
+    </div>
+    <p class="signnote" data-i18n="dl.signnote">Windows 11 · x64 · The installers are code-signed — free
       code signing by <a href="https://about.signpath.io/">SignPath.io</a>, certificate by the
       <a href="https://signpath.org/">SignPath Foundation</a>.</p>
-    <div class="cta" style="justify-content:center">
-      <a class="btn" href="https://github.com/WRCX/SidebarMonitor/releases/latest">Download</a>
-      <a class="btn ghost" href="https://github.com/WRCX/SidebarMonitor">Star on GitHub</a>
-    </div>
   </div>
 </section>
 
 <footer>
-  <div class="wrap" style="margin-bottom:14px">
-    <span class="lede" style="font-size:13px;margin:0">Written by AI (Claude), human-supervised,
-      reviewed and tested by the maintainer. If you'd rather not run AI-written software, that's fair —
-      better you know up front.</span>
-  </div>
   <div class="wrap">
-    <span class="brand"><span class="logo"></span>SidebarMonitor</span>
-    <span class="sp"></span>
-    <span>MIT · © 2026 WRCX</span>
-    <a href="https://github.com/WRCX/SidebarMonitor">GitHub</a>
-    <a href="https://github.com/WRCX/SidebarMonitor/blob/main/docs/FAQ.md">FAQ</a>
-    <a href="https://github.com/sponsors/WRCX">Sponsor</a>
+    <div class="disclaimer" data-i18n="footer.disclaimer"><strong>Built with AI, human-supervised.</strong>
+      This software was written by an AI assistant (Claude), then reviewed, tested and maintained by a
+      human. If you'd rather not run AI-written software, that's fair — better you know up front.</div>
+    <div class="foot">
+      <span class="brand">
+        <svg class="logo" viewBox="0 0 26 26" aria-hidden="true">
+          <rect x="1" y="1" width="24" height="24" rx="7" fill="var(--accent-soft)" stroke="var(--accent-line)"/>
+          <g fill="var(--accent)">
+            <rect x="6.5" y="14" width="2.6" height="5.5" rx="1.1"/>
+            <rect x="11.7" y="9.5" width="2.6" height="10" rx="1.1" opacity=".78"/>
+            <rect x="16.9" y="6.5" width="2.6" height="13" rx="1.1" opacity=".55"/>
+          </g>
+        </svg>
+        SidebarMonitor
+      </span>
+      <span class="sp"></span>
+      <span>MIT · © 2026 WRCX</span>
+      <a href="https://github.com/WRCX/SidebarMonitor">GitHub</a>
+      <a href="https://github.com/WRCX/SidebarMonitor/blob/main/docs/FAQ.md">FAQ</a>
+      <a href="https://github.com/sponsors/WRCX" data-i18n="footer.sponsor">Sponsor</a>
+    </div>
   </div>
 </footer>
+
+<script>
+  var I18N = {
+    "nav.features": {en:"Features", es:"Características"},
+    "nav.requirements": {en:"Requirements", es:"Requisitos"},
+    "nav.download": {en:"Download", es:"Descargar"},
+
+    "hero.badge": {en:"Works with Memory Integrity (HVCI) enabled", es:"Funciona con Memory Integrity (HVCI) activado"},
+    "hero.h1": {en:"A lean, native system monitor for Windows 11.", es:"Un monitor de sistema nativo y ligero para Windows 11."},
+    "hero.lead": {
+      en:"CPU, per-core, GPU, memory, network, disks, processes and game FPS in one lean panel — dock it to any monitor's edge or float it wherever you like. <strong>No kernel driver of its own, no HWiNFO dependency, no telemetry.</strong>",
+      es:"CPU, por núcleo, GPU, memoria, red, discos, procesos y FPS de juegos en un solo panel — ánclalo al borde de cualquier monitor o déjalo flotando donde quieras. <strong>Sin driver de kernel propio, sin depender de HWiNFO, sin telemetría.</strong>"},
+    "hero.download": {en:"Download for Windows", es:"Descargar para Windows"},
+    "hero.source": {en:"View source", es:"Ver el código"},
+
+    "trust.hvci": {en:"HVCI-safe", es:"Compatible con HVCI"},
+    "trust.telemetry": {en:"No telemetry", es:"Sin telemetría"},
+    "trust.oss": {en:"Open source · MIT", es:"Código abierto · MIT"},
+    "trust.signed": {en:"Code-signed", es:"Firmado digitalmente"},
+
+    "why.eyebrow": {en:"Why it exists", es:"Por qué existe"},
+    "why.h2": {en:"When Windows blocklisted WinRing0, most monitors broke. This one doesn't use it.",
+      es:"Cuando Windows bloqueó WinRing0, la mayoría de monitores dejaron de funcionar. Este no lo usa."},
+    "why.lede": {
+      en:"In 2025, Windows added the WinRing0 kernel driver to its vulnerable-driver blocklist. Hardware monitors that read sensors through it stopped working on machines with <strong>Memory Integrity / Core Isolation (HVCI)</strong> enabled. SidebarMonitor takes a different route <strong>by design</strong>: it ships no kernel driver of its own and reads sensors through signed, HVCI-safe paths — the AMD Ryzen Master Monitoring SDK, NVIDIA NVML, AMD ADLX, Intel's PresentMon and native Windows APIs.",
+      es:"En 2025, Windows añadió el driver de kernel WinRing0 a su lista de bloqueo de drivers vulnerables. Los monitores de hardware que leían sensores a través de él dejaron de funcionar en equipos con <strong>Memory Integrity / Aislamiento del núcleo (HVCI)</strong> activado. SidebarMonitor toma otro camino <strong>por diseño</strong>: no incluye ningún driver de kernel propio y lee los sensores por vías firmadas y compatibles con HVCI — el SDK de monitorización de AMD Ryzen Master, NVIDIA NVML, AMD ADLX, PresentMon de Intel y APIs nativas de Windows."},
+
+    "features.eyebrow": {en:"What you get", es:"Qué incluye"},
+    "features.h2": {en:"Depth where it counts.", es:"Profundidad donde importa."},
+    "feat.hvci.h": {en:"HVCI-safe", es:"Compatible con HVCI"},
+    "feat.hvci.p": {en:"Runs with Memory Integrity on — the whole reason it exists. No WinRing0, no kernel driver of ours.",
+      es:"Funciona con Memory Integrity activado — la razón misma de su existencia. Sin WinRing0, sin ningún driver de kernel nuestro."},
+    "feat.native.h": {en:"Native &amp; lightweight", es:"Nativo y ligero"},
+    "feat.native.p": {en:"The sampling agent is a NativeAOT binary: ~2&nbsp;MB, ~60&nbsp;ms cold start, allocation-free hot path.",
+      es:"El agente de muestreo es un binario NativeAOT: ~2&nbsp;MB, ~60&nbsp;ms de arranque en frío, camino caliente sin asignaciones."},
+    "feat.ryzen.h": {en:"Deep Ryzen telemetry", es:"Telemetría Ryzen a fondo"},
+    "feat.ryzen.p": {en:"Per-core frequency, temperature and C0/sleep residency; best-core marker; power caps (PPT/TDC/EDC); throttle state.",
+      es:"Frecuencia, temperatura y residencia C0/sleep por núcleo; marcador de mejor núcleo; límites de potencia (PPT/TDC/EDC); estado de throttle."},
+    "feat.gpu.h": {en:"GPU: NVIDIA &amp; AMD", es:"GPU: NVIDIA y AMD"},
+    "feat.gpu.p": {en:"Full telemetry for NVIDIA (NVML) and AMD (ADLX), plus per-engine activity for any GPU via D3DKMT.",
+      es:"Telemetría completa para NVIDIA (NVML) y AMD (ADLX), más actividad por motor de cualquier GPU vía D3DKMT."},
+    "feat.fps.h": {en:"Game FPS, no injection", es:"FPS de juegos, sin inyección"},
+    "feat.fps.p": {en:"FPS, frametime, 1% and 0.1% lows via Intel's PresentMon (ETW) — no overlay, no anti-cheat trouble.",
+      es:"FPS, frametime y 1%/0.1% lows vía PresentMon de Intel (ETW) — sin overlay, sin problemas con el anti-cheat."},
+    "feat.priv.h": {en:"Private by default", es:"Privado por defecto"},
+    "feat.priv.p": {en:"Nothing leaves your machine. No analytics, no crash reporting, no network activity in normal use.",
+      es:"Nada sale de tu equipo. Sin analíticas, sin informes de fallos, sin actividad de red en uso normal."},
+
+    "screens.eyebrow": {en:"A look inside", es:"Un vistazo por dentro"},
+    "screens.h2": {en:"One panel, everything at a glance.", es:"Un panel, todo de un vistazo."},
+    "screens.cap1": {en:"Per-core bars coloured by process (svchost broken out by service), per-core clock and temperature, best-core marker and power/thermal limits — plus NVIDIA and the Ryzen iGPU with real ADLX sensors.",
+      es:"Barras por núcleo coloreadas por proceso (svchost desglosado por servicio), frecuencia y temperatura por núcleo, marcador de mejor núcleo y límites de potencia/térmicos — más NVIDIA y la iGPU Ryzen con sensores ADLX reales."},
+    "screens.cap2": {en:"Per-adapter and per-process network, per-disk temperature (NVMe + SATA) and activity, and top processes by CPU and RAM.",
+      es:"Red por adaptador y por proceso, temperatura por disco (NVMe + SATA) y actividad, y los procesos top por CPU y RAM."},
+
+    "req.eyebrow": {en:"Requirements", es:"Requisitos"},
+    "req.h2": {en:"Runs anywhere; richest on Ryzen + NVIDIA/AMD.", es:"Funciona en cualquier sitio; más completo en Ryzen + NVIDIA/AMD."},
+    "req.lede": {en:"Everything renders on any Windows 11 x64 machine, and the app degrades gracefully when a source is missing.",
+      es:"Todo se muestra en cualquier equipo Windows 11 x64, y la app se degrada con elegancia cuando falta una fuente."},
+    "req.th1": {en:"Feature", es:"Función"},
+    "req.th2": {en:"Needs", es:"Necesita"},
+    "req.th3": {en:"Without it", es:"Sin ello"},
+    "req.r1c1": {en:"CPU temp / power / per-core temp / throttle", es:"Temp/potencia de CPU · temp por núcleo · throttle"},
+    "req.r1c2": {en:"AMD Ryzen + Ryzen Master SDK (accepted on first run)", es:"AMD Ryzen + SDK de Ryzen Master (aceptado en el 1er arranque)"},
+    "req.r1c3": {en:"Those fields show “—”; Intel is detected and explained.", es:"Esos campos muestran «—»; Intel se detecta y se explica."},
+    "req.r2c1": {en:"NVIDIA GPU temp / power / fan / VRAM", es:"GPU NVIDIA: temp/potencia/ventilador/VRAM"},
+    "req.r2c2": {en:"NVIDIA driver (NVML)", es:"Driver de NVIDIA (NVML)"},
+    "req.r2c3": {en:"Per-engine activity via D3DKMT.", es:"Actividad por motor vía D3DKMT."},
+    "req.r3c1": {en:"AMD GPU temp / power / fan / clocks / VRAM", es:"GPU AMD: temp/potencia/ventilador/relojes/VRAM"},
+    "req.r3c2": {en:"AMD Adrenalin driver (ADLX)", es:"Driver AMD Adrenalin (ADLX)"},
+    "req.r3c3": {en:"Per-engine activity via D3DKMT.", es:"Actividad por motor vía D3DKMT."},
+    "req.r4c1": {en:"Per-core process colours, per-process network", es:"Colores de proceso por núcleo, red por proceso"},
+    "req.r4c2": {en:"The elevated helper", es:"El ayudante elevado"},
+    "req.r4c3": {en:"Bars still show usage; no per-process attribution.", es:"Las barras siguen mostrando uso; sin atribución por proceso."},
+
+    "how.eyebrow": {en:"How it works", es:"Cómo funciona"},
+    "how.h2": {en:"Three small processes, each chosen for a reason.", es:"Tres procesos pequeños, cada uno elegido por una razón."},
+    "how.lede": {
+      en:"A <strong>NativeAOT agent</strong> samples sensors unelevated and publishes to shared memory via a lock-free seqlock. An optional <strong>elevated helper</strong> runs the kernel ETW session and the AMD SDK. The <strong>WPF panel</strong> renders it — docked or floating, resizable, click-through. WPF can't be AOT-compiled and the helper needs a different elevation manifest, so keeping them separate keeps the agent native and unelevated. <a href=\"https://github.com/WRCX/SidebarMonitor/blob/main/docs/ARCHITECTURE.md\">Read the architecture →</a>",
+      es:"Un <strong>agente NativeAOT</strong> muestrea los sensores sin elevación y publica en memoria compartida mediante un seqlock sin bloqueos. Un <strong>ayudante elevado</strong> opcional ejecuta la sesión ETW de kernel y el SDK de AMD. El <strong>panel WPF</strong> lo dibuja — anclado o flotante, redimensionable, con click-through. WPF no se puede compilar con AOT y el ayudante necesita otro manifiesto de elevación, así que mantenerlos separados deja al agente nativo y sin elevar. <a href=\"https://github.com/WRCX/SidebarMonitor/blob/main/docs/ARCHITECTURE.md\">Lee la arquitectura →</a>"},
+
+    "callout.h2": {en:"No telemetry. Ever.", es:"Sin telemetría. Nunca."},
+    "callout.p": {
+      en:"SidebarMonitor collects nothing and sends nothing. It samples local hardware and renders it — no analytics, no crash reporting, no sockets to any server. Your settings and logs stay on your disk. <a href=\"https://github.com/WRCX/SidebarMonitor/blob/main/PRIVACY.md\">Privacy policy →</a>",
+      es:"SidebarMonitor no recopila nada ni envía nada. Muestrea el hardware local y lo dibuja — sin analíticas, sin informes de fallos, sin conexiones a ningún servidor. Tu configuración y tus registros se quedan en tu disco. <a href=\"https://github.com/WRCX/SidebarMonitor/blob/main/PRIVACY.md\">Política de privacidad →</a>"},
+
+    "dl.eyebrow": {en:"Get it", es:"Consíguelo"},
+    "dl.h2": {en:"Free, open source, and it just works.", es:"Gratis, de código abierto, y simplemente funciona."},
+    "dl.lede": {en:"Download the signed installer, or install it from the command line.",
+      es:"Descarga el instalador firmado, o instálalo desde la línea de comandos."},
+    "dl.btn": {en:"Download installer", es:"Descargar instalador"},
+    "dl.star": {en:"Star on GitHub", es:"Dale una estrella en GitHub"},
+    "dl.copy": {en:"Copy", es:"Copiar"},
+    "build.full.h": {en:"Full <span class=\"pill\">recommended</span>", es:"Completo <span class=\"pill\">recomendado</span>"},
+    "build.full.p": {
+      en:"Bundles AMD's sensor SDK, so full CPU telemetry works offline with no extra steps. This is what <code>winget</code> installs.",
+      es:"Incluye el SDK de sensores de AMD, así la telemetría completa de CPU funciona sin conexión y sin pasos extra. Es lo que instala <code>winget</code>."},
+    "build.lite.h": {en:"Lite", es:"Lite"},
+    "build.lite.p": {
+      en:"Ships none of AMD's binaries — it uses the Ryzen Master SDK you install yourself. Smaller download; CPU falls back to basic metrics without it.",
+      es:"No incluye ningún binario de AMD — usa el SDK de Ryzen Master que instales tú. Descarga más pequeña; sin él, la CPU cae a métricas básicas."},
+    "dl.signnote": {
+      en:"Windows 11 · x64 · The installers are code-signed — free code signing by <a href=\"https://about.signpath.io/\">SignPath.io</a>, certificate by the <a href=\"https://signpath.org/\">SignPath Foundation</a>.",
+      es:"Windows 11 · x64 · Los instaladores están firmados — firma de código gratuita por <a href=\"https://about.signpath.io/\">SignPath.io</a>, certificado de la <a href=\"https://signpath.org/\">SignPath Foundation</a>."},
+
+    "footer.disclaimer": {
+      en:"<strong>Built with AI, human-supervised.</strong> This software was written by an AI assistant (Claude), then reviewed, tested and maintained by a human. If you'd rather not run AI-written software, that's fair — better you know up front.",
+      es:"<strong>Creado con IA, supervisado por una persona.</strong> Este software lo escribió un asistente de IA (Claude), y luego lo revisó, probó y lo mantiene una persona. Si prefieres no ejecutar software escrito por IA, es comprensible — mejor saberlo de antemano."},
+    "footer.sponsor": {en:"Sponsor", es:"Patrocinar"}
+  };
+
+  function applyLang(lang) {
+    document.documentElement.lang = lang;
+    var nodes = document.querySelectorAll('[data-i18n]');
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      var entry = I18N[el.getAttribute('data-i18n')];
+      if (!entry) continue;
+      var v = entry[lang];
+      if (v == null) continue;
+      if (v.indexOf('<') >= 0) el.innerHTML = v; else el.textContent = v;
+    }
+    var hero = document.getElementById('heroImg');
+    var sh = document.getElementById('shotHero');
+    var ss = document.getElementById('shotSections');
+    if (hero) hero.src = 'img/demo-' + lang + '.gif';
+    if (sh) sh.src = 'img/hero-' + lang + '.png';
+    if (ss) ss.src = 'img/sections-' + lang + '.png';
+    var btns = document.querySelectorAll('.lang-btn');
+    for (var j = 0; j < btns.length; j++)
+      btns[j].classList.toggle('active', btns[j].getAttribute('data-lang') === lang);
+    try { localStorage.setItem('sbm-lang', lang); } catch (e) {}
+  }
+
+  (function () {
+    var saved = null;
+    try { saved = localStorage.getItem('sbm-lang'); } catch (e) {}
+    var initial = saved || ((navigator.language || 'en').toLowerCase().indexOf('es') === 0 ? 'es' : 'en');
+    applyLang(initial);
+
+    var btns = document.querySelectorAll('.lang-btn');
+    for (var i = 0; i < btns.length; i++)
+      btns[i].addEventListener('click', function () { applyLang(this.getAttribute('data-lang')); });
+
+    var btn = document.getElementById('copyBtn');
+    if (btn) btn.addEventListener('click', function () {
+      var text = document.getElementById('wgt').textContent.trim();
+      navigator.clipboard.writeText(text).then(function () {
+        var old = btn.textContent;
+        btn.textContent = (document.documentElement.lang === 'es') ? 'Copiado' : 'Copied';
+        setTimeout(function () { btn.textContent = old; }, 1400);
+      }).catch(function () {});
+    });
+  })();
+</script>
 
 </body>
 </html>

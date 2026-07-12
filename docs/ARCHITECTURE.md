@@ -9,7 +9,8 @@
 # SidebarMonitor
 
 Sidebar nativa de monitorización para Windows: CPU, cores, vatios, RAM, red, discos,
-GPU y top de procesos, siempre visible en el escritorio (pensada para una segunda pantalla).
+GPU y top de procesos, siempre visible en el escritorio: anclada al borde de cualquier
+monitor (principal o secundario) o flotante donde quieras.
 
 Sustituye a los *Windows Desktop Gadgets* (`sidebar.exe`, binario de Windows 7 RTM revivido
 vía 8GadgetPack / Gadgets Revived), que son la única opción decente que queda en el mercado
