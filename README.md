@@ -133,6 +133,14 @@ native/AdlxShim/build.cmd     # -> AdlxShim.dll   (GPU ADLX bridge)
 dotnet build SidebarMonitor.slnx -c Release
 ```
 
+## A note on how this was built
+
+**SidebarMonitor's code is written by AI** (Anthropic's Claude), directed, reviewed and tested by the
+maintainer (**WRCX**) — human-supervised, not human-typed. Every design decision, verification and
+release is a human call; the keystrokes are the model's. This is stated up front on purpose: if you'd
+rather not run AI-written software, that's completely fair — better you know before you download it.
+Bug reports and fixes are triaged and shipped by a human.
+
 ## Licence
 
 SidebarMonitor's own code is **[MIT](LICENSE)** © 2026 WRCX. It builds on third-party components (AMD Ryzen Master SDK, ADLX, NVML, TraceEvent, the VC++ runtime and .NET), each under its own terms — see **[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)**. AMD's proprietary binaries and SDK headers are never redistributed in this repository.
