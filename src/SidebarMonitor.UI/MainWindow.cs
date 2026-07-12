@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.IO;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -362,14 +363,19 @@ internal sealed class MainWindow : AppBarWindow
 
     // ---------------------------------------------------------------- layout
 
-    /// <summary>The build's version, "vMajor.Minor.Patch", read from the assembly (stamped by
-    /// Directory.Build.props). Shown next to the title so a stale install is spotted immediately.</summary>
+    /// <summary>The build's version, "vMajor.Minor.Patch". Read from the <em>file</em> version, not the
+    /// assembly version: AssemblyVersion is pinned stable (see Directory.Build.props) so a UI-only
+    /// redeploy doesn't break its bind to Shared.dll, while FileVersion still tracks each release.
+    /// Shown next to the title so a stale install is spotted immediately.</summary>
     private static string AppVersion
     {
         get
         {
-            var v = typeof(MainWindow).Assembly.GetName().Version;
-            return v is null ? "" : $"v{v.Major}.{v.Minor}.{v.Build}";
+            var attr = typeof(MainWindow).Assembly
+                .GetCustomAttribute<System.Reflection.AssemblyFileVersionAttribute>();
+            if (attr is null) return "";
+            var p = attr.Version.Split('.');
+            return p.Length >= 3 ? $"v{p[0]}.{p[1]}.{p[2]}" : $"v{attr.Version}";
         }
     }
 
