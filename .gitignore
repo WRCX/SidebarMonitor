@@ -24,3 +24,6 @@ native/RyzenSdk/*.cat
 # ADLX SDK headers/source — AMD-proprietary, redistribution prohibited (fetch.ps1 pulls them on
 # demand; only the compiled AdlxShim.dll ships). Keep fetch.ps1 tracked.
 native/AdlxSdk/SDK/
+
+# PresentMon CLI (MIT; fetch.ps1 downloads it) - not committed
+native/PresentMon/*.exe

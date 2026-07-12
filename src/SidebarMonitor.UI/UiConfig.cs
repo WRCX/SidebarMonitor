@@ -14,6 +14,11 @@ public sealed class UiConfig
     /// "en" force it. Applied at startup by <see cref="Loc.Init"/>; changing it relaunches the UI.</summary>
     public string Language { get; set; } = "auto";
 
+    /// <summary>Game FPS monitoring: the helper spawns Intel's PresentMon (ETW, no injection) to
+    /// measure the foreground game's frametime, and the panel shows a GAME section. Off by default —
+    /// running PresentMon has a small cost, so only gamers who want it pay it.</summary>
+    public bool ShowFps { get; set; }
+
     /// <summary>Check GitHub Releases for a newer version on startup (then daily). Off by default to
     /// honour the no-network-in-normal-use privacy stance; a manual "Check now" always works. When on,
     /// the only network call is to GitHub's public API — nothing about you is sent. See PRIVACY.md.</summary>

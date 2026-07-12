@@ -34,6 +34,7 @@ internal static class FirstRunDialog
         // Every launch: the marker the helper reads must reflect the stored consent (covers a
         // deleted marker, a config copied between machines, or a future settings toggle).
         ConsentMarker.SetAmdSdk(cfg.AmdEulaAccepted);
+        ConsentMarker.SetFps(cfg.ShowFps);   // gates the helper spawning PresentMon
     }
 
     private static void ShowFor(UiConfig cfg)

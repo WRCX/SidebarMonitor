@@ -27,6 +27,12 @@
     <None Include="..\..\native\RyzenShim\RyzenShim.dll" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- Intel PresentMon CLI (MIT), for game frame-timing via ETW. Copied next to the helper, which
+       spawns it. Absent (fetch.ps1 not run) = the FPS feature is simply unavailable. -->
+  <ItemGroup Condition="Exists('..\..\native\PresentMon\PresentMon.exe')">
+    <None Include="..\..\native\PresentMon\PresentMon.exe" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <!-- The bundled SDK DLLs + driver + VC runtime (populated by native/RyzenSdk/fetch.ps1). When
        present, RyzenShim loads Platform.dll from right here, so the helper needs no SDK install. -->
   <ItemGroup>

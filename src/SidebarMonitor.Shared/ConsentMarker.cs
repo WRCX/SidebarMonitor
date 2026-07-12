@@ -19,6 +19,24 @@ public static class ConsentMarker
 
     public static bool AmdSdkAccepted => File.Exists(AmdSdkPath);
 
+    /// <summary>Marker for "the user enabled the game FPS overlay" — gates the helper spawning
+    /// PresentMon, so a user who doesn't want it pays nothing.</summary>
+    private static string FpsPath => Path.Combine(Dir, "fps-enabled");
+
+    public static bool FpsEnabled => File.Exists(FpsPath);
+
+    /// <summary>Idempotently create/remove the FPS marker to match the UI's stored setting.</summary>
+    public static void SetFps(bool enabled)
+    {
+        try
+        {
+            Directory.CreateDirectory(Dir);
+            if (enabled) { if (!File.Exists(FpsPath)) File.WriteAllText(FpsPath, "game FPS monitoring enabled by the user.\n"); }
+            else if (File.Exists(FpsPath)) File.Delete(FpsPath);
+        }
+        catch { /* non-fatal */ }
+    }
+
     /// <summary>Idempotently create/remove the marker to match the UI's stored consent.</summary>
     public static void SetAmdSdk(bool accepted)
     {

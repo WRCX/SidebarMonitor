@@ -259,6 +259,9 @@ internal static class LocStrings
         ["Bajo el título: fabricante/modelo de CPU, versiones del contrato, estado del SDK/helper, cadencia y estado del CSV."]
             = "Under the title: CPU vendor/model, contract versions, SDK/helper status, cadence and CSV status.",
         ["Abrir carpeta de logs"] = "Open logs folder",
+        ["FPS de juegos (PresentMon)"] = "Game FPS (PresentMon)",
+        ["Mide FPS/frametime/1% low/latencia/stutter del juego en primer plano vía ETW (sin inyección). El helper lanza PresentMon solo cuando está activado."]
+            = "Measures the foreground game's FPS/frametime/1% low/latency/stutter via ETW (no injection). The helper runs PresentMon only when enabled.",
 
         // ── Updates ───────────────────────────────────────────────────────────────────────────
         ["Actualizaciones"] = "Updates",

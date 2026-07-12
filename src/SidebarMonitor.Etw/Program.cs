@@ -168,6 +168,9 @@ internal static class Program
         // which reads the static CPPC ranking directly — we can't, so we learn it from the peaks).
         var corePeak = CorePeakStore.Load();
 
+        // Game frame-timing via the bundled PresentMon CLI (only spawns while the marker is present).
+        using var frameStats = new FrameStats(AppContext.BaseDirectory);
+
         using var publish = new Timer(_ =>
         {
             lock (gate)
@@ -250,6 +253,10 @@ internal static class Program
             else snapshot.CpuSdkOk = 0;
 
             diskTemps.Fill(ref snapshot);
+
+            // Game frame-timing (PresentMon), opt-in via the marker the UI writes.
+            frameStats.SetEnabled(ConsentMarker.FpsEnabled);
+            snapshot.Frame = frameStats.Poll();
 
             writer.Publish(snapshot);
             published++;

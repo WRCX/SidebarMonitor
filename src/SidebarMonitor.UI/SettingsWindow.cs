@@ -376,6 +376,11 @@ internal sealed class SettingsWindow : Window
         p.Children.Add(Toggle(Loc.T("Registrar a CSV"), Loc.T("Graba una fila por muestra (CPU, límites, por-núcleo, RAM, GPU0, red, disco) a %LOCALAPPDATA%\\SidebarMonitor\\logs."), () => _cfg.LogCsv, v => { _cfg.LogCsv = v; _host.ApplyLive("csv"); }));
         p.Children.Add(Toggle(Loc.T("Datos de depuración (overlay)"), Loc.T("Bajo el título: fabricante/modelo de CPU, versiones del contrato, estado del SDK/helper, cadencia y estado del CSV."), () => _cfg.LogVerbose, v => { _cfg.LogVerbose = v; _host.ApplyLive("verbose"); }));
 
+        p.Children.Add(Toggle(Loc.T("FPS de juegos (PresentMon)"),
+            Loc.T("Mide FPS/frametime/1% low/latencia/stutter del juego en primer plano vía ETW (sin inyección). El helper lanza PresentMon solo cuando está activado."),
+            () => _cfg.ShowFps,
+            v => { _cfg.ShowFps = v; _cfg.Save(); SidebarMonitor.Shared.ConsentMarker.SetFps(v); }));
+
         var open = TextButton(Loc.T("Abrir carpeta de logs"));
         open.Click += (_, _) =>
         {

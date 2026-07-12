@@ -10,7 +10,7 @@ public static class SnapshotLayout
     public const uint Signature = 0x4E4D4253;
 
     /// <summary>Bump on any layout change. The reader refuses anything it does not know.</summary>
-    public const uint Version = 20;
+    public const uint Version = 21;
 
     /// <summary>
     /// Local\, not Global\. Creating a Global\ kernel object requires SeCreateGlobalPrivilege,
@@ -180,6 +180,27 @@ public struct ProcInfo
     public int Instances;
 }
 
+/// <summary>
+/// Frame-timing for the foreground presenting app (a game), measured by PresentMon via the elevated
+/// helper (ETW, no injection). <see cref="App"/> empty means nothing is presenting or the feature is
+/// off. <see cref="FpsPresented"/> is the engine's real rate; <see cref="FpsDisplayed"/> includes
+/// generated frames, so frame generation shows Displayed &gt; Presented. Lows are FPS-equivalents of
+/// the worst-case frametime percentiles. NaN/0 fields are unavailable for this app.
+/// </summary>
+[StructLayout(LayoutKind.Sequential)]
+public struct FrameInfo
+{
+    public Name32 App;
+    public float FpsPresented;
+    public float FpsDisplayed;
+    public float FrametimeMs;
+    public float Low1PctFps;
+    public float Low01PctFps;
+    public float GpuBusyPct;
+    public float AnimationErrorMs;
+    public float LatencyMs;
+}
+
 [StructLayout(LayoutKind.Sequential)]
 public struct Snapshot
 {
@@ -217,6 +238,9 @@ public struct Snapshot
 
     public int NetProcCount;
     public NetProcArray NetProcs;
+
+    /// <summary>Foreground game frame-timing (PresentMon via the helper). App empty = none.</summary>
+    public FrameInfo Frame;
 }
 
 /// <summary>

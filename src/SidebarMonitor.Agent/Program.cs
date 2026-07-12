@@ -200,6 +200,7 @@ internal static class Program
         s.CoreDetail = e.CoreDetail;
         s.NetProcCount = e.NetProcCount;
         s.NetProcs = e.NetProcs;
+        s.Frame = e.Frame;   // game frame-timing (PresentMon), or empty when off/idle
         s.EtwAvailable = true;
 
         // CPU temp and package power come solely from the AMD SDK (via the helper): it works with

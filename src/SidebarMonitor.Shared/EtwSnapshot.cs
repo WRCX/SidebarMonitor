@@ -7,7 +7,7 @@ public static class EtwLayout
 {
     /// <summary>'SBME' little-endian.</summary>
     public const uint Signature = 0x454D4253;
-    public const uint Version = 8;
+    public const uint Version = 9;
     public const string MapName = @"Local\SidebarMonitor.Etw";
 
     /// <summary>Segments drawn per core bar. Beyond this, the rest folds into "otros".</summary>
@@ -108,6 +108,10 @@ public struct EtwSnapshot
     /// NaN = unknown. Covers the SATA disks the agent's unelevated NVMe path can't reach, closing
     /// the last thing HWiNFO was for.</summary>
     public DiskTempArray DiskTempsC;
+
+    /// <summary>Foreground game frame-timing (FPS/frametime/lows/GPU busy/latency/stutter), measured
+    /// by PresentMon (ETW, no injection). App empty = nothing presenting or the feature is off.</summary>
+    public FrameInfo Frame;
 }
 
 [InlineArray(SnapshotLayout.MaxDisks)] public struct DiskTempArray { private float _element0; }

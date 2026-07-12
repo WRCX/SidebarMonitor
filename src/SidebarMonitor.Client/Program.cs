@@ -106,6 +106,13 @@ internal static class Program
         Console.WriteLine(string.Create(ci, $"RAM   {s.Mem.PhysUsed / G,5:F2} / {s.Mem.PhysTotal / G:F2} GiB      commit {s.Mem.CommitUsed / G:F2} / {s.Mem.CommitTotal / G:F2} GiB"));
         Console.WriteLine();
 
+        string frameApp = NameField.Get(ref s.Frame.App);
+        if (frameApp.Length > 0)
+        {
+            Console.WriteLine(string.Create(ci, $"FPS  {frameApp}  {s.Frame.FpsPresented:F0} fps (disp {s.Frame.FpsDisplayed:F0})  {s.Frame.FrametimeMs:F1} ms  1%low {s.Frame.Low1PctFps:F0}  0.1%low {s.Frame.Low01PctFps:F0}  GPU {s.Frame.GpuBusyPct:F0}%  lat {s.Frame.LatencyMs:F1} ms  stutter {s.Frame.AnimationErrorMs:F2} ms"));
+            Console.WriteLine();
+        }
+
         for (int i = 0; i < s.GpuCount; i++)
         {
             ref var g = ref s.Gpus[i];
