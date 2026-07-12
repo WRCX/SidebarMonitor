@@ -54,22 +54,50 @@ internal static class Program
             return 1;
         }
 
-        // CPU temp/power from AMD's SDK (needs admin, which we have). Optional: if the SDK/driver
-        // is absent, the agent keeps using HWiNFO.
-        var ryzen = RyzenSdk.TryOpen(out string? ryzenErr);
-        Console.WriteLine($"AMD Ryzen SDK: {(ryzen is not null ? "OK" : $"no disponible - {ryzenErr}")}");
+        // CPU temp/power from AMD's SDK (needs admin, which we have). Gated three ways: only on an
+        // AMD CPU, only after the user accepted AMD's EULA in the UI (marker file), and skippable via
+        // --no-sdk. On anything else it stays closed and the agent keeps using HWiNFO/PDH. Failing
+        // soft here is the whole degradation story on Intel and on AMD-before-consent.
+        RyzenSdk? ryzen = null;
+        bool awaitingConsent = false;   // AMD CPU, eligible, but EULA not yet accepted in the UI
+        bool forceSdk = args.Contains("--force-sdk");
+        if (args.Contains("--no-sdk"))
+        {
+            Console.WriteLine("AMD Ryzen SDK: desactivado por --no-sdk.");
+        }
+        else if (!CpuVendor.IsAmd && !forceSdk)
+        {
+            Console.WriteLine($"AMD Ryzen SDK: omitido (CPU {(CpuVendor.VendorId is { Length: > 0 } v ? v : "desconocida")}, no AMD). " +
+                              "temp/vatios por SDK no disponibles en esta plataforma.");
+        }
+        else if (!ConsentMarker.AmdSdkAccepted && !forceSdk)
+        {
+            awaitingConsent = true;
+            Console.WriteLine("AMD Ryzen SDK: en espera (EULA de AMD no aceptada todavia en la UI). Usando HWiNFO/PDH.");
+        }
+        else
+        {
+            ryzen = RyzenSdk.TryOpen(out string? ryzenErr);
+            Console.WriteLine($"AMD Ryzen SDK: {(ryzen is not null ? "OK" : $"no disponible - {ryzenErr}")}");
+        }
 
         // Drive temps (SATA + NVMe) from the storage stack; needs admin, which we have.
         using var diskTemps = new DiskTempsWmi();
         Console.WriteLine("Temps de disco: por WMI (storage reliability counter)");
 
         var names = new ProcessNames();
+        var details = new ProcessDetails();
+        details.Refresh();
         var gate = new Lock();
 
         // Touched only under `gate`: the ETW callbacks run on the session thread, the publish
         // timer on another.
         var coreCounts = new Dictionary<string, int>[cores];
         for (int i = 0; i < cores; i++) coreCounts[i] = new Dictionary<string, int>(16);
+        // Samples per PID per core, to find the single process that owns each core (for its detail).
+        var pidCounts = new Dictionary<int, int>[cores];
+        for (int i = 0; i < cores; i++) pidCounts[i] = new Dictionary<int, int>(16);
+        var dominantPid = new int[cores];
         var netRx = new Dictionary<string, long>(32);
         var netTx = new Dictionary<string, long>(32);
         long windowStart = Stopwatch.GetTimestamp();
@@ -94,7 +122,7 @@ internal static class Program
         void Net(Dictionary<string, long> map, int pid, int size)
         {
             Interlocked.Increment(ref netEvents);
-            string name = names.Get(pid);
+            string name = names.GetDisplay(pid);
             lock (gate) map[name] = map.GetValueOrDefault(name) + size;
         }
 
@@ -114,11 +142,13 @@ internal static class Program
                 Interlocked.Increment(ref perfSamples);
                 int cpu = d.ProcessorNumber;
                 if ((uint)cpu >= (uint)cores) { Interlocked.Increment(ref droppedSamples); return; }
-                string name = names.Get(d.ProcessID);
+                string name = names.GetDisplay(d.ProcessID);
                 lock (gate)
                 {
                     var map = coreCounts[cpu];
                     map[name] = map.GetValueOrDefault(name) + 1;
+                    var pmap = pidCounts[cpu];
+                    pmap[d.ProcessID] = pmap.GetValueOrDefault(d.ProcessID) + 1;
                 }
             };
 
@@ -131,6 +161,12 @@ internal static class Program
 
         var snapshot = default(EtwSnapshot);
         long published = 0;
+
+        // Running peak clock per physical core, to derive the best/second-best (highest-boosting)
+        // cores. Persisted across launches and never reset: the CPPC preferred cores are fixed, so
+        // the accumulated peaks converge on them and the star stops jumping each run (like HWiNFO,
+        // which reads the static CPPC ranking directly — we can't, so we learn it from the peaks).
+        var corePeak = CorePeakStore.Load();
 
         using var publish = new Timer(_ =>
         {
@@ -147,9 +183,31 @@ internal static class Program
                 FillCores(ref snapshot, coreCounts, cores);
                 FillNet(ref snapshot, netRx, netTx, seconds);
 
+                // The PID that owns most of each core's samples — its detail goes in the tooltip.
+                for (int i = 0; i < cores; i++)
+                {
+                    int top = 0, topN = 0;
+                    foreach (var kv in pidCounts[i]) if (kv.Value > topN) { topN = kv.Value; top = kv.Key; }
+                    dominantPid[i] = top;
+                    pidCounts[i].Clear();
+                }
+
                 foreach (var m in coreCounts) m.Clear();
                 netRx.Clear();
                 netTx.Clear();
+            }
+
+            // Resolve the dominant PIDs' parent + command line outside the gate (WMI is slow-ish).
+            for (int i = 0; i < cores; i++)
+                NameField.Set(ref snapshot.CoreDetail[i], details.Detail(dominantPid[i]));
+
+            // Consent can arrive after we start (first-run: UI shows the EULA while we're already
+            // up). Poll the marker and open the SDK the moment the user accepts — no helper restart.
+            if (awaitingConsent && ConsentMarker.AmdSdkAccepted)
+            {
+                awaitingConsent = false;
+                ryzen = RyzenSdk.TryOpen(out string? lateErr);
+                Console.WriteLine($"AMD Ryzen SDK: EULA aceptada -> {(ryzen is not null ? "abierto" : $"no disponible - {lateErr}")}");
             }
 
             // AMD CPU sensors read outside the gate (the SDK has its own locking).
@@ -158,7 +216,36 @@ internal static class Program
                 snapshot.CpuSdkOk = 1;
                 snapshot.CpuTempC = rm.TempC;
                 snapshot.CpuPackageW = rm.PackageW;
-                snapshot.CpuFmaxMhz = rm.FmaxMhz;
+                // Best-core current clock from the SDK's per-core dCurrentFreq — the real boost clock
+                // (reaches ~5040), which Windows' averaged % Processor Performance never catches.
+                double bestCur = 0;
+                for (int i = 0; i < rm.CoreCount && i < 16; i++) bestCur = Math.Max(bestCur, rm.CoreFreqMhz[i]);
+                snapshot.CpuBestFreqMhz = (float)bestCur;
+                snapshot.CpuVidV = rm.VidV;
+                snapshot.CpuTjMaxC = rm.TjMaxC;
+                snapshot.CpuPptPct = rm.PptPct;
+                snapshot.CpuTdcPct = rm.TdcPct;
+                snapshot.CpuEdcPct = rm.EdcPct;
+                snapshot.CpuPhysicalCores = rm.CoreCount;
+                int ntemp = Math.Min(rm.CoreCount, 16);
+                for (int i = 0; i < ntemp; i++) snapshot.CpuCoreTempsC[i] = (float)rm.CoreTempC[i];
+                // C0 residency is indexed by physical core (uncompacted in the shim), so fill all 16.
+                for (int i = 0; i < 16; i++) snapshot.CpuCoreC0Pct[i] = (float)rm.CoreC0Pct[i];
+
+                // Best / second-best physical core = the two with the highest peak clock. The SDK
+                // doesn't expose the CPPC ranking, but tracking peaks converges to the same cores.
+                int nc = Math.Min(rm.CoreCount, corePeak.Length);
+                for (int i = 0; i < nc; i++)
+                    // Cap out glitches (a stray 6+ GHz reading would pin the star to a wrong core forever).
+                    if (rm.CoreFreqMhz[i] > corePeak[i] && rm.CoreFreqMhz[i] < 6000) corePeak[i] = rm.CoreFreqMhz[i];
+                int best = -1, second = -1;
+                for (int i = 0; i < nc; i++)
+                {
+                    if (best < 0 || corePeak[i] > corePeak[best]) { second = best; best = i; }
+                    else if (second < 0 || corePeak[i] > corePeak[second]) second = i;
+                }
+                snapshot.CpuBestCore = best;
+                snapshot.CpuSecondCore = second;
             }
             else snapshot.CpuSdkOk = 0;
 
@@ -166,6 +253,11 @@ internal static class Program
 
             writer.Publish(snapshot);
             published++;
+
+            // Re-read the SCM (svchost→service) and the WMI process details every ~20 windows so
+            // late-started processes get picked up. Cheap, and off the sample hot path.
+            if (published % 20 == 0) { names.RefreshServices(); details.Refresh(); }
+            if (published % 60 == 0) CorePeakStore.Save(corePeak);   // persist the learned best-core peaks
 
             if (verbose)
             {
@@ -223,6 +315,7 @@ internal static class Program
             if (!quit) { restarts++; Console.WriteLine($"--- sesion recreada (#{restarts}) ---"); }
         }
 
+        CorePeakStore.Save(corePeak);
         ryzen?.Dispose();
         writer.Dispose();
         Console.WriteLine($"Parado tras {published} publicaciones, {restarts} reinicios de sesion.");
@@ -306,5 +399,42 @@ internal static class Program
     {
         string? a = args.FirstOrDefault(x => x.StartsWith(prefix, StringComparison.Ordinal));
         return a is not null && int.TryParse(a[prefix.Length..], out int v) ? v : fallback;
+    }
+}
+
+/// <summary>
+/// Persists the per-physical-core peak clocks so the best/second-core ranking survives restarts and
+/// converges on the fixed CPPC preferred cores, instead of being re-learned (and jumping) each run.
+/// </summary>
+internal static class CorePeakStore
+{
+    private static string Path => System.IO.Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SidebarMonitor", "corepeak.dat");
+
+    public static double[] Load()
+    {
+        var a = new double[16];
+        try
+        {
+            if (File.Exists(Path))
+            {
+                var parts = File.ReadAllText(Path).Split(',', StringSplitOptions.RemoveEmptyEntries);
+                for (int i = 0; i < a.Length && i < parts.Length; i++)
+                    if (double.TryParse(parts[i], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double v) && v > 0 && v < 6000)
+                        a[i] = v;
+            }
+        }
+        catch { /* first run or unreadable */ }
+        return a;
+    }
+
+    public static void Save(double[] peak)
+    {
+        try
+        {
+            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Path)!);
+            File.WriteAllText(Path, string.Join(",", peak.Select(v => v.ToString("F1", System.Globalization.CultureInfo.InvariantCulture))));
+        }
+        catch { /* non-fatal */ }
     }
 }

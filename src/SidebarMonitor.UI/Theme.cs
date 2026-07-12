@@ -1,5 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Markup;
 using System.Windows.Media;
 
 namespace SidebarMonitor.UI;
@@ -54,20 +56,43 @@ internal static class Theme
 
     private static readonly Dictionary<int, Color> CoreColorCache = [];
 
+    /// <summary>Active per-core colour preset: 0 rainbow, 1 high-contrast, 2 cool, 3 warm, 4 pastel.</summary>
+    public static int CorePalette { get; private set; }
+
+    /// <summary>Switch the per-core palette and drop the caches so every core widget recolours. The
+    /// widgets that cache pens/brushes (CoreSparkline, CoreGrid) reset separately; CoreRows reads
+    /// CoreBrush live and only needs an InvalidateVisual.</summary>
+    public static void SetCorePalette(int id)
+    {
+        if (id == CorePalette) return;
+        CorePalette = id;
+        CoreColorCache.Clear();   // CoreBrush derives from CoreColor, so this recolours everything
+    }
+
     /// <summary>
     /// A distinct colour per core index. 16 cores are 16 forced categories that cannot fold into
-    /// "other", so this is a legitimate generated ramp: an evenly-spaced HSL wheel, stepped for
-    /// the dark surface. Adjacent cores land 22° apart on the wheel, clearly distinguishable.
-    /// The offset keeps core 0 off pure red so it never reads as a status colour.
+    /// "other", so this is a legitimate generated ramp. Five presets trade off identity vs harmony:
+    /// an even HSL wheel (rainbow), a golden-angle spread (max contrast between neighbours), and
+    /// hue-limited cool/warm/pastel schemes. The offset keeps core 0 off pure red (a status colour).
     /// </summary>
     public static Color CoreColor(int index)
     {
         if (CoreColorCache.TryGetValue(index, out var cached)) return cached;
-        double hue = (index * 360.0 / 16.0 + 25) % 360;
-        var c = FromHsl(hue, 0.68, 0.62);
+        double alt = index % 2 == 0 ? 0 : 1;   // small lightness alternation to separate neighbours
+        Color c = CorePalette switch
+        {
+            1 => FromHsl((index * 137.5 + 25) % 360, 0.72, 0.55 + alt * 0.12),          // high-contrast (golden angle)
+            2 => FromHsl(180 + index * 120.0 / 15.0, 0.58, 0.60 + alt * 0.06),          // cool: cyan→blue→violet
+            3 => FromHsl((300 + index * 150.0 / 15.0) % 360, 0.66, 0.58 + alt * 0.06),  // warm: magenta→red→orange→yellow
+            4 => FromHsl((index * 360.0 / 16.0 + 25) % 360, 0.42, 0.72),                // pastel
+            _ => FromHsl((index * 360.0 / 16.0 + 25) % 360, 0.68, 0.62),                // rainbow (default)
+        };
         CoreColorCache[index] = c;
         return c;
     }
+
+    /// <summary>Friendly names for the palette picker.</summary>
+    public static readonly string[] CorePaletteNames = ["Arcoíris", "Contraste", "Fríos", "Cálidos", "Pastel"];
 
     public static Brush CoreBrush(int index) => SeriesBrush(CoreColor(index));
 
@@ -119,6 +144,48 @@ internal static class Theme
     public static readonly FontFamily Ui = new("Segoe UI");
     public static readonly FontFamily Mono = new("Consolas");
 
+    /// <summary>
+    /// A slim dark scrollbar (translucent rounded thumb, no arrow buttons, transparent track) to
+    /// replace the classic grey Windows one, which clashes with the dark surface. Parsed from XAML
+    /// once — a full ScrollBar template is impractical to hand-build with FrameworkElementFactory.
+    /// Add it to a ScrollViewer/window's Resources keyed by typeof(ScrollBar) so it applies implicitly.
+    /// </summary>
+    public static Style DarkScrollBar()
+    {
+        const string xaml =
+            "<Style xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'" +
+            "       xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' TargetType='ScrollBar'>" +
+            "  <Setter Property='Background' Value='Transparent'/>" +
+            "  <Setter Property='Width' Value='11'/>" +
+            "  <Setter Property='Template'>" +
+            "    <Setter.Value>" +
+            "      <ControlTemplate TargetType='ScrollBar'>" +
+            "        <Grid Background='Transparent'>" +
+            "          <Track Name='PART_Track' IsDirectionReversed='True'>" +
+            "            <Track.DecreaseRepeatButton>" +
+            "              <RepeatButton Command='ScrollBar.PageUpCommand' Opacity='0' Focusable='False'/>" +
+            "            </Track.DecreaseRepeatButton>" +
+            "            <Track.Thumb>" +
+            "              <Thumb>" +
+            "                <Thumb.Template>" +
+            "                  <ControlTemplate TargetType='Thumb'>" +
+            "                    <Border CornerRadius='4' Background='#40FFFFFF' Margin='3,2,3,2'/>" +
+            "                  </ControlTemplate>" +
+            "                </Thumb.Template>" +
+            "              </Thumb>" +
+            "            </Track.Thumb>" +
+            "            <Track.IncreaseRepeatButton>" +
+            "              <RepeatButton Command='ScrollBar.PageDownCommand' Opacity='0' Focusable='False'/>" +
+            "            </Track.IncreaseRepeatButton>" +
+            "          </Track>" +
+            "        </Grid>" +
+            "      </ControlTemplate>" +
+            "    </Setter.Value>" +
+            "  </Setter>" +
+            "</Style>";
+        return (Style)XamlReader.Parse(xaml);
+    }
+
     public static Brush Freeze(string hex)
     {
         var b = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
@@ -133,6 +200,77 @@ internal static class Theme
         return b;
     }
 
+    /// <summary>
+    /// A tooltip styled to match the panel: dark rounded surface, subtle border, soft shadow, mono
+    /// face so columns line up. The wrong-monitor placement bug was fixed at the source (pinning the
+    /// popup's PlacementTarget), so the transparent look is safe again.
+    /// </summary>
+    public static ToolTip MakeToolTip()
+    {
+        var border = new FrameworkElementFactory(typeof(Border));
+        // Bind the fill to the ToolTip's own Background (set to the shared TooltipBg below). Putting
+        // the brush directly in the template would seal-freeze it, and then its Opacity couldn't be
+        // retuned at runtime. Via the tooltip's Background property it stays mutable and shared.
+        border.SetBinding(Border.BackgroundProperty, new System.Windows.Data.Binding
+        {
+            Path = new PropertyPath(Control.BackgroundProperty),
+            RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.TemplatedParent),
+        });
+        border.SetValue(Border.BorderBrushProperty, Freeze("#66FFFFFF"));
+        border.SetValue(Border.BorderThicknessProperty, new Thickness(1));
+        border.SetValue(Border.CornerRadiusProperty, new CornerRadius(6));
+        border.SetValue(Border.PaddingProperty, new Thickness(10, 7, 10, 8));
+        border.SetValue(FrameworkElement.MarginProperty, new Thickness(6));   // room for the shadow
+        border.SetValue(UIElement.EffectProperty, new System.Windows.Media.Effects.DropShadowEffect
+        {
+            BlurRadius = 12,
+            ShadowDepth = 2,
+            Direction = 270,
+            Opacity = 0.5,
+            Color = Colors.Black,
+        });
+
+        var content = new FrameworkElementFactory(typeof(ContentPresenter));
+        border.AppendChild(content);
+
+        var template = new ControlTemplate(typeof(ToolTip)) { VisualTree = border };
+
+        return new ToolTip
+        {
+            OverridesDefaultStyle = true,
+            HasDropShadow = true,   // transparent popup for the rounded corners + shadow
+            Template = template,
+            Background = TooltipBg,   // shared, mutable → opacity is configurable at runtime
+            Foreground = InkSecondary,
+            FontFamily = Mono,
+            FontSize = 11.5,
+            Padding = new Thickness(0),
+        };
+    }
+
+    /// <summary>Shared tooltip background. Deliberately NOT frozen: changing its Opacity retunes
+    /// the translucency of every tooltip at once. Default 0.85; the menu adjusts it.</summary>
+    public static readonly SolidColorBrush TooltipBg =
+        new((Color)ColorConverter.ConvertFromString("#201F1D")) { Opacity = 0.85 };
+
+    // ---- Structured tooltip content: a bold header over a mono body. ----
+
+    /// <summary>A blank TextBlock configured for tooltip content (mono, so columns align).</summary>
+    public static TextBlock TipBlock() =>
+        new() { FontFamily = Mono, FontSize = 11.5, Foreground = InkSecondary };
+
+    /// <summary>Bold, bright header run (the headline number/label).</summary>
+    public static System.Windows.Documents.Run TipHead(string s) =>
+        new(s) { FontWeight = FontWeights.Bold, Foreground = InkPrimary };
+
+    /// <summary>Recessive run for secondary text (the "hace N s", units, etc.).</summary>
+    public static System.Windows.Documents.Run TipDim(string s) =>
+        new(s) { Foreground = InkMuted };
+
+    /// <summary>A run in an arbitrary colour (e.g. the best-core star).</summary>
+    public static System.Windows.Documents.Run TipColor(string s, Brush brush) =>
+        new(s) { Foreground = brush, FontWeight = FontWeights.Bold };
+
     public static TextBlock Text(string text, double size, Brush brush, bool mono = false) => new()
     {
         Text = text,
@@ -141,21 +279,30 @@ internal static class Theme
         FontFamily = mono ? Mono : Ui,
     };
 
-    public static string Bytes(double bytesPerSec)
+    /// <summary>Rate in KiB/MiB/GiB (binary, 1024) or KB/MB/GB (decimal, 1000), per the caller.</summary>
+    public static string Bytes(double bytesPerSec, bool binary = true)
     {
-        const double K = 1024, M = K * 1024, G = M * 1024;
-        return bytesPerSec >= G ? $"{bytesPerSec / G:F2} GiB/s"
-             : bytesPerSec >= M ? $"{bytesPerSec / M:F1} MiB/s"
-             : $"{bytesPerSec / K:F1} KiB/s";
+        double k = binary ? 1024 : 1000, m = k * k, g = m * k;
+        (string ku, string mu, string gu) = binary ? ("KiB", "MiB", "GiB") : ("KB", "MB", "GB");
+        return bytesPerSec >= g ? $"{bytesPerSec / g:F2} {gu}/s"
+             : bytesPerSec >= m ? $"{bytesPerSec / m:F1} {mu}/s"
+             : $"{bytesPerSec / k:F1} {ku}/s";
     }
 
-    public static string BytesShort(double bytesPerSec)
+    public static string BytesShort(double bytesPerSec, bool binary = true)
     {
-        const double K = 1024, M = K * 1024, G = M * 1024;
-        return bytesPerSec >= G ? $"{bytesPerSec / G:F1}G"
-             : bytesPerSec >= M ? $"{bytesPerSec / M:F1}M"
-             : $"{bytesPerSec / K:F0}K";
+        double k = binary ? 1024 : 1000, m = k * k, g = m * k;
+        return bytesPerSec >= g ? $"{bytesPerSec / g:F1}G"
+             : bytesPerSec >= m ? $"{bytesPerSec / m:F1}M"
+             : $"{bytesPerSec / k:F0}K";
     }
 
     public static string Gib(ulong bytes) => $"{bytes / (1024.0 * 1024 * 1024):F1}";
+
+    /// <summary>Memory size number in GiB (binary, 1024) or GB (decimal, 1000), per the flag.</summary>
+    public static string MemVal(ulong bytes, bool binary) =>
+        (bytes / (binary ? 1024.0 * 1024 * 1024 : 1000.0 * 1000 * 1000)).ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>The matching unit label for <see cref="MemVal"/>.</summary>
+    public static string MemUnit(bool binary) => binary ? "GiB" : "GB";
 }

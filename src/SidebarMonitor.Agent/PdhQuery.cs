@@ -53,6 +53,7 @@ internal sealed class PdhQuery : IDisposable
     private readonly IntPtr _cpuTotal, _cpuPerf, _cpuPerfPerCore, _cpuFreq, _cpuPerCore;
     private readonly IntPtr _committed;
     private readonly IntPtr _diskRead, _diskWrite, _diskQueue, _diskIdle;
+    private readonly IntPtr _gpuEngine;
 
     public PdhQuery()
     {
@@ -73,6 +74,11 @@ internal sealed class PdhQuery : IDisposable
         // Task Manager's "Active time" is 100 - % Idle Time. "% Disk Time" is not it: it counts
         // queued requests and routinely reads far above 100 %.
         _diskIdle = Add(@"\PhysicalDisk(*)\% Idle Time");
+
+        // Per-process, per-engine GPU utilisation. Instances are "pid_N_..._engtype_3D" etc.;
+        // aggregating them tells us what the GPU is doing and who's driving it. Absent on machines
+        // without the GPU counter set — then it just returns nothing.
+        _gpuEngine = Add(@"\GPU Engine(*)\Utilization Percentage");
 
         PdhCollectQueryData(_query);   // rate counters need a baseline
     }
@@ -127,10 +133,13 @@ internal sealed class PdhQuery : IDisposable
     }
 
     public List<InstanceSample> CpuPerCore() => Array(_cpuPerCore);
+    /// <summary>Per-core "% Processor Performance"; × nominal / 100 gives each core's clock.</summary>
+    public List<InstanceSample> CpuPerCorePerf() => Array(_cpuPerfPerCore);
     public List<InstanceSample> DiskRead() => Array(_diskRead);
     public List<InstanceSample> DiskWrite() => Array(_diskWrite);
     public List<InstanceSample> DiskQueue() => Array(_diskQueue);
     public List<InstanceSample> DiskIdle() => Array(_diskIdle);
+    public List<InstanceSample> GpuEngine() => Array(_gpuEngine);
 
     private static double Scalar(IntPtr counter, bool cap = true)
     {

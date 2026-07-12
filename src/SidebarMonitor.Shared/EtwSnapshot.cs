@@ -7,7 +7,7 @@ public static class EtwLayout
 {
     /// <summary>'SBME' little-endian.</summary>
     public const uint Signature = 0x454D4253;
-    public const uint Version = 1;
+    public const uint Version = 8;
     public const string MapName = @"Local\SidebarMonitor.Etw";
 
     /// <summary>Segments drawn per core bar. Beyond this, the rest folds into "otros".</summary>
@@ -62,6 +62,11 @@ public struct EtwSnapshot
     /// <summary>Non-idle sample count per core; 0 means "no data, do not colour".</summary>
     public CoreSampleArray CoreSamples;
 
+    /// <summary>Per core, the parent + command line of the PID owning most of its samples. Only the
+    /// elevated helper can read the command line of system processes (svchost), so it fills this for
+    /// the UI's core tooltip. Empty when unknown.</summary>
+    public CoreDetailArray CoreDetail;
+
     public int NetProcCount;
     public NetProcArray NetProcs;
 
@@ -71,7 +76,33 @@ public struct EtwSnapshot
     public byte CpuSdkOk;
     public double CpuTempC;
     public float CpuPackageW;
-    public float CpuFmaxMhz;
+    /// <summary>Best-core current clock (MHz) straight from the AMD SDK's per-core dCurrentFreq — the
+    /// actual boost clock HWiNFO shows (reaches ~5040 on a 7800X3D). Windows' % Processor Performance
+    /// averages the sample and undershoots the brief single-core boost, so the agent prefers this.</summary>
+    public float CpuBestFreqMhz;
+
+    /// <summary>Average core voltage (Vcore / VID), volts. 0 = not read.</summary>
+    public float CpuVidV;
+    /// <summary>Thermal limit (cHTC), °C — the temperature the CPU throttles at. 0 = unknown.</summary>
+    public float CpuTjMaxC;
+    /// <summary>Limit utilisation (HWiNFO's "Limits"): PPT power, TDC/EDC current, as % of cap.</summary>
+    public float CpuPptPct, CpuTdcPct, CpuEdcPct;
+    /// <summary>Cores that boost highest (derived from observed peak clock), as PHYSICAL core
+    /// indices. -1 = unknown. The UI maps them onto its logical rows via CpuPhysicalCores.</summary>
+    public int CpuBestCore;
+    public int CpuSecondCore;
+    /// <summary>Physical core count the SDK reports (8 for a 7800X3D), so the UI can map a physical
+    /// best-core index onto its logical (SMT) rows. 0 = unknown.</summary>
+    public int CpuPhysicalCores;
+
+    /// <summary>Per-PHYSICAL-core temperature (°C) from the AMD SDK. The agent maps these onto the
+    /// logical rows. NaN/0 when unavailable.</summary>
+    public PhysCoreTempArray CpuCoreTempsC;
+
+    /// <summary>Per-PHYSICAL-core C0 (active) state residency %, from the AMD SDK (dState): how much
+    /// of the sample the core was awake. ~0 = parked/asleep — the "Sleep" state Ryzen Master shows.
+    /// The agent maps these onto the logical rows. -1 when unavailable.</summary>
+    public PhysCoreTempArray CpuCoreC0Pct;
 
     /// <summary>Drive temperatures (°C) by physical disk number, from the storage stack (admin).
     /// NaN = unknown. Covers the SATA disks the agent's unelevated NVMe path can't reach, closing
@@ -82,6 +113,8 @@ public struct EtwSnapshot
 [InlineArray(SnapshotLayout.MaxDisks)] public struct DiskTempArray { private float _element0; }
 
 [InlineArray(SnapshotLayout.MaxCores)] public struct CoreSampleArray { private int _element0; }
+[InlineArray(16)] public struct PhysCoreTempArray { private float _element0; }   // AMD SDK caps at 16 physical cores
+[InlineArray(SnapshotLayout.MaxCores)] public struct CoreDetailArray { private Name160 _element0; }
 
 public static class EtwChannel
 {

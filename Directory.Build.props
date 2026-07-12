@@ -9,6 +9,18 @@
     <AnalysisLevel>latest</AnalysisLevel>
   </PropertyGroup>
 
+  <!-- Product identity, stamped into every assembly's version resource so the exes read as one
+       product (icon, company, copyright) in Explorer and Task Manager. -->
+  <PropertyGroup>
+    <Product>SidebarMonitor</Product>
+    <Company>Rubén Arbós</Company>
+    <Authors>Rubén Arbós</Authors>
+    <Copyright>© 2026 Rubén Arbós</Copyright>
+    <Version>1.2.0</Version>
+    <FileVersion>1.2.0.0</FileVersion>
+    <AssemblyVersion>1.2.0.0</AssemblyVersion>
+  </PropertyGroup>
+
   <!--
     The probes are console tools. The agent that replaces them is meant to publish
     with PublishAot, so keep the code AOT-clean from the start: DllImport is fine,

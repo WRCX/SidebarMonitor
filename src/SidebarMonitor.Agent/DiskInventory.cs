@@ -135,10 +135,13 @@ internal static class DiskInventory
         return (string.Join(" / ", labels), string.Join(" · ", summary), count);
     }
 
-    /// <summary>Compact storage size: 293G, 1.6T. Invariant (the agent runs globalization-invariant).</summary>
+    /// <summary>Compact storage size: 293G, 1.6T. DECIMAL (SI) on purpose — storage is marketed and
+    /// labelled in decimal (a "2 TB" drive = 2×10^12 B ≈ 1.8 TiB), so decimal matches the number on
+    /// the box and the physical-size line. (RAM is the opposite: modules are inherently binary.)
+    /// Invariant, since the agent runs globalization-invariant.</summary>
     private static string Short(ulong bytes)
     {
-        const double G = 1024.0 * 1024 * 1024, T = G * 1024;
+        const double G = 1_000_000_000.0, T = 1_000_000_000_000.0;
         return bytes >= T
             ? (bytes / T).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "T"
             : (bytes / G).ToString("0", System.Globalization.CultureInfo.InvariantCulture) + "G";

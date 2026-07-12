@@ -1,4 +1,5 @@
 using Microsoft.Diagnostics.Tracing.Parsers.Kernel;
+using SidebarMonitor.Shared;
 
 namespace SidebarMonitor.Etw;
 
@@ -12,11 +13,26 @@ namespace SidebarMonitor.Etw;
 internal sealed class ProcessNames
 {
     private readonly Dictionary<int, string> _byPid = new(512);
+    private readonly Dictionary<int, string> _display = new(512);   // base name expanded (svchost:svc)
+    private readonly ServiceMap _services = new();
 
     public ProcessNames()
     {
         _byPid[0] = "Idle";
         _byPid[4] = "System";
+        // ETW attributes samples taken in interrupt / DPC context to PID -1 (no owning process).
+        // That's the CPU spent in hardware interrupts and driver deferred work — Task Manager's
+        // "System interrupts". Naming it here stops it showing up as the raw "pid -1".
+        _byPid[-1] = "Interrupciones";
+        RefreshServices();
+    }
+
+    /// <summary>Re-reads the SCM so svchost PIDs resolve to their service, and drops the display
+    /// cache so late-started services get picked up. Cheap; call it periodically.</summary>
+    public void RefreshServices()
+    {
+        _services.Refresh();
+        _display.Clear();
     }
 
     public void OnStart(ProcessTraceData d) => _byPid[d.ProcessID] = Clean(d.ProcessName, d.ImageFileName);
@@ -33,6 +49,18 @@ internal sealed class ProcessNames
         try { using var p = System.Diagnostics.Process.GetProcessById(pid); name = p.ProcessName; }
         catch { name = $"pid {pid}"; }
         return _byPid[pid] = name;
+    }
+
+    /// <summary>The name to display and group by: like <see cref="Get"/>, but a generic service host
+    /// (svchost) is expanded to the service it runs — "svchost:Dhcp" — so different svchosts read as
+    /// different owners instead of one anonymous "svchost".</summary>
+    public string GetDisplay(int pid)
+    {
+        if (_display.TryGetValue(pid, out string? d)) return d;
+        string name = Get(pid);
+        if (name.Equals("svchost", StringComparison.OrdinalIgnoreCase) && _services.Label(pid) is { } svc)
+            name = "svchost:" + svc;
+        return _display[pid] = name;
     }
 
     private static string Clean(string processName, string imageFileName)

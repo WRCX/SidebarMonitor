@@ -1,9 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-
-  <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <RootNamespace>HwiProbe</RootNamespace>
-    <AssemblyName>HwiProbe</AssemblyName>
-  </PropertyGroup>
-
-</Project>

@@ -35,6 +35,10 @@ internal sealed class Processes : IDisposable
     public int TotalProcesses { get; private set; }
     public int TotalThreads { get; private set; }
 
+    /// <summary>Process name for a pid from the last enumeration, or null. Used to name the top GPU
+    /// process, whose pid comes from a different (GPU) counter.</summary>
+    public string? NameFor(int pid) => _previous.TryGetValue(pid, out var p) ? p.Name : null;
+
     public readonly record struct TopRow(string Name, int Pid, float CpuPct, ulong WorkingSet, int Threads, int Instances);
 
     /// <summary>

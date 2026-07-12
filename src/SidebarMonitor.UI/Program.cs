@@ -11,6 +11,17 @@ internal static class Program
         if (args.Contains("--dump") || args.Any(a => a.StartsWith("--shot=")))
             Native.AttachToParentConsole();
 
+        // Preview the first-run notice in isolation (QA/screenshots), then exit. --firstrun-preview
+        // shows the AMD EULA branch; --firstrun-preview=intel forces the Intel notice.
+        string? previewArg = args.FirstOrDefault(a => a.StartsWith("--firstrun-preview"));
+        if (previewArg is not null)
+        {
+            var previewApp = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+            string which = previewArg.Contains('=') ? previewArg[(previewArg.IndexOf('=') + 1)..] : "amd";
+            FirstRunDialog.Preview(which);
+            return 0;
+        }
+
         var cfg = UiConfig.Load();
 
         // Command-line overrides are for debugging. Applying one makes the config ephemeral, so
@@ -19,9 +30,18 @@ internal static class Program
         if (IntArg(args, "--width=", -1) is var w and > 0) { cfg.Width = w; cfg.Ephemeral = true; }
         if (args.Contains("--left")) { cfg.EdgeLeft = true; cfg.Ephemeral = true; }
         if (args.Contains("--floating")) { cfg.Docked = false; cfg.Ephemeral = true; }
+        if (args.Contains("--no-reserve")) { cfg.ReserveSpace = false; cfg.Ephemeral = true; }
         if (args.Contains("--minimized")) { cfg.Minimized = true; cfg.Ephemeral = true; }
-        if (args.Contains("--cpu-cores")) { cfg.CpuPerCoreGraph = true; cfg.Ephemeral = true; }
-        if (args.Contains("--cpu-process")) { cfg.CpuPerCoreGraph = false; cfg.Ephemeral = true; }
+        if (args.Contains("--cpu-cores")) { cfg.CpuGraphMode = 1; cfg.Ephemeral = true; }
+        if (args.Contains("--cpu-grid")) { cfg.CpuGraphMode = 2; cfg.Ephemeral = true; }
+        if (args.Contains("--core-temp")) { cfg.ShowCoreTemp = true; cfg.Ephemeral = true; }
+        if (args.Contains("--cpu-process")) { cfg.CpuGraphMode = 0; cfg.Ephemeral = true; }
+        if (args.Contains("--show-vid")) { cfg.ShowCpuVid = true; cfg.Ephemeral = true; }
+        if (args.Contains("--show-limits")) { cfg.ShowCpuLimits = true; cfg.Ephemeral = true; }
+        if (args.Contains("--verbose")) { cfg.LogVerbose = true; cfg.Ephemeral = true; }
+        if (args.Contains("--csv")) { cfg.LogCsv = true; cfg.Ephemeral = true; }
+        if (IntArg(args, "--cpu-name=", -1) is var cn and >= 0) { cfg.CpuNameMode = cn; cfg.Ephemeral = true; }
+        if (IntArg(args, "--gpu-name=", -1) is var gn and >= 0) { cfg.GpuNameMode = gn; cfg.Ephemeral = true; }
 
         int seconds = IntArg(args, "--seconds=", 0);          // 0 = run until closed
         string? shot = args.FirstOrDefault(a => a.StartsWith("--shot="))?["--shot=".Length..];
@@ -30,6 +50,12 @@ internal static class Program
         if (cfg.Monitor >= monitors.Count) cfg.Monitor = monitors.Count - 1;
 
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+
+        // First-run platform notice (AMD EULA / Intel ring0). Skipped for automated/timed runs and
+        // for throwaway debug runs so nothing blocks on a modal dialog; --no-firstrun forces skip.
+        if (seconds == 0 && !cfg.Ephemeral && !args.Contains("--no-firstrun"))
+            FirstRunDialog.EnsureShown(cfg);
+
         var win = new MainWindow(cfg, monitors);
 
         TrayIcon? tray = null;
@@ -70,6 +96,8 @@ internal static class Program
                 timer.Start();
             };
         }
+
+        if (args.Contains("--settings")) win.Loaded += (_, _) => win.OpenSettings();
 
         win.Show();
         app.Run();

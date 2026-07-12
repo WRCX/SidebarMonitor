@@ -21,6 +21,12 @@ internal sealed class RyzenSdk : IDisposable
         public int CoreCount;
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)] public double[] CoreFreqMhz;
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)] public double[] CoreTempC;
+        public float VidV;        // average core voltage (Vcore / VID)
+        public float TjMaxC;      // thermal limit (cHTC) — the throttle temperature
+        public float PptPct;      // PPT usage as % of limit
+        public float TdcPct;      // TDC usage as % of limit
+        public float EdcPct;      // EDC usage as % of limit
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)] public double[] CoreC0Pct;   // per-physical-core C0 residency %
     }
 
     [DllImport("RyzenShim.dll")] private static extern int RmOpen();

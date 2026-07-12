@@ -60,20 +60,24 @@ internal static class Program
         using (var pdh = new PdhQuery())
         using (var procs = new Processes())
         {
-            var hwi = HwiSensors.TryOpen(out string? hwiError);
             var nvml = Nvml.TryOpen(out string? nvmlError);
+
+            // The physical adapters (discrete + iGPU) with their LUIDs, so the GPU Engine counter can
+            // be split per GPU. Enumerated once — adapters don't come and go during a session.
+            var gpuAdapters = GpuAdapters.Enumerate(SnapshotLayout.MaxGpus);
 
             // Disk identity never changes while we run; a single collect gives us the instances.
             pdh.Collect();
             var inventory = DiskInventory.Enumerate(pdh.DiskRead().Select(d => d.Instance));
 
-            // NVMe drive temperature we read ourselves (unelevated), no HWiNFO. SATA still needs
-            // HWiNFO (ATA pass-through wants admin).
+            // NVMe drive temperature we read ourselves, unelevated. SATA temps and CPU temp/power
+            // come from the elevated helper. No HWiNFO anywhere.
             using var diskTemps = new DiskTemps(inventory.Where(kv => kv.Value.Bus == "NVMe").Select(kv => kv.Key));
 
             Console.WriteLine($"Agente en marcha. {SnapshotLayout.MapName}, {writer.SizeBytes} B, cada {intervalMs} ms.");
-            Console.WriteLine($"  HWiNFO: {(hwi is not null ? $"OK ({hwi.CpuName})" : $"no disponible - {hwiError}")}");
+            Console.WriteLine($"  CPU:    {CpuNameString}");
             Console.WriteLine($"  NVML:   {(nvml is not null ? $"OK ({nvml.Count} GPU)" : $"no disponible - {nvmlError}")}");
+            Console.WriteLine($"  GPUs:   {(gpuAdapters.Count > 0 ? string.Join(", ", gpuAdapters.Select(a => $"{a.Name}{(a.Integrated ? " [iGPU]" : "")}")) : "D3DKMT sin adaptadores (fallback NVML)")}");
             Console.WriteLine($"  Discos: {inventory.Count} identificados");
             foreach (var (idx, id) in inventory.OrderBy(kv => kv.Key))
                 Console.WriteLine($"          [{idx}] {id.Label,-18} {id.Model,-24} {id.Media,-7} {id.Bus,-6} {id.SizeBytes / 1e12:F2} TB");
@@ -102,16 +106,9 @@ internal static class Program
             // The elevated helper is optional and can come and go. Re-probe periodically instead
             // of deciding once at startup.
             SeqLockReader<EtwSnapshot>? etw = EtwChannel.TryOpenReader(out _);
-            Console.WriteLine($"  ETW:    {(etw is not null ? "OK (helper elevado presente)" : "no disponible - lanza SidebarMonitor.Etw para colores por proceso")}");
+            Console.WriteLine($"  ETW:    {(etw is not null ? "OK (helper elevado presente)" : "no disponible - lanza SidebarMonitor.Etw para CPU temp/vatios y colores por proceso")}");
             Console.WriteLine();
             long lastEtwProbe = Stopwatch.GetTimestamp();
-
-            // HWiNFO's SHM can freeze (the free build disables it after 12 h) or be replaced (a
-            // restart makes a new mapping). Track poll_time; when it stalls, the readings are stale
-            // and periodically re-open in case HWiNFO came back with a fresh object and new indices.
-            long lastPoll = hwi?.PollTime ?? 0;
-            long lastPollChange = Stopwatch.GetTimestamp();
-            long lastHwiReopen = Stopwatch.GetTimestamp();
 
             while (!quit.IsSet)
             {
@@ -124,40 +121,13 @@ internal static class Program
                     if (etw is not null) Console.WriteLine("ETW: helper detectado.");
                 }
 
-                // Is HWiNFO still updating? poll_time not advancing for >8 s means frozen.
-                bool hwiLive = false;
-                if (hwi is not null)
-                {
-                    long poll = hwi.PollTime;
-                    if (poll != lastPoll) { lastPoll = poll; lastPollChange = Stopwatch.GetTimestamp(); }
-                    hwiLive = Stopwatch.GetElapsedTime(lastPollChange).TotalSeconds < 8;
-                }
-
-                // Frozen or absent: try re-opening every 15 s. Catches HWiNFO restarting (new SHM
-                // object, new reading order) and the user re-enabling Shared Memory Support.
-                if ((hwi is null || !hwiLive) && Stopwatch.GetElapsedTime(lastHwiReopen).TotalSeconds >= 15)
-                {
-                    lastHwiReopen = Stopwatch.GetTimestamp();
-                    var fresh = HwiSensors.TryOpen(out _);
-                    if (fresh is not null)
-                    {
-                        hwi?.Dispose();
-                        hwi = fresh;
-                        lastPoll = hwi.PollTime;
-                        lastPollChange = Stopwatch.GetTimestamp();
-                        hwiLive = false;   // confirmed live only once poll_time advances
-                    }
-                }
-
                 pdh.Collect();
                 snapshot.TimestampUtcTicks = DateTime.UtcNow.Ticks;
                 snapshot.SampleIntervalSec = intervalMs / 1000.0;
-                snapshot.HwiNfoAvailable = hwi is not null;
-                snapshot.HwiNfoLive = hwiLive;
 
-                FillCpu(ref snapshot.Cpu, pdh, hwiLive ? hwi : null);
+                FillCpu(ref snapshot.Cpu, pdh);
                 FillMem(ref snapshot.Mem, pdh);
-                FillGpus(ref snapshot, nvml);
+                FillGpus(ref snapshot, nvml, gpuAdapters, pdh, procs);
                 FillDisks(ref snapshot, pdh, inventory, diskTemps, etwDiskTemps);
 
                 // Adapters come and go (VPN up, dock unplugged); rescanning every tick is wasteful.
@@ -190,7 +160,6 @@ internal static class Program
 
             Console.WriteLine();
             Console.WriteLine($"Parado tras {ticks} ticks. Peor muestreo: {worstMs:F2} ms.");
-            hwi?.Dispose();
             nvml?.Dispose();
         }
 
@@ -223,23 +192,54 @@ internal static class Program
 
         s.CoreOwners = e.Cores;
         s.CoreOwnerSamples = e.CoreSamples;
+        s.CoreDetail = e.CoreDetail;
         s.NetProcCount = e.NetProcCount;
         s.NetProcs = e.NetProcs;
         s.EtwAvailable = true;
 
-        // AMD SDK CPU sensors override HWiNFO's when present: they don't have the 12 h freeze and
-        // work with HVCI. FreqBest stays PDH-derived (the SDK Fmax is the boost bin, not live).
+        // CPU temp and package power come solely from the AMD SDK (via the helper): it works with
+        // HVCI. FreqBest stays PDH-derived (the SDK Fmax is the boost bin, not the live clock).
         if (e.CpuSdkOk != 0)
         {
             s.Cpu.TempC = (float)e.CpuTempC;
             s.Cpu.PackagePowerW = e.CpuPackageW;
+            s.Cpu.VidV = e.CpuVidV;
+            s.Cpu.TjMaxC = e.CpuTjMaxC;
+            // "GHz máx" = the highest current core clock from either source: the SDK's best-core
+            // dCurrentFreq catches the real single-core boost (~5040) that PDH's averaged % Processor
+            // Performance smooths away, while the max() keeps it from ever reading below the per-core
+            // rows (which are PDH) at an instant the SDK sampled lower.
+            if (e.CpuBestFreqMhz > 0) s.Cpu.FreqBestMhz = Math.Max(s.Cpu.FreqBestMhz, e.CpuBestFreqMhz);
+            s.Cpu.PptPct = e.CpuPptPct;
+            s.Cpu.TdcPct = e.CpuTdcPct;
+            s.Cpu.EdcPct = e.CpuEdcPct;
+            s.Cpu.BestCore = e.CpuBestCore;
+            s.Cpu.SecondCore = e.CpuSecondCore;
+            s.Cpu.PhysicalCores = e.CpuPhysicalCores;
+
+            // Map the SDK's per-PHYSICAL-core temps onto the logical rows (both SMT siblings share
+            // their physical core's temperature).
+            int phys = e.CpuPhysicalCores;
+            int tpc = phys > 0 ? Math.Max(1, s.Cpu.CoreCount / phys) : 1;
+            for (int i = 0; i < s.Cpu.CoreCount && i < SnapshotLayout.MaxCores; i++)
+            {
+                int p = phys > 0 ? Math.Min(phys - 1, i / tpc) : i;
+                s.Cpu.CoreTempC[i] = e.CpuCoreTempsC[p];
+                // C0 residency maps the same way: both SMT siblings inherit the physical core's
+                // awake-fraction, so a parked physical core shows both its logical rows asleep.
+                s.Cpu.CoreC0Pct[i] = e.CpuCoreC0Pct[p];
+            }
+
             s.CpuFromAmd = true;
+        }
+        else
+        {
+            s.Cpu.BestCore = s.Cpu.SecondCore = -1;
         }
         return etw;
     }
 
-    // The processor name string, read once from the registry — authoritative and unelevated, so
-    // the CPU name never depends on HWiNFO either.
+    // The processor name string, read once from the registry — authoritative and unelevated.
     private static readonly string CpuNameString = ReadCpuName();
 
     private static string ReadCpuName()
@@ -253,15 +253,23 @@ internal static class Program
         catch { return "CPU"; }
     }
 
-    private static void FillCpu(ref CpuInfo cpu, PdhQuery pdh, HwiSensors? hwi)
+    private static void FillCpu(ref CpuInfo cpu, PdhQuery pdh)
     {
         NameField.Set(ref cpu.Name, CpuNameString);
         cpu.TotalUsagePct = Clamp100(pdh.CpuTotalPct);
         cpu.FreqBestMhz = (float)pdh.CpuFrequencyMhz(CpuFreqMode.Best);
         cpu.FreqMeanMhz = (float)pdh.CpuFrequencyMhz(CpuFreqMode.Mean);
         cpu.FreqMedianMhz = (float)pdh.CpuFrequencyMhz(CpuFreqMode.Median);
-        cpu.PackagePowerW = (float)(hwi?.PackagePowerW ?? double.NaN);
-        cpu.TempC = (float)(hwi?.CpuTempC ?? double.NaN);
+        // Temp, power, voltage, Tjmax and the best-core ranking come from the AMD SDK in MergeEtw;
+        // default to "unknown" so a missing helper never leaves a stale star or reading on screen.
+        cpu.PackagePowerW = float.NaN;
+        cpu.TempC = float.NaN;
+        cpu.VidV = 0;
+        cpu.TjMaxC = 0;
+        cpu.LimitMhz = 0;
+        cpu.PptPct = cpu.TdcPct = cpu.EdcPct = 0;
+        cpu.BestCore = cpu.SecondCore = -1;
+        cpu.PhysicalCores = 0;
 
         int n = 0;
         foreach (var s in pdh.CpuPerCore())
@@ -272,6 +280,20 @@ internal static class Program
             cpu.CoreUsagePct[n++] = Clamp100(s.Value);
         }
         cpu.CoreCount = n;
+
+        // Per-core clock = nominal × that core's % Processor Performance. Same instance order as
+        // the usage counter above (same PDH object), so the index lines up with CoreUsagePct.
+        double nominal = pdh.NominalMhz;
+        int f = 0;
+        foreach (var s in pdh.CpuPerCorePerf())
+        {
+            if (s.Instance.Contains("_Total", StringComparison.Ordinal)) continue;
+            if (f >= SnapshotLayout.MaxCores) break;
+            cpu.CoreFreqMhz[f++] = double.IsNaN(s.Value) || double.IsNaN(nominal) ? float.NaN : (float)(nominal * s.Value / 100.0);
+        }
+
+        // Per-core temp and C0 residency come from the AMD SDK in MergeEtw; sentinel until mapped in.
+        for (int i = 0; i < SnapshotLayout.MaxCores; i++) { cpu.CoreTempC[i] = float.NaN; cpu.CoreC0Pct[i] = -1f; }
     }
 
     /// <summary>
@@ -294,10 +316,152 @@ internal static class Program
         mem.CommitUsed = (ulong)Math.Max(0, pdh.CommittedBytes);
     }
 
-    private static void FillGpus(ref Snapshot s, Nvml? nvml)
+    /// <summary>
+    /// Builds the GPU list from the vendor-neutral D3DKMT adapters (both the discrete card and the
+    /// iGPU), attaching NVML's rich telemetry to the NVIDIA one and deriving the rest from the GPU
+    /// Engine counter. Falls back to NVML-only, single GPU, if adapter enumeration came up empty.
+    /// </summary>
+    private static void FillGpus(ref Snapshot s, Nvml? nvml, List<GpuAdapters.Adapter> adapters, PdhQuery pdh, Processes procs)
     {
-        s.GpuCount = nvml?.Count ?? 0;
-        for (int i = 0; i < s.GpuCount; i++) nvml!.Fill(i, ref s.Gpus[i]);
+        if (adapters.Count == 0)
+        {
+            s.GpuCount = nvml?.Count ?? 0;
+            for (int i = 0; i < s.GpuCount; i++)
+            {
+                s.Gpus[i] = default;
+                nvml!.Fill(i, ref s.Gpus[i]);
+                s.Gpus[i].HasDetail = 1;
+            }
+            FillEngines(ref s, pdh, procs, adapters);
+            return;
+        }
+
+        s.GpuCount = adapters.Count;
+        int nvmlNext = 0;
+        for (int i = 0; i < adapters.Count; i++)
+        {
+            ref var g = ref s.Gpus[i];
+            g = default;
+            var a = adapters[i];
+
+            bool isNvidia = a.Name.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase);
+            if (isNvidia && nvml is not null && nvmlNext < nvml.Count)
+            {
+                nvml.Fill(nvmlNext++, ref g);   // NVML fills the name and every telemetry field
+                g.HasDetail = 1;
+            }
+            else
+            {
+                NameField.Set(ref g.Name, a.Name);
+                g.LoadPct = float.NaN;   // derived from the engines below
+                g.TempC = g.PowerW = float.NaN;
+                g.HasDetail = 0;
+            }
+            g.IsIntegrated = (byte)(a.Integrated ? 1 : 0);
+        }
+
+        FillEngines(ref s, pdh, procs, adapters);
+    }
+
+    /// <summary>
+    /// What each GPU is doing and who's driving it, from the "GPU Engine" counter. Every instance is
+    /// "pid_&lt;n&gt;_luid_0x&lt;hi&gt;_0x&lt;lo&gt;_..._engtype_&lt;type&gt;". We route each sample to the GPU whose
+    /// LUID matches, fold the engtype into a curated slot, and track the busiest process per GPU. An
+    /// adapter with no NVML load (the iGPU) takes its utilisation from its busiest engine.
+    /// </summary>
+    private static void FillEngines(ref Snapshot s, PdhQuery pdh, Processes procs, List<GpuAdapters.Adapter> adapters)
+    {
+        if (s.GpuCount == 0) return;
+        var eng = pdh.GpuEngine();
+        if (eng.Count == 0) return;
+
+        var byPid = new Dictionary<int, float>[s.GpuCount];
+        for (int i = 0; i < s.GpuCount; i++) byPid[i] = new Dictionary<int, float>(16);
+
+        foreach (var item in eng)
+        {
+            if (double.IsNaN(item.Value) || item.Value <= 0) continue;
+            int gi = GpuIndexForInstance(item.Instance, adapters, s.GpuCount);
+            if (gi < 0) continue;
+
+            float v = (float)item.Value;
+            int slot = EngSlot(EngType(item.Instance));
+            ref var g = ref s.Gpus[gi];
+            g.Engines[slot] = Math.Min(100, g.Engines[slot] + v);
+
+            int pid = EngPid(item.Instance);
+            if (pid > 0) byPid[gi][pid] = byPid[gi].GetValueOrDefault(pid) + v;
+        }
+
+        for (int i = 0; i < s.GpuCount; i++)
+        {
+            ref var g = ref s.Gpus[i];
+            int topPid = 0; float topV = 0;
+            foreach (var kv in byPid[i]) if (kv.Value > topV) { topV = kv.Value; topPid = kv.Key; }
+            NameField.Set(ref g.TopProc, topPid > 0 ? procs.NameFor(topPid) ?? string.Empty : string.Empty);
+            g.TopProcPct = Math.Min(100, topV);
+
+            if (g.HasDetail == 0)
+            {
+                float max = 0;
+                for (int e = 0; e < GpuEngines.Count; e++) max = Math.Max(max, g.Engines[e]);
+                g.LoadPct = max;
+            }
+        }
+    }
+
+    /// <summary>Which GPU (index into s.Gpus) a "GPU Engine" instance belongs to, matched by LUID.
+    /// With no adapter list (fallback), everything folds into GPU 0. -1 = no match.</summary>
+    private static int GpuIndexForInstance(string inst, List<GpuAdapters.Adapter> adapters, int gpuCount)
+    {
+        if (adapters.Count == 0) return 0;
+
+        int k = inst.IndexOf("luid_", StringComparison.Ordinal);
+        if (k < 0) return -1;
+        k += 5;
+        int end = inst.IndexOf("_phys", k, StringComparison.Ordinal);
+        ReadOnlySpan<char> luid = end < 0 ? inst.AsSpan(k) : inst.AsSpan(k, end - k);   // "0xHIGH_0xLOW"
+        int us = luid.IndexOf('_');
+        if (us < 0) return -1;
+        if (!TryHex(luid[..us], out uint high) || !TryHex(luid[(us + 1)..], out uint low)) return -1;
+
+        for (int i = 0; i < gpuCount && i < adapters.Count; i++)
+            if (adapters[i].LuidLow == low && (uint)adapters[i].LuidHigh == high) return i;
+        return -1;
+    }
+
+    private static bool TryHex(ReadOnlySpan<char> s, out uint value)
+    {
+        if (s.StartsWith("0x") || s.StartsWith("0X")) s = s[2..];
+        return uint.TryParse(s, System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out value);
+    }
+
+    private static int EngSlot(string engtype) => engtype.ToLowerInvariant() switch
+    {
+        "3d" => GpuEngines.Idx3D,
+        "compute" => GpuEngines.IdxCompute,
+        "videodecode" => GpuEngines.IdxDecode,
+        "videoencode" => GpuEngines.IdxEncode,
+        "video" => GpuEngines.IdxVideo,
+        "copy" => GpuEngines.IdxCopy,
+        "vr" => GpuEngines.IdxVR,
+        _ => GpuEngines.IdxOther,   // high, timer, security, legacyoverlay, ofa_*, …
+    };
+
+    private static int EngPid(string inst)
+    {
+        int i = inst.IndexOf("pid_", StringComparison.Ordinal);
+        if (i < 0) return 0;
+        i += 4;
+        int j = i;
+        while (j < inst.Length && char.IsAsciiDigit(inst[j])) j++;
+        return int.TryParse(inst.AsSpan(i, j - i), out int p) ? p : 0;
+    }
+
+    private static string EngType(string inst)
+    {
+        int i = inst.IndexOf("engtype_", StringComparison.Ordinal);
+        return i < 0 ? "" : inst[(i + 8)..];
     }
 
     private static void FillDisks(ref Snapshot s, PdhQuery pdh, Dictionary<int, DiskIdentity> inventory, DiskTemps diskTemps, float[] helperTemps)

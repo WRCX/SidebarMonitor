@@ -25,6 +25,12 @@ struct RmCpu
     int    CoreCount;
     double CoreFreqMhz[16];
     double CoreTempC[16];
+    float  VidV;           // average core voltage (Vcore / VID)
+    float  TjMaxC;         // thermal limit (cHTC), i.e. the throttle temperature
+    float  PptPct;         // PPT (package power) usage as % of its limit
+    float  TdcPct;         // TDC (sustained current) usage as % of its limit
+    float  EdcPct;         // EDC (peak current) usage as % of its limit
+    double CoreC0Pct[16];  // per-PHYSICAL-core C0 (active) state residency %; ~0 = parked/asleep
 };
 #pragma pack(pop)
 
@@ -33,6 +39,19 @@ static IPlatform* g_platform = nullptr;
 static ICPUEx* g_cpu = nullptr;
 
 typedef IPlatform& (*GetPlatformFunc)();
+
+// The directory this shim DLL itself lives in — where the installer drops the bundled SDK DLLs.
+static std::wstring SelfDir()
+{
+    HMODULE self = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       (LPCWSTR)&SelfDir, &self);
+    wchar_t path[MAX_PATH] = {0};
+    GetModuleFileNameW(self, path, MAX_PATH);
+    std::wstring p = path;
+    size_t slash = p.find_last_of(L"\\/");
+    return slash == std::wstring::npos ? std::wstring(L".") : p.substr(0, slash);
+}
 
 // Reads the SDK install dir from the registry, exactly like AMD's sample, so we do not hardcode.
 static std::wstring SdkBin()
@@ -50,14 +69,24 @@ static std::wstring SdkBin()
     return p + L"bin";
 }
 
+static bool FileExists(const std::wstring& p)
+{
+    return GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES;
+}
+
 // 0 on success, negative on failure.
 __declspec(dllexport) int RmOpen()
 {
     if (g_cpu) return 0;
 
-    std::wstring bin = SdkBin();
-    SetDllDirectoryW(bin.c_str());   // resolve Platform.dll's dependencies from the SDK bin
-    g_dll = LoadLibraryW(L"Platform.dll");
+    // Prefer the DLLs the installer bundled next to us (fully standalone, no SDK install needed);
+    // fall back to the installed SDK's bin only if they are not here.
+    std::wstring self = SelfDir();
+    std::wstring dir = FileExists(self + L"\\Platform.dll") ? self : SdkBin();
+
+    SetDllDirectoryW(dir.c_str());   // so Platform.dll's own dependencies (Device.dll, ...) resolve
+    std::wstring platformPath = dir + L"\\Platform.dll";
+    g_dll = LoadLibraryW(platformPath.c_str());
     if (!g_dll) return -1;
 
     GetPlatformFunc gp = (GetPlatformFunc)GetProcAddress(g_dll, "GetPlatform");
@@ -85,6 +114,8 @@ __declspec(dllexport) int RmRead(RmCpu* out)
     out->PackageLimitW = p.fPPTLimit;
     out->FmaxMhz = p.fCCLK_Fmax;
     out->PeakSpeedMhz = p.dPeakSpeed;
+    out->VidV = (float)p.dAvgCoreVoltage;
+    out->TjMaxC = p.fcHTCLimit;
 
     int n = 0;
     unsigned len = p.stFreqData.uLength;
@@ -97,6 +128,19 @@ __declspec(dllexport) int RmRead(RmCpu* out)
         n++;
     }
     out->CoreCount = n;
+
+    // C0 residency by PHYSICAL core index (not compacted): a parked core keeps its slot and reports
+    // ~0, which is exactly the "Sleep" state Ryzen Master shows. dState is the SDK's C0 State
+    // Residency % — how much of the sample the core was actually awake.
+    for (unsigned i = 0; i < len && i < 16; i++)
+        out->CoreC0Pct[i] = p.stFreqData.dState ? p.stFreqData.dState[i] : 0.0;
+
+    // Limit utilisation, exactly what HWiNFO's "Limits" group shows: how close each cap is to
+    // being hit. FmaxMhz above is the global frequency limit; these are power and current.
+    out->PptPct = p.fPPTLimit     > 0.0f ? p.fPPTValue     / p.fPPTLimit     * 100.0f : 0.0f;
+    out->TdcPct = p.fTDCLimit_VDD > 0.0f ? p.fTDCValue_VDD / p.fTDCLimit_VDD * 100.0f : 0.0f;
+    out->EdcPct = p.fEDCLimit_VDD > 0.0f ? p.fEDCValue_VDD / p.fEDCLimit_VDD * 100.0f : 0.0f;
+
     return 0;
 }
 

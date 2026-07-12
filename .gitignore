@@ -10,3 +10,8 @@ native/**/*.dll
 native/**/*.obj
 native/**/*.lib
 native/**/*.exp
+
+# Vendored AMD SDK + VC runtime redistributables (fetch.ps1 populates these; never commit them)
+native/RyzenSdk/*.sys
+native/RyzenSdk/*.inf
+native/RyzenSdk/*.cat

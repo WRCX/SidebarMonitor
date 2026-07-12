@@ -6,6 +6,8 @@
     <AssemblyName>SidebarMonitor.Etw</AssemblyName>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\..\assets\icon.ico</ApplicationIcon>
+    <AssemblyTitle>SidebarMonitor (helper)</AssemblyTitle>
 
     <!-- TraceEvent uses reflection, so this helper cannot be AOT. That is one more reason it
          lives in its own process instead of inside the agent, which stays AOT and unelevated. -->
@@ -23,6 +25,13 @@
        Copied next to the helper so its P/Invoke resolves it. Absent = the SDK path is skipped. -->
   <ItemGroup Condition="Exists('..\..\native\RyzenShim\RyzenShim.dll')">
     <None Include="..\..\native\RyzenShim\RyzenShim.dll" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- The bundled SDK DLLs + driver + VC runtime (populated by native/RyzenSdk/fetch.ps1). When
+       present, RyzenShim loads Platform.dll from right here, so the helper needs no SDK install. -->
+  <ItemGroup>
+    <None Include="..\..\native\RyzenSdk\*.dll;..\..\native\RyzenSdk\AMDRyzenMasterDriver.*"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

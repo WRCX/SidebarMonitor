@@ -10,7 +10,7 @@ public static class SnapshotLayout
     public const uint Signature = 0x4E4D4253;
 
     /// <summary>Bump on any layout change. The reader refuses anything it does not know.</summary>
-    public const uint Version = 9;
+    public const uint Version = 20;
 
     /// <summary>
     /// Local\, not Global\. Creating a Global\ kernel object requires SeCreateGlobalPrivilege,
@@ -33,6 +33,20 @@ public static class SnapshotLayout
 [InlineArray(32)] public struct Name32 { private byte _element0; }
 [InlineArray(64)] public struct Name64 { private byte _element0; }
 [InlineArray(160)] public struct Name160 { private byte _element0; }
+
+/// <summary>
+/// GPU engine slots, in display order. The "GPU Engine" counter reports a dozen raw engtypes; we
+/// fold them into this curated set (everything unlisted lands in <c>Otros</c>). Names and count are
+/// shared so the agent's mapping and the UI's labels never drift apart.
+/// </summary>
+public static class GpuEngines
+{
+    public const int Count = 8;
+    public const int Idx3D = 0, IdxCompute = 1, IdxDecode = 2, IdxEncode = 3,
+                     IdxVideo = 4, IdxCopy = 5, IdxVR = 6, IdxOther = 7;
+    public static readonly string[] Names = ["3D", "Compute", "Decode", "Encode", "Vídeo", "Copy", "VR", "Otros"];
+}
+[InlineArray(GpuEngines.Count)] public struct GpuEngArray { private float _element0; }
 [InlineArray(SnapshotLayout.MaxCores)] public struct CoreUsageArray { private float _element0; }
 [InlineArray(SnapshotLayout.MaxGpus)] public struct GpuArray { private GpuInfo _element0; }
 [InlineArray(SnapshotLayout.MaxNics)] public struct NicArray { private NicInfo _element0; }
@@ -51,9 +65,33 @@ public struct CpuInfo
     public float FreqBestMhz;
     public float FreqMeanMhz;
     public float FreqMedianMhz;
-    public float PackagePowerW;   // NaN when HWiNFO is not available
-    public float TempC;           // NaN when HWiNFO is not available
-    public int CoreCount;
+    public float PackagePowerW;   // NaN until the AMD SDK (via the elevated helper) fills it
+    public float TempC;           // NaN until the AMD SDK (via the elevated helper) fills it
+    public int CoreCount;         // logical processors (PDH), i.e. with SMT
+    /// <summary>Per-logical-core clock in MHz (nominal × % Processor Performance). NaN if unknown.</summary>
+    public CoreUsageArray CoreFreqMhz;
+    /// <summary>Per-logical-core temperature (°C) from the AMD SDK, mapped from physical cores (both
+    /// SMT siblings share the physical core's temp). NaN if unavailable.</summary>
+    public CoreUsageArray CoreTempC;
+    /// <summary>Per-logical-core C0 (active) residency %, from the AMD SDK, mapped from physical cores.
+    /// ~0 = the core is parked/asleep (Ryzen Master's "Sleep"). -1 if unavailable.</summary>
+    public CoreUsageArray CoreC0Pct;
+
+    // ---- From the AMD SDK (via the elevated helper); 0/NaN/-1 when it is not running ----
+    /// <summary>Average core voltage (Vcore / VID), volts.</summary>
+    public float VidV;
+    /// <summary>Thermal limit (cHTC), °C — the temperature the CPU throttles at.</summary>
+    public float TjMaxC;
+    /// <summary>Dynamic global frequency limit, MHz (HWiNFO's "Límite de frecuencia: Global"): the
+    /// current max boost the CPU allows, which drops under all-core load. Not the static rated cap.</summary>
+    public float LimitMhz;
+    /// <summary>Limit utilisation (HWiNFO's "Limits"): PPT power, TDC/EDC current, as % of cap.</summary>
+    public float PptPct, TdcPct, EdcPct;
+    /// <summary>Highest-boosting cores, as PHYSICAL indices. -1 = unknown.</summary>
+    public int BestCore, SecondCore;
+    /// <summary>Physical core count, to map a physical best-core index onto the logical rows.</summary>
+    public int PhysicalCores;
+
     public CoreUsageArray CoreUsagePct;
 }
 
@@ -71,6 +109,20 @@ public struct GpuInfo
     public float LoadPct, MemControllerPct, TempC, PowerW;
     public uint CoreClockMhz, MemClockMhz, FanPct, PcieWidth;
     public ulong VramUsed, VramTotal;
+
+    /// <summary>Per-engine GPU utilisation (%), indexed by <see cref="GpuEngines"/>: what the GPU is
+    /// actually doing — 3D, compute/ML, video decode/encode, generic video, DMA copy, VR, other.</summary>
+    public GpuEngArray Engines;
+    /// <summary>The process driving this GPU the most, and its total GPU utilisation %.</summary>
+    public Name32 TopProc;
+    public float TopProcPct;
+
+    /// <summary>1 for an integrated GPU (Ryzen/Intel iGPU), 0 for a discrete card.</summary>
+    public byte IsIntegrated;
+    /// <summary>1 when the rich telemetry (temp/power/fan/clocks/VRAM) is real — i.e. NVML filled it.
+    /// 0 for adapters we only see through the vendor-neutral counters (the AMD iGPU), whose stat
+    /// row the UI then omits.</summary>
+    public byte HasDetail;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -106,7 +158,8 @@ public struct DiskInfo
     public byte VolumeCount;
     /// <summary>USB / removable, virtual (WSL/Hyper-V vHD), or the disk holding the Windows volume.</summary>
     public byte IsRemovable, IsVirtual, IsSystem;
-    /// <summary>From HWiNFO's S.M.A.R.T. sensors; NaN when unavailable.</summary>
+    /// <summary>S.M.A.R.T. drive temperature: NVMe via our own unelevated IOCTL, SATA via the
+    /// elevated helper's storage-stack read. NaN when neither can read it.</summary>
     public float TempC;
     public ulong SizeBytes;
     public double ReadBytesPerSec, WriteBytesPerSec, QueueLength;
@@ -144,14 +197,8 @@ public struct Snapshot
     public int TotalProcesses;
     public int TotalThreads;
 
-    /// <summary>HWiNFO's shared memory is mapped.</summary>
-    public bool HwiNfoAvailable;
-    /// <summary>...and its poll_time is advancing. False = frozen (the free build disables SHM
-    /// after 12 h). When false, every HWiNFO-sourced value is stale and shown as "—".</summary>
-    public bool HwiNfoLive;
-
-    /// <summary>CPU temp/power came from the AMD Ryzen Master SDK (via the elevated helper), not
-    /// HWiNFO. When true the panel needs no HWiNFO at all for the CPU.</summary>
+    /// <summary>CPU temp/power came from the AMD Ryzen Master SDK (via the elevated helper). False
+    /// means the helper is not running or its SDK read failed, so temp/power show "—".</summary>
     public bool CpuFromAmd;
 
     // ---- Only populated when the elevated ETW helper is running ----
@@ -163,6 +210,10 @@ public struct Snapshot
 
     /// <summary>Zero means "no attribution for this core"; do not colour it.</summary>
     public CoreSampleArray CoreOwnerSamples;
+
+    /// <summary>Per core, the parent + command line of the dominant process (from the helper, which
+    /// as an elevated process can read even svchost's command line). Shown in the core tooltip.</summary>
+    public CoreDetailArray CoreDetail;
 
     public int NetProcCount;
     public NetProcArray NetProcs;

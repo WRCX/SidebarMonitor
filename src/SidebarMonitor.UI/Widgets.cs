@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using SidebarMonitor.Shared;
@@ -56,7 +57,7 @@ internal sealed class Sparkline : FrameworkElement
     private readonly Color? _colorB;
 
     private double _hoverX = -1;
-    private readonly ToolTip _tip = new() { Placement = System.Windows.Controls.Primitives.PlacementMode.Relative };
+    private readonly ToolTip _tip = Theme.MakeToolTip();
 
     /// <summary>0 = autoscale. A fixed value pins the top of the axis to it (used for %, 0..100).</summary>
     public double FixedMax { get; init; }
@@ -104,6 +105,11 @@ internal sealed class Sparkline : FrameworkElement
             _fillB = MakeFill(b);
         }
 
+        // Opening the tooltip manually (IsOpen=true) skips the WPF machinery that would set the
+        // PlacementTarget, so without this the popup can't tell which monitor it's on and lands on
+        // the primary one until the next mouse move nudges it. Pinning the target fixes the origin.
+        _tip.PlacementTarget = this;
+        _tip.Placement = System.Windows.Controls.Primitives.PlacementMode.Relative;
         ToolTip = _tip;
         ToolTipService.SetInitialShowDelay(this, 100);
         ToolTipService.SetBetweenShowDelay(this, 0);
@@ -146,11 +152,26 @@ internal sealed class Sparkline : FrameworkElement
 
         double ago = (_count - 1 - i) * SecondsPerSample;
         string when = ago < 0.5 ? "ahora" : $"hace {ago:F0} s";
-        string body = _b is null
-            ? $"{Format(_a[i])}"
-            : $"{(LabelA.Length > 0 ? LabelA + " " : "")}{Format(_a[i])}\n{(LabelB.Length > 0 ? LabelB + " " : "")}{Format(_b[i])}";
 
-        _tip.Content = $"{when}\n{body}";
+        var tb = Theme.TipBlock();
+        if (_b is null)
+        {
+            tb.Inlines.Add(Theme.TipHead(Format(_a[i])));
+            tb.Inlines.Add(new LineBreak());
+            tb.Inlines.Add(Theme.TipDim(when));
+        }
+        else
+        {
+            tb.Inlines.Add(Theme.TipDim(when));
+            tb.Inlines.Add(new LineBreak());
+            if (LabelA.Length > 0) tb.Inlines.Add(new Run(LabelA + " "));
+            tb.Inlines.Add(Theme.TipHead(Format(_a[i])));
+            tb.Inlines.Add(new LineBreak());
+            if (LabelB.Length > 0) tb.Inlines.Add(new Run(LabelB + " "));
+            tb.Inlines.Add(Theme.TipHead(Format(_b[i])));
+        }
+
+        _tip.Content = tb;
         _tip.HorizontalOffset = _hoverX + 12;
         _tip.VerticalOffset = 4;
         _tip.IsOpen = true;
@@ -311,9 +332,15 @@ internal sealed class CoreSparkline : FrameworkElement
     private double _lo, _hi;
     private bool _boundsInit;
 
+    private double _hoverX = -1;
+    private readonly ToolTip _tip = Theme.MakeToolTip();
+
     /// <summary>Fit the shared axis to the busiest and quietest core in the window, so 16 low
     /// cores spread across the height instead of hugging the baseline. Off = fixed 0..100.</summary>
     public bool AutoScale { get; set; } = true;
+
+    /// <summary>Sample spacing, for the hover tooltip's "hace N s".</summary>
+    public double SecondsPerSample { get; set; } = 1;
 
     public CoreSparkline(double height = 48)
     {
@@ -323,6 +350,73 @@ internal sealed class CoreSparkline : FrameworkElement
         _totalPen = new Pen(Theme.InkPrimary, 2)
         { LineJoin = PenLineJoin.Round, StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
         _totalPen.Freeze();
+
+        // See the Sparkline note: a manually-opened tooltip needs its PlacementTarget pinned or the
+        // popup lands on the primary monitor until the next mouse move repositions it.
+        _tip.PlacementTarget = this;
+        _tip.Placement = System.Windows.Controls.Primitives.PlacementMode.Relative;
+        ToolTip = _tip;
+        ToolTipService.SetInitialShowDelay(this, 100);
+        ToolTipService.SetBetweenShowDelay(this, 0);
+    }
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        _hoverX = e.GetPosition(this).X;
+        UpdateTip();
+        InvalidateVisual();
+    }
+
+    protected override void OnMouseLeave(MouseEventArgs e)
+    {
+        _hoverX = -1;
+        _tip.IsOpen = false;
+        InvalidateVisual();
+    }
+
+    private int HoverIndex(double w)
+    {
+        if (_hoverX < 0 || _count < 2) return -1;
+        double dx = w / (Capacity - 1);
+        double x0 = w - (_count - 1) * dx;
+        int i = (int)Math.Round((_hoverX - x0) / dx);
+        return Math.Clamp(i, 0, _count - 1);
+    }
+
+    /// <summary>Test hook: place the crosshair without a real mouse, for screenshot verification.</summary>
+    public void ForceHover(double fraction)
+    {
+        _hoverX = ActualWidth * fraction;
+        UpdateTip();
+        InvalidateVisual();
+    }
+
+    /// <summary>The whole point the user asked for: the total AND every core's % at that instant.</summary>
+    private void UpdateTip()
+    {
+        int i = HoverIndex(ActualWidth);
+        if (i < 0) { _tip.IsOpen = false; return; }
+
+        double ago = (_count - 1 - i) * SecondsPerSample;
+        string when = ago < 0.5 ? "ahora" : $"hace {ago:F0} s";
+        string Pct(float v) => v.ToString("F0", CultureInfo.InvariantCulture);
+
+        var tb = Theme.TipBlock();
+        tb.Inlines.Add(Theme.TipHead(string.Create(CultureInfo.InvariantCulture, $"Total {Pct(_total[i])}%")));
+        tb.Inlines.Add(Theme.TipDim($"   {when}"));
+        for (int c = 0; c < _coreCount; c++)
+        {
+            // New row every four cores (also before core 0, dropping down from the header). Fixed
+            // widths (index 2, value 3) so with the mono font the columns line up like a table.
+            if (c % 4 == 0) tb.Inlines.Add(new LineBreak());
+            else tb.Inlines.Add(new Run("  "));
+            tb.Inlines.Add(new Run(string.Create(CultureInfo.InvariantCulture, $"{c,2} {Pct(_cores[c][i]),3}%")));
+        }
+
+        _tip.Content = tb;
+        _tip.HorizontalOffset = _hoverX + 12;
+        _tip.VerticalOffset = 4;
+        _tip.IsOpen = true;
     }
 
     private Pen CorePen(int index)
@@ -335,6 +429,9 @@ internal sealed class CoreSparkline : FrameworkElement
         }
         return _corePens[index];
     }
+
+    /// <summary>Drop the cached per-core pens so they rebuild against a newly-selected colour palette.</summary>
+    public void ResetColors() { _corePens.Clear(); InvalidateVisual(); }
 
     public void Push(ref Snapshot s)
     {
@@ -374,6 +471,27 @@ internal sealed class CoreSparkline : FrameworkElement
         DrawLine(dc, _total, lo, hi, w, h, _totalPen);   // white, on top
 
         AxisLabels.Draw(dc, this, lo, hi, w, h, v => v.ToString("F0", CultureInfo.InvariantCulture) + " %");
+
+        int hoverIdx = HoverIndex(w);
+        if (hoverIdx >= 0)
+        {
+            double dx = w / (Capacity - 1);
+            double x = w - (_count - 1) * dx + hoverIdx * dx;
+            dc.DrawLine(new Pen(Theme.Grid, 1), new Point(x, 0), new Point(x, h));
+            // A dot per core in its own colour, then the total on top in white — the visual echo of
+            // the tooltip's numbers, so you can read the spread at a glance.
+            for (int c = 0; c < _coreCount; c++)
+                dc.DrawEllipse(Theme.Surface, new Pen(Theme.CoreBrush(c), 1.5),
+                    new Point(x, YAt(_cores[c][hoverIdx], lo, hi, h)), 2.0, 2.0);
+            dc.DrawEllipse(Theme.Surface, new Pen(Theme.InkPrimary, 2),
+                new Point(x, YAt(_total[hoverIdx], lo, hi, h)), 3.0, 3.0);
+        }
+    }
+
+    private static double YAt(float v, double lo, double hi, double h)
+    {
+        double span = hi - lo;
+        return h - 1 - Math.Clamp(span > 1e-9 ? (v - lo) / span : 0, 0, 1) * (h - 5);
     }
 
     private void ComputeBounds(out double lo, out double hi)
@@ -455,6 +573,7 @@ internal sealed class Section : StackPanel
     public UIElement Body { get; }
     private readonly TextBlock _arrow;
     private readonly TextBlock _summary;
+    private readonly System.Windows.Documents.Run _titleSuffix;
     public event Action? StateChanged;
 
     public Section(string key, string title, UIElement body)
@@ -468,8 +587,16 @@ internal sealed class Section : StackPanel
         _summary = Theme.Text("", 11, Theme.InkSecondary, mono: true);
         _summary.HorizontalAlignment = HorizontalAlignment.Right;
 
-        var titleBlock = Theme.Text(title, 11, Theme.InkPrimary);
+        var titleBlock = Theme.Text("", 11, Theme.InkPrimary);
         titleBlock.FontWeight = FontWeights.SemiBold;
+        titleBlock.Inlines.Add(new System.Windows.Documents.Run(title));
+        // A dimmer, lighter run after the title for an optional model name ("CPU  Ryzen 7 7800X3D").
+        _titleSuffix = new System.Windows.Documents.Run("")
+        {
+            Foreground = Theme.InkMuted,
+            FontWeight = FontWeights.Normal,
+        };
+        titleBlock.Inlines.Add(_titleSuffix);
 
         var headerGrid = new Grid { Margin = new Thickness(8, 5, 8, 3) };
         headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -504,4 +631,8 @@ internal sealed class Section : StackPanel
     }
 
     public void SetSummary(string text) => _summary.Text = text;
+
+    /// <summary>Optional model name shown, dimmed, right after the section title. "" clears it.</summary>
+    public void SetTitleSuffix(string text) =>
+        _titleSuffix.Text = string.IsNullOrEmpty(text) ? "" : "   " + text;
 }

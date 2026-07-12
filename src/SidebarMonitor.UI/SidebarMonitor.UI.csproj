@@ -11,6 +11,9 @@
     <RootNamespace>SidebarMonitor.UI</RootNamespace>
     <AssemblyName>SidebarMonitor.UI</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\..\assets\icon.ico</ApplicationIcon>
+    <!-- Shown as the friendly name in Task Manager's Processes tab. -->
+    <AssemblyTitle>SidebarMonitor</AssemblyTitle>
 
     <!-- WPF: no AOT, and it cannot run globalization-invariant (font cache builds CultureInfo). -->
     <IsAotCompatible>false</IsAotCompatible>
@@ -29,6 +32,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- WMI, for static RAM module info (Win32_PhysicalMemory: model, speed, size). Same version as
+         the helper, whose System.Management.dll already sits in the app dir, so no extra deploy. -->
+    <PackageReference Include="System.Management" Version="9.0.0" />
     <ProjectReference Include="..\SidebarMonitor.Shared\SidebarMonitor.Shared.csproj" />
   </ItemGroup>
 

@@ -6,6 +6,8 @@
     <AssemblyName>SidebarMonitor.Agent</AssemblyName>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <PublishAot>true</PublishAot>
+    <ApplicationIcon>..\..\assets\icon.ico</ApplicationIcon>
+    <AssemblyTitle>SidebarMonitor (agente)</AssemblyTitle>
   </PropertyGroup>
 
   <!--

@@ -18,7 +18,8 @@ Dos fuentes, elegidas para **no enviar ningún driver de kernel** y **no requeri
 
 | Dato | Fuente | Por qué |
 |---|---|---|
-| Potencia CPU, temperaturas, ventiladores, voltajes, SMART | HWiNFO (memoria compartida) | Requiere ring0; delegamos en HWiNFO en vez de shippear WinRing0 y pelearnos con HVCI, la blocklist de drivers vulnerables y la firma |
+| Potencia y temperatura de CPU | SDK de AMD Ryzen Master (helper elevado) | Requiere ring0; el driver de Ryzen Master esta firmado y es compatible con HVCI, asi que no shippeamos WinRing0 ni peleamos con la blocklist de drivers vulnerables |
+| Temperatura de discos (NVMe / SATA) | IOCTL del log SMART (agente) / WMI `MSFT_StorageReliabilityCounter` (helper elevado) | NVMe sin admin; SATA por el reliability counter del stack de almacenamiento |
 | CPU total y por core, frecuencia real, discos, red | PDH + IP Helper | Sin admin |
 | RAM | `GlobalMemoryStatusEx` | Sin admin |
 | Procesos | `NtQuerySystemInformation` | 1 llamada devuelve todo |
@@ -55,10 +56,6 @@ saltados, el último top se queda en el snapshot sin tocar.
 
 ```
 dotnet build
-src/HwiProbe/bin/Release/net10.0-windows/HwiProbe.exe          # vuelca todos los sensores
-src/HwiProbe/bin/Release/net10.0-windows/HwiProbe.exe --bench  # coste de un snapshot
-src/HwiProbe/bin/Release/net10.0-windows/HwiProbe.exe --watch
-src/HwiProbe/bin/Release/net10.0-windows/HwiProbe.exe --filter=Potencia
 src/NativeProbe/bin/Release/net10.0-windows/NativeProbe.exe    # PDH + RAM + red + procesos + NVML
 src/ShellProbe/bin/Release/net10.0-windows/ShellProbe.exe --monitor=1 --seconds=10
 ```
@@ -78,9 +75,30 @@ La UI arranca el agente ella sola si no lo encuentra publicando.
 que su salida es evidencia, no intención. Acepta `--monitor=N`, `--width=`, `--seconds=`,
 `--left` y `--clickthrough`.
 
-`HwiProbe` necesita HWiNFO corriendo con *Settings → Main Settings → Shared Memory Support*
-activado. **En la versión gratuita la SHM se autodesactiva a las 12 h**; sin límite en Pro.
-Y el uso comercial de esa interfaz se negocia con el autor de HWiNFO.
+## Instalación y arranque automático
+
+```
+install.cmd                 # doble clic: publica, empaqueta y registra el arranque (se auto-eleva)
+install.ps1 -SelfContained  # incrusta el runtime .NET (para máquinas sin .NET instalado)
+uninstall.cmd               # quita binarios y autostart (uninstall.ps1 -Purge borra también la config)
+```
+
+El instalador:
+
+1. Compila `RyzenShim.dll` si falta y **empaqueta las DLLs mínimas del SDK de AMD** con
+   `native/RyzenSdk/fetch.ps1`: solo `Platform.dll`, `Device.dll`, el driver `AMDRyzenMasterDriver.*`
+   y el runtime VC (`VCRUNTIME140`, `VCRUNTIME140_1`, `MSVCP140`) — **~1.5 MB**, nada de las ~90 MB
+   de DLLs de Qt que el SDK trae para su propia GUI. `RyzenShim` carga `Platform.dll` de la carpeta
+   donde vive el propio shim (empaquetado) antes que del SDK instalado, así que **en runtime el SDK
+   no hace falta**. Las DLLs empaquetadas viven en `native/RyzenSdk/` (gitignored).
+2. Publica agente (AOT), helper y UI en `%LOCALAPPDATA%\SidebarMonitor\app`.
+3. Registra el **helper** (`SidebarMonitor.Etw`, que necesita admin) como **tarea programada** al
+   inicio de sesión, `RunLevel Highest` (elevada, **sin UAC**), en la sesión interactiva. Se lanza
+   por un `run-helper-hidden.vbs` (`WScript.Shell.Run` con estilo 0) para que la consola **nazca
+   oculta, sin parpadeo**. La **UI** va en la clave `HKCU\...\Run` (sin elevar); ella lanza el agente.
+
+Se auto-eleva porque crear la tarea necesita administrador. Todo arranca solo en cada inicio de
+sesión, **sin ninguna ventana de consola**.
 
 ## Números medidos
 
@@ -194,7 +212,9 @@ Dos cosas que hay que respetar sí o sí:
 ## Requisitos
 
 - .NET 10 SDK (fijado en `global.json`).
-- HWiNFO, para los sensores.
+- Para la temperatura/potencia de CPU: el **SDK de AMD Ryzen Master Monitoring** (aporta las DLLs
+  y el driver firmado). El instalador empaqueta las DLLs mínimas, así que **en runtime no hace
+  falta tenerlo instalado** — solo para compilar/empaquetar la primera vez. Ya **no se usa HWiNFO**.
 - Para publicar con AOT, el workload **Desktop development with C++** de Visual Studio
   (el linker de MSVC). Verificado con Visual Studio Community 2026 (18.7).
 
@@ -231,6 +251,8 @@ Seis secciones — CPU, MEMORIA, GPU, RED, DISCOS, PROCESOS — en un AppBar de 
 
 - **Plegar** una sección: clic en su cabecera. **Ocultarla** del todo: menú contextual.
   Todo se guarda en `%LOCALAPPDATA%\SidebarMonitor\ui.json`.
+- **Reordenar** las secciones: menú contextual → **«Orden de secciones»**, con «▲ Subir» /
+  «▼ Bajar» por sección. El orden se guarda en `ui.json` (`SectionOrder`).
 - Una cabecera plegada **sigue informando**, con lo más útil de cada sección:
   `CPU 27% 4.70GHz 49W` · `GPU 0% 2640MHz 51W` · `DISCOS 1% R4K W1,5M` ·
   `PROCESOS pwsh 12.2% · bdservi… 1.7%`. Plegar pierde el detalle, no el dato.
@@ -241,11 +263,18 @@ Seis secciones — CPU, MEMORIA, GPU, RED, DISCOS, PROCESOS — en un AppBar de 
 
 Todo desde el menú contextual (clic derecho) o desde el icono de bandeja:
 
-- **Anclado** (AppBar, reserva espacio, nada lo tapa) o **flotante**, arrastrable por su
-  cabecera. La ventana nunca se activa, así que `DragMove` de WPF no sirve: el arrastre se
-  hace con deltas de `GetCursorPos`.
+- **Anclado** (pegado a un borde) o **flotante**, arrastrable por su cabecera. La ventana nunca
+  se activa, así que `DragMove` de WPF no sirve: el arrastre se hace con deltas de `GetCursorPos`,
+  capturando el ratón en el propio elemento de la cabecera (capturar un ancestro rompe el arrastre).
+- **Reservar espacio** (solo anclado) es un toggle aparte. Activado: registra un AppBar y el
+  escritorio reserva la franja, nada lo tapa — pero maximizar, snap y pantalla completa de otras
+  apps se paran en su borde. Desactivado: es un overlay pegado al borde, las demás ventanas usan
+  todo el monitor y se dibujan por debajo. Es lo que quieres si el panel te cortaba el manejo de
+  ventanas. Ojo: **reservar espacio es independiente de «siempre encima»** (eso es solo z-order).
 - **Siempre encima** es una opción, no una constante. Borde izquierdo o derecho, monitor y
   ancho, todo en caliente.
+- El **menú contextual** se cierra al clicar fuera aunque el panel no tome foco: al abrirse, su
+  popup se trae al foreground (`SetForegroundWindow`), que es lo que le da la señal de «clic fuera».
 - **Minimizar** colapsa el panel a una pestaña de 18 px con una flecha, en vez de ocultarlo:
   un AppBar de 18 px sigue reservando 18 px, así que el escritorio no pega saltos y el panel
   queda a un clic. Verificado: la work area pasa de 1920 a 1902 px.
@@ -331,20 +360,15 @@ de C++ y la SDK de AMD instalada) y se copia junto al helper. Da temp, PPT, Fmax
 temp/frecuencia por core. Consulta bajo demanda: **sin el límite de 12 h, sin el ~6 % de overhead
 de HWiNFO**. Verificado con HWiNFO muerto: 43 W / 77 °C / 4.84 GHz, cambiando en vivo.
 
-**Con el helper elevado corriendo, HWiNFO ya no hace falta para nada.** CPU temp/potencia del SDK
-de AMD, temp NVMe del agente, temp SATA del helper. `HwiSensors` se mantiene solo como último
-recurso para la CPU si corres HWiNFO pero no el helper; se puede cerrar/desinstalar HWiNFO sin
-perder nada mientras el helper esté activo.
+**HWiNFO se ha eliminado por completo.** No queda ni fallback: `HwiSensors` y el proyecto
+`HwiProbe` están borrados. CPU temp/potencia del SDK de AMD, temp NVMe del agente, temp SATA del
+helper — todo propio. Con el helper elevado corriendo (que el instalador arranca solo), la app es
+100 % standalone. Cuando el helper no corre, la barra de estado dice **«sin helper (lanza
+SidebarMonitor.Etw)»** y CPU temp/potencia salen como `—`; el resto lo cubre el agente sin elevar.
+El antiguo problema del límite de 12 h y el overhead de tener HWiNFO midiendo todo desaparecieron
+con él.
 
-### HWiNFO congelado
-
-La versión gratuita de HWiNFO **desactiva la memoria compartida a las 12 h**. Cuando pasa, el
-`poll_time` de la SHM deja de avanzar y todo lo que sale de HWiNFO (potencia y temperaturas de
-CPU y discos) se queda congelado. El agente lo detecta —si `poll_time` no avanza en 8 s— y
-marca esos valores como `—` en vez de mostrar números viejos que parecen vivos; la barra de
-estado dice **«HWiNFO en pausa»**. Y **se recupera solo**: reintenta abrir la SHM cada 15 s, así
-que en cuanto reactivas HWiNFO (o lo reinicias, que crea un objeto nuevo) vuelve a datos en
-vivo sin reiniciar el agente. Si HWiNFO no está, la barra dice «sin HWiNFO».
+### Actividad de disco
 
 Ese porcentaje es el «tiempo activo» del Administrador de tareas, que es `100 - % Idle Time`.
 No es `% Disk Time`: ese cuenta peticiones encoladas y pasa de 100 % con toda normalidad.
@@ -363,14 +387,35 @@ dispositivo crudo y falla sin admin.
 SSD vs HDD sale de `StorageDeviceSeekPenaltyProperty`: un disco que «incurre en penalización de
 búsqueda» es mecánico. Los USB no lo reportan y quedan como `Unknown`, correctamente.
 
-La temperatura viene de HWiNFO. El único punto de unión es que HWiNFO nombra sus sensores
-`S.M.A.R.T.: <modelo> (<serie>)`, y el modelo del IOCTL es subcadena de ese nombre.
+La temperatura de disco es propia: NVMe por IOCTL sin elevar (agente), SATA por
+`MSFT_StorageReliabilityCounter` vía WMI (helper elevado), casadas por número de disco físico.
 
 ### Procesos
 
 Agrupados por nombre y sumando CPU, RAM e hilos (`chrome.exe ×31`, `svchost.exe ×97`), que es
 la única forma de que la lista se lea. Se desactiva con `--no-group` en el agente. La cabecera
 etiqueta las columnas: sin ella, `116 MB` no dice que sea el working set.
+
+### Docker y WSL (opcionales)
+
+Windows solo ve el agregado de todo lo que corre en la VM de WSL2/Docker como un único proceso
+(`vmmemWSL`); el desglose vive dentro del invitado. Dos secciones **opcionales** (ocultas por
+defecto; se activan en «Secciones») lo leen preguntando al invitado:
+
+- **DOCKER** — `docker stats` por contenedor: CPU %, RAM y **red** (la I/O de docker es acumulada,
+  se diferencia a tasa). Ej.: `immich_server 0% 1.1G ↓0K ↑0K`.
+- **WSL** — `top -bn2` dentro de la distro por defecto (la 2ª pasada da el %CPU instantáneo). Los
+  procesos con su CPU y RAM. La red por proceso no la expone el invitado fácilmente, así que ahí va vacía.
+
+Cada colector corre en segundo plano (no bloquea la UI) y **solo se lanza cuando su sección está
+visible** — nunca invocamos `docker`/`wsl` si no se muestran. Aviso: la **primera** carga de WSL
+puede tardar ~20 s si tu distro tarda en arrancar la sesión de usuario de systemd; en caliente
+responde en ~1 s y el propio sondeo la mantiene despierta mientras la sección esté abierta.
+
+### Unidades de red y disco
+
+Binario (KiB/MiB/GiB, 1024) o decimal (KB/MB/GB, 1000), **independiente** para red y disco, desde
+«Red → Unidades» y «Discos → Unidades».
 
 ### Red
 
@@ -403,6 +448,33 @@ lenguaje de color cada una** — nunca los dos a la vez, que era lo confuso.
 
 16 cores son 16 categorías forzadas que no se pueden plegar, así que la rueda generada es la
 opción legítima para ese caso.
+
+**Estrella del mejor núcleo.** Con el helper elevado, una **★ dorada** marca el core que más
+boostea y un **◆ plateado** el segundo, delante del número de la fila (como los preferentes de
+Ryzen Master). El SDK de AMD no expone el ranking CPPC, así que se deduce siguiendo el pico de
+frecuencia por core físico (converge a los mismos cores en cuanto la CPU hace boost). El SDK da
+cores **físicos** (8) y la UI muestra **lógicos** (16, con SMT): se marcan ambos hilos del físico.
+
+### CPU: temperatura, voltaje y throttle (SDK de AMD)
+
+Con el helper corriendo, la **temperatura cambia de color según se acerca al Tjmax real** que
+reporta el SDK (`fcHTCLimit`, el límite cHTC ≈ 89 °C en el 7800X3D): normal en verde, **ámbar** a
+menos de 12 °C del límite, **rojo** a menos de 4 °C. Sin SDK, cae a un genérico 80/90 °C.
+
+Dos lecturas más del SDK, **opcionales** (menú, off por defecto), en una línea bajo la gráfica:
+- **VID** — voltaje medio de núcleo (`dAvgCoreVoltage`).
+- **Límites** — el grupo "Limits" de HWiNFO en una línea: cuánto se acerca a los límites de **PPT**
+  (potencia), **TDC** y **EDC** (corriente) y **térmico** (temp/Tjmax), en %. Avisa con **⚠ throttle
+  térmico** al tocar el Tjmax. Ej.: `PPT 51% · TDC 22% · EDC 35% · térm 63%`.
+
+  > El **"Límite de frecuencia: Global"** de HWiNFO (que baja a ~4.8 GHz bajo carga all-core) **no
+  > lo expone el SDK** de AMD: lo lee HWiNFO del SMU crudo. Los campos de frecuencia del SDK son
+  > `fCCLK_Fmax` (5.10 GHz, techo rated **estático**) y `dPeakSpeed` (dinámico pero *sube* con la
+  > carga — es la velocidad real de los cores activos, no un límite). Ninguno replica ese valor, así
+  > que no se muestra un número de frecuencia aquí.
+
+El SDK da aún más (voltaje SOC, Infinity Fabric FCLK, temp por core); el mecanismo ya está para
+añadirlo. PROCHOT no lo expone el SDK — solo el throttle térmico (HTC) es derivable.
 
 ### Frecuencia de CPU: mejor núcleo, media o mediana
 
@@ -523,9 +595,10 @@ el mismo número.
 ## Estructura
 
 - `SidebarMonitor.Shared` — el contrato: `Snapshot` + lector/escritor de memoria compartida.
-- `SidebarMonitor.Agent` — muestrea (HWiNFO, PDH, NVML, `NtQuerySystemInformation`,
-  `GlobalMemoryStatusEx`) y publica. AOT, sin privilegios.
-- `SidebarMonitor.Etw` — helper **opcional y elevado**: quién ocupa cada core y red por proceso.
+- `SidebarMonitor.Agent` — muestrea (PDH, NVML, `NtQuerySystemInformation`,
+  `GlobalMemoryStatusEx`, IOCTL de disco) y publica. AOT, sin privilegios.
+- `SidebarMonitor.Etw` — helper **opcional y elevado**: SDK de AMD (CPU temp/potencia), temp SATA
+  por WMI, y quién ocupa cada core y la red por proceso.
 - `SidebarMonitor.UI` — el panel (WPF). Reusa el chasis de ventana de `ShellProbe`.
 - `SidebarMonitor.Client` — el snapshot en texto; útil para depurar sin abrir la UI.
 - `src/*Probe` — las sondas de viabilidad, se pueden borrar cuando estorben.
@@ -551,10 +624,8 @@ del padre, si la hay. Ojo: en PowerShell, `& app.exe` **no espera** a un WinExe 
   Si el agente lo arrancaste tú, la UI solo redibuja más o menos a menudo.
 - Reusar los diccionarios de `Processes` entre muestras: hoy reconstruye ~370 entradas con sus
   strings cada 3 ticks. Es la única basura real que genera el agente.
-- Arrancar con Windows, e instalador.
-- Extraer un `ISensorSource` cuando entre LibreHardwareMonitor como fallback. Hoy el agente
-  habla con HWiNFO directamente; no vale la pena la abstracción hasta tener el segundo backend.
-- Más sensores de HWiNFO al snapshot (temperaturas de disco, hotspot de GPU, potencia por
-  raíl): el mecanismo ya está, es añadir campos e índices.
 - Click-through al pasar el ratón (`WS_EX_TRANSPARENT` alternado), que `ShellProbe` ya
   soporta con `--clickthrough` pero no está probado en uso real.
+
+**Hecho:** arranque con Windows e instalador (`install.cmd`), HWiNFO eliminado por completo
+(sensores propios: SDK de AMD + IOCTL/WMI), y secciones reordenables desde el menú.

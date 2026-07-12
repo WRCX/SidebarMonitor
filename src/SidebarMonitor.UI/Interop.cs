@@ -33,8 +33,20 @@ internal struct MonitorInfo
 
 internal static class Native
 {
-    // Extended window styles
+    // Window styles
+    public const int GWL_STYLE = -16;
     public const int GWL_EXSTYLE = -20;
+    public const long WS_THICKFRAME = 0x00040000;   // resizable border (invisible with our NCCALCSIZE)
+
+    // Resize hit-test + sizing
+    public const int WM_NCCALCSIZE = 0x0083;
+    public const int WM_NCHITTEST = 0x0084;
+    public const int WM_SIZING = 0x0214;
+    public const int WM_EXITSIZEMOVE = 0x0232;
+    public const int HTCLIENT = 1, HTLEFT = 10, HTRIGHT = 11, HTTOP = 12,
+                     HTTOPLEFT = 13, HTTOPRIGHT = 14, HTBOTTOM = 15, HTBOTTOMLEFT = 16, HTBOTTOMRIGHT = 17;
+    public const int WMSZ_LEFT = 1, WMSZ_RIGHT = 2, WMSZ_TOP = 3, WMSZ_TOPLEFT = 4,
+                     WMSZ_TOPRIGHT = 5, WMSZ_BOTTOM = 6, WMSZ_BOTTOMLEFT = 7, WMSZ_BOTTOMRIGHT = 8;
     public const long WS_EX_TOPMOST = 0x00000008;
     public const long WS_EX_TRANSPARENT = 0x00000020;
     public const long WS_EX_TOOLWINDOW = 0x00000080;   // keeps it out of Alt+Tab
@@ -44,6 +56,7 @@ internal static class Native
     // Messages
     public const int WM_MOUSEACTIVATE = 0x0021;
     public const int WM_WINDOWPOSCHANGED = 0x0047;
+    public const int WM_DISPLAYCHANGE = 0x007E;   // resolution/topology changed (monitor off/on, dock)
     public const int MA_NOACTIVATE = 3;
 
     // AppBar
@@ -96,6 +109,10 @@ internal static class Native
 
     [DllImport("user32.dll")]
     public static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SetForegroundWindow(IntPtr hWnd);
 
     [DllImport("user32.dll")]
     public static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
