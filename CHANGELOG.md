@@ -8,6 +8,19 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 _Nothing yet._
 
+## [1.2.1] — 2026-07-13
+
+Maintenance release. No functional changes versus the 1.2.0 release build — it exists as a distinct
+version so the **in-app auto-updater** can deliver the fixes below to installs still on an earlier
+1.2.0 build (the updater only offers a strictly higher version).
+
+### Fixed (carried from 1.2.0, now updater-deliverable)
+
+- **Installer autostart** — UI Run key moved from HKCU to HKLM so a per-machine (SYSTEM) MSI writes it
+  to the right place and the UI autostarts at logon.
+- **Borderless window frame / right-click** — force `SWP_FRAMECHANGED` after `WS_THICKFRAME` so the
+  frame commits (no stray border strip, hit-tests aligned, right-click/context-menu work).
+
 ## [1.2.0] — 2026-07-13
 
 First public release.
@@ -45,5 +58,6 @@ First public release.
 
 > Not code-signed yet, so Windows SmartScreen may warn on first run — choose **More info → Run anyway**.
 
-[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.2.1
 [1.2.0]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.2.0
