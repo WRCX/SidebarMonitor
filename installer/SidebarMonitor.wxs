@@ -49,20 +49,23 @@
       <RegistryValue Root="HKLM" Key="Software\SidebarMonitor" Name="Flavor" Type="string" Value="$(Flavor)" />
     </Component>
 
-    <!-- Autostart (UI under the per-user Run key) + Start-menu shortcut, keyed per-user. -->
-    <Component Id="AutostartAndShortcut" Directory="ProgramMenuFolder" Guid="7A1C4E88-2B93-4D5F-B0E6-1F3A9C2D4E57">
-      <RegistryValue Root="HKCU"
+    <!-- Autostart (UI under the all-users Run key) + Start-menu shortcut. HKLM, NOT HKCU: this is a
+         per-machine MSI, installed by the msiexec SYSTEM service, so an HKCU Run value lands in SYSTEM's
+         profile instead of the user's and the UI never autostarts. HKLM Run is written correctly by
+         SYSTEM and starts the UI for every user at logon (each reads its own %LOCALAPPDATA% config). -->
+    <Component Id="AutostartAndShortcut" Directory="ProgramMenuFolder" Guid="4B9D2E10-7C34-4A6E-9F81-3D5C8B2A1E90">
+      <RegistryValue Root="HKLM"
                      Key="Software\Microsoft\Windows\CurrentVersion\Run"
                      Name="SidebarMonitor"
                      Type="string"
-                     Value="&quot;[INSTALLFOLDER]SidebarMonitor.UI.exe&quot;" />
+                     Value="&quot;[INSTALLFOLDER]SidebarMonitor.UI.exe&quot;"
+                     KeyPath="yes" />
       <Shortcut Id="StartMenuShortcut"
                 Name="SidebarMonitor"
                 Target="[INSTALLFOLDER]SidebarMonitor.UI.exe"
                 WorkingDirectory="INSTALLFOLDER"
                 Icon="AppIcon.ico" />
       <RemoveFolder Id="RemoveProgramMenuFolder" On="uninstall" />
-      <RegistryValue Root="HKCU" Key="Software\SidebarMonitor" Name="installed" Type="integer" Value="1" KeyPath="yes" />
     </Component>
 
     <!-- The elevated helper runs from a logon scheduled task (Highest run level = no UAC prompt),
