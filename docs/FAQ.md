@@ -35,8 +35,8 @@ still show usage, but without per-process attribution or CPU temperature/power.
 
 No. It runs fully offline. The only optional network access is the **update check** (Settings →
 Updates), which is **off by default** and, when enabled, only asks GitHub's public Releases API whether
-a newer version exists — see [PRIVACY.md](../PRIVACY.md). Downloading the app via `winget`/the installer
-is the other obvious time bytes move, and that's you initiating it.
+a newer version exists — see [PRIVACY.md](../PRIVACY.md). Downloading the installer is the other obvious
+time bytes move, and that's you initiating it.
 
 ## What works on my hardware?
 
@@ -73,9 +73,9 @@ panel.
 
 ## How do I install / uninstall?
 
-Via the WiX MSI (`msiexec /i SidebarMonitor.msi`), `winget`, or the developer `install.ps1`. To
-remove: Add/Remove Programs, `msiexec /x`, or `uninstall.ps1 -Purge`. See
-[installer/README.md](../installer/README.md).
+Via the WiX MSI (`msiexec /i SidebarMonitor.msi`) or the developer `install.ps1`. To remove:
+Add/Remove Programs, `msiexec /x`, or `uninstall.ps1 -Purge`. See
+[installer/README.md](../installer/README.md). *(A `winget` package will come with the first release.)*
 
 ## Why three separate processes instead of one?
 

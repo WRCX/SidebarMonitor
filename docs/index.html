@@ -202,7 +202,7 @@
         <span class="item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.6-7 9-4-1.4-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg> <span data-i18n="trust.hvci">HVCI-safe</span></span>
         <span class="item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg> <span data-i18n="trust.telemetry">No telemetry</span></span>
         <span class="item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8l-4 4 4 4"/><path d="M17 8l4 4-4 4"/><path d="M14 4l-4 16"/></svg> <span data-i18n="trust.oss">Open source · MIT</span></span>
-        <span class="item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.6-7 9-4-1.4-7-4.5-7-9V6z"/></svg> <span data-i18n="trust.signed">Code-signed</span></span>
+        <span class="item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg> <span data-i18n="trust.native">Native, no bloat</span></span>
       </div>
     </div>
     <div class="shotwrap">
@@ -355,32 +355,26 @@
   <div class="wrap download">
     <div class="eyebrow" data-i18n="dl.eyebrow">Get it</div>
     <h2 data-i18n="dl.h2">Free, open source, and it just works.</h2>
-    <p class="lede" data-i18n="dl.lede">Download the signed installer, or install it from the command line.</p>
+    <p class="lede" data-i18n="dl.lede">Grab the latest installer from GitHub Releases, or build it yourself from source.</p>
     <div class="dlrow">
-      <a class="btn" href="https://github.com/WRCX/SidebarMonitor/releases/latest">
+      <a class="btn" href="https://github.com/WRCX/SidebarMonitor/releases">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 11l5 5 5-5"/><path d="M5 21h14"/></svg>
         <span data-i18n="dl.btn">Download installer</span>
       </a>
       <a class="btn ghost" href="https://github.com/WRCX/SidebarMonitor" data-i18n="dl.star">Star on GitHub</a>
     </div>
-    <div class="winget">
-      <span class="prompt mono">&gt;</span>
-      <span class="mono" id="wgt">winget install WRCX.SidebarMonitor</span>
-      <button class="copy" id="copyBtn" type="button" data-i18n="dl.copy">Copy</button>
-    </div>
     <div class="builds">
       <div class="build">
         <h3 data-i18n="build.full.h">Full <span class="pill">recommended</span></h3>
-        <p data-i18n="build.full.p">Bundles AMD's sensor SDK, so full CPU telemetry works offline with no extra steps. This is what <code>winget</code> installs.</p>
+        <p data-i18n="build.full.p">Bundles AMD's sensor SDK, so full CPU telemetry works offline with no extra steps.</p>
       </div>
       <div class="build">
         <h3 data-i18n="build.lite.h">Lite</h3>
         <p data-i18n="build.lite.p">Ships none of AMD's binaries — it uses the Ryzen Master SDK you install yourself. Smaller download; CPU falls back to basic metrics without it.</p>
       </div>
     </div>
-    <p class="signnote" data-i18n="dl.signnote">Windows 11 · x64 · The installers are code-signed — free
-      code signing by <a href="https://about.signpath.io/">SignPath.io</a>, certificate by the
-      <a href="https://signpath.org/">SignPath Foundation</a>.</p>
+    <p class="signnote" data-i18n="dl.signnote">Windows 11 · x64 · Free &amp; open source (MIT). Builds
+      aren't code-signed yet, so Windows SmartScreen may warn on first run — choose “More info → Run anyway”.</p>
   </div>
 </section>
 
@@ -427,7 +421,7 @@
     "trust.hvci": {en:"HVCI-safe", es:"Compatible con HVCI"},
     "trust.telemetry": {en:"No telemetry", es:"Sin telemetría"},
     "trust.oss": {en:"Open source · MIT", es:"Código abierto · MIT"},
-    "trust.signed": {en:"Code-signed", es:"Firmado digitalmente"},
+    "trust.native": {en:"Native, no bloat", es:"Nativo, sin lastre"},
 
     "why.eyebrow": {en:"Why it exists", es:"Por qué existe"},
     "why.h2": {en:"When Windows blocklisted WinRing0, most monitors broke. This one doesn't use it.",
@@ -497,22 +491,22 @@
 
     "dl.eyebrow": {en:"Get it", es:"Consíguelo"},
     "dl.h2": {en:"Free, open source, and it just works.", es:"Gratis, de código abierto, y simplemente funciona."},
-    "dl.lede": {en:"Download the signed installer, or install it from the command line.",
-      es:"Descarga el instalador firmado, o instálalo desde la línea de comandos."},
+    "dl.lede": {en:"Grab the latest installer from GitHub Releases, or build it yourself from source.",
+      es:"Coge el último instalador de GitHub Releases, o compílalo tú mismo desde el código."},
     "dl.btn": {en:"Download installer", es:"Descargar instalador"},
     "dl.star": {en:"Star on GitHub", es:"Dale una estrella en GitHub"},
     "dl.copy": {en:"Copy", es:"Copiar"},
     "build.full.h": {en:"Full <span class=\"pill\">recommended</span>", es:"Completo <span class=\"pill\">recomendado</span>"},
     "build.full.p": {
-      en:"Bundles AMD's sensor SDK, so full CPU telemetry works offline with no extra steps. This is what <code>winget</code> installs.",
-      es:"Incluye el SDK de sensores de AMD, así la telemetría completa de CPU funciona sin conexión y sin pasos extra. Es lo que instala <code>winget</code>."},
+      en:"Bundles AMD's sensor SDK, so full CPU telemetry works offline with no extra steps.",
+      es:"Incluye el SDK de sensores de AMD, así la telemetría completa de CPU funciona sin conexión y sin pasos extra."},
     "build.lite.h": {en:"Lite", es:"Lite"},
     "build.lite.p": {
       en:"Ships none of AMD's binaries — it uses the Ryzen Master SDK you install yourself. Smaller download; CPU falls back to basic metrics without it.",
       es:"No incluye ningún binario de AMD — usa el SDK de Ryzen Master que instales tú. Descarga más pequeña; sin él, la CPU cae a métricas básicas."},
     "dl.signnote": {
-      en:"Windows 11 · x64 · The installers are code-signed — free code signing by <a href=\"https://about.signpath.io/\">SignPath.io</a>, certificate by the <a href=\"https://signpath.org/\">SignPath Foundation</a>.",
-      es:"Windows 11 · x64 · Los instaladores están firmados — firma de código gratuita por <a href=\"https://about.signpath.io/\">SignPath.io</a>, certificado de la <a href=\"https://signpath.org/\">SignPath Foundation</a>."},
+      en:"Windows 11 · x64 · Free &amp; open source (MIT). Builds aren't code-signed yet, so Windows SmartScreen may warn on first run — choose “More info → Run anyway”.",
+      es:"Windows 11 · x64 · Gratis y de código abierto (MIT). Los builds aún no están firmados, así que Windows SmartScreen puede avisar en el primer arranque — elige «Más información → Ejecutar de todas formas»."},
 
     "footer.disclaimer": {
       en:"<strong>Built with AI, human-supervised.</strong> This software was written by an AI assistant (Claude), then reviewed, tested and maintained by a human. If you'd rather not run AI-written software, that's fair — better you know up front.",

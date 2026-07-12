@@ -62,8 +62,9 @@ Everything renders on any machine, but the **richest data depends on your hardwa
 
 ## Install
 
-Grab the MSI from [Releases](https://github.com/WRCX/SidebarMonitor/releases/latest). Two builds
-are offered so you can decide, explicitly, how AMD's proprietary sensor SDK gets onto your machine:
+Grab the MSI from [Releases](https://github.com/WRCX/SidebarMonitor/releases) (or build it from
+source — see below). Two builds are offered so you can decide, explicitly, how AMD's proprietary
+sensor SDK gets onto your machine:
 
 | Download | AMD SDK binaries | Best for |
 |---|---|---|
@@ -71,11 +72,7 @@ are offered so you can decide, explicitly, how AMD's proprietary sensor SDK gets
 | **`SidebarMonitor-lite.msi`** | **None** — ships zero AMD binaries | Anyone who'd rather no vendor binaries be redistributed. Uses the AMD Ryzen Master / Monitoring SDK **you install yourself**; without it, CPU temp/power fall back to basic mode. |
 
 Both are identical apart from those few AMD DLLs. GPU sensors (NVML/ADLX) are unaffected either way —
-those ship with your GPU driver. Or install with **winget** (full build):
-
-```powershell
-winget install WRCX.SidebarMonitor
-```
+those ship with your GPU driver. *(A `winget` package is planned once the first release is published.)*
 
 The installer puts the three apps in `Program Files\SidebarMonitor`, registers the elevated helper as a
 **scheduled task** (logon, no UAC prompt, hidden console) and the UI under the per-user `Run` key. On
@@ -87,9 +84,9 @@ CPU sensors are enabled. Uninstall from Add/Remove Programs.
 
 ### Code signing
 
-The Windows installers are code-signed. Free code signing is provided by
-[SignPath.io](https://about.signpath.io/), with a certificate from the
-[SignPath Foundation](https://signpath.org/).
+The installers **aren't code-signed yet**, so Windows SmartScreen may warn on first run — choose
+**More info → Run anyway**. Free code signing through the [SignPath Foundation](https://signpath.org/)
+OSS program is planned.
 
 ## How it works
 
