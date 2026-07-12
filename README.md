@@ -99,10 +99,12 @@ To read CPU temperature and power *without* a ring0 driver of our own. The AMD R
 A kernel ETW session and the AMD SDK both require elevation. Isolating them in a small helper lets the main agent stay unelevated and AOT.
 
 **Do you collect any telemetry?**
-No. Nothing leaves your machine. There is no network reporting of any kind.
+No. Nothing leaves your machine — no analytics, no crash reporting, no network activity at all during normal use. See [PRIVACY.md](PRIVACY.md).
 
 **What about Intel CPUs?**
 Intel CPU temperature/power needs a ring0 MSR path (e.g. PawnIO) that isn't bundled. The app detects Intel, tells you why those fields are blank, and everything else (GPU, memory, network, disks, processes) works normally.
+
+**More questions?** See the full [FAQ](docs/FAQ.md).
 
 ## Building from source
 

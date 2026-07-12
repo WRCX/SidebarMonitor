@@ -55,9 +55,9 @@ Leída la EULA local (`C:\Program Files\AMD\RyzenMasterMonitoringSDK\License.rtf
 - [ ] **Autoactualización** o al menos aviso de versión nueva desde GitHub Releases (comparar con `AppVersion`).
 - [x] **README** con el pitch anti-WinRing0, tabla de features, requisitos y **capturas** (hero + secciones). En inglés (estándar OSS). El deep-dive técnico se movió a `docs/ARCHITECTURE.md`. *(pendiente: GIF de demo)*
 - [ ] **Landing** (GitHub Pages) + botón **café** (GitHub Sponsors / Buy Me a Coffee).
-- [ ] **Política sin telemetría**, dicho explícito (los entusiastas lo valoran).
+- [x] **Política sin telemetría**, dicho explícito → `PRIVACY.md` + destacado en README/FAQ.
 - [ ] **CI** (GitHub Actions): build AOT del agente + publish + firmar + crear Release. (Ojo: el AOT necesita el toolchain C++ y `vswhere` en PATH.)
-- [ ] **Docs**: cómo funciona (agente AOT + helper ETW + shim SDK), FAQ ("¿por qué necesita el SDK de AMD?", "¿por qué un helper elevado?", "¿telemetría? no").
+- [x] **Docs**: cómo funciona → `docs/ARCHITECTURE.md` (deep-dive) + `docs/FAQ.md` (FAQ ampliada: SDK AMD, helper elevado, telemetría, Intel, HVCI, matriz por hardware, config, idioma, 3 procesos). README con "How it works" + FAQ.
 
 ### P2 — nice-to-have / futuro
 - [ ] Modo portable (sin instalar).
