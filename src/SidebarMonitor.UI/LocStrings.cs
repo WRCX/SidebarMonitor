@@ -280,6 +280,12 @@ internal static class LocStrings
         ["No se pudo comprobar (sin conexión o sin releases)."] = "Couldn't check (offline or no releases).",
         ["Estás en la última versión."] = "You're on the latest version.",
         ["Disponible {0} — pulsa «Actualizar»."] = "{0} available — click «Update».",
+        ["Instalar automáticamente (silencioso)"] = "Install automatically (silent)",
+        ["Al detectar una versión nueva, la descarga e instala sola en segundo plano y reinicia el panel — sin avisos, diálogos ni navegador. Requiere «Buscar actualizaciones» activado."]
+            = "When a new version is found, it downloads and installs itself in the background and restarts the panel — no notifications, dialogs or browser. Requires «Check for updates» on.",
+        ["Instalando {0} automáticamente…"] = "Installing {0} automatically…",
+        ["Actualizando a {0}…"] = "Updating to {0}…",
+        ["No se pudo actualizar automáticamente."] = "Automatic update failed.",
         ["Se descargará e instalará {0}. Windows pedirá permiso de administrador y el panel se reiniciará. ¿Continuar?"]
             = "{0} will be downloaded and installed. Windows will ask for administrator permission and the panel will restart. Continue?",
         ["Descargando {0}…"] = "Downloading {0}…",

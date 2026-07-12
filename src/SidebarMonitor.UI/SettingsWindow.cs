@@ -396,7 +396,10 @@ internal sealed class SettingsWindow : Window
         var p = Page(Loc.T("Actualizaciones"));
         p.Children.Add(Toggle(Loc.T("Buscar actualizaciones automáticamente"),
             Loc.T("Al arrancar (y a diario) consulta GitHub Releases. Solo se contacta la API pública de GitHub; no se envía nada tuyo."),
-            () => _cfg.CheckUpdates, v => { _cfg.CheckUpdates = v; _cfg.Save(); }));
+            () => _cfg.CheckUpdates, v => { _cfg.CheckUpdates = v; if (!v) _cfg.AutoInstallUpdates = false; _cfg.Save(); }));
+        p.Children.Add(Toggle(Loc.T("Instalar automáticamente (silencioso)"),
+            Loc.T("Al detectar una versión nueva, la descarga e instala sola en segundo plano y reinicia el panel — sin avisos, diálogos ni navegador. Requiere «Buscar actualizaciones» activado."),
+            () => _cfg.AutoInstallUpdates, v => { _cfg.AutoInstallUpdates = v; if (v) _cfg.CheckUpdates = true; _cfg.Save(); }));
 
         p.Children.Add(SubHeader(Loc.T("Versión actual: {0}", _host.CurrentVersionText)));
 

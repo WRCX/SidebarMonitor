@@ -8,6 +8,16 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 _Nothing yet._
 
+## [1.2.2] — 2026-07-13
+
+### Added
+
+- **Zero-friction automatic updates** — new *Install automatically (silent)* option (Settings →
+  Updates). When on, the app detects a newer release on startup and downloads + installs it silently
+  (`msiexec /qn` — no notification, no dialog, no progress window, no browser) and relaunches the
+  panel. Opt-in; truly hands-off on machines where elevation is silent (UAC off / set to elevate
+  without prompting). The previous notify-and-click flow remains the default.
+
 ## [1.2.1] — 2026-07-13
 
 Maintenance release. No functional changes versus the 1.2.0 release build — it exists as a distinct
@@ -58,6 +68,7 @@ First public release.
 
 > Not code-signed yet, so Windows SmartScreen may warn on first run — choose **More info → Run anyway**.
 
-[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.2.2...HEAD
+[1.2.2]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.2.2
 [1.2.1]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.2.1
 [1.2.0]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.2.0

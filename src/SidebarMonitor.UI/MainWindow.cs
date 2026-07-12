@@ -243,6 +243,19 @@ internal sealed class MainWindow : AppBarWindow
         _latest = rel;
         string ver = $"v{rel.Version.Major}.{rel.Version.Minor}.{Math.Max(0, rel.Version.Build)}";
         Dispatcher.Invoke(() => _tray?.SetUpdateAvailable(ver));
+
+        // Zero-friction path: if the user opted into automatic install and this is an MSI install with a
+        // matching asset, download + install it silently right now — no prompt, no progress window, no
+        // browser. (Truly hands-off only where elevation is silent; elsewhere msiexec still elevates.)
+        if (_cfg.AutoInstallUpdates && _install.FromMsi && rel.AssetUrl is not null)
+        {
+            Report(Loc.T("Instalando {0} automáticamente…", ver));
+            Dispatcher.Invoke(() => _tray?.Notify(Loc.T("Actualizando a {0}…", ver)));
+            try { await Updater.ApplyAsync(rel, _install, () => Dispatcher.Invoke(Close), silent: true); }
+            catch { Report(Loc.T("No se pudo actualizar automáticamente.")); }
+            return;
+        }
+
         Report(Loc.T("Disponible {0} — pulsa «Actualizar».", ver));
     }
 

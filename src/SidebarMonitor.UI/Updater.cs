@@ -90,7 +90,7 @@ internal static class Updater
     /// nothing to apply (no asset / not MSI-installed); the caller should open <see cref="Release.HtmlUrl"/>
     /// in that case. One UAC prompt appears (per-machine MSI).
     /// </summary>
-    public static async Task<bool> ApplyAsync(Release r, Install install, Action shutdown, CancellationToken ct = default)
+    public static async Task<bool> ApplyAsync(Release r, Install install, Action shutdown, bool silent = false, CancellationToken ct = default)
     {
         if (!install.FromMsi || install.Path is null || r.AssetUrl is null) return false;
 
@@ -107,14 +107,18 @@ internal static class Updater
             await src.CopyToAsync(dst, ct);
         }
 
-        // A detached, hidden relauncher: run msiexec (UAC prompt, waits for it), then start the new UI.
-        // wscript with window style 0 keeps it console-less; it is not killed when this UI exits.
+        // A detached, hidden relauncher: run msiexec (elevates; a prompt appears unless elevation is
+        // silent), then start the new UI. wscript with window style 0 keeps it console-less and it is
+        // not killed when this UI exits. silent => /qn (no msiexec UI at all) for the zero-friction path;
+        // otherwise /qb shows a basic progress bar.
+        string flag = silent ? "/qn" : "/qb";
+        int show = silent ? 0 : 1;
         string ui = Path.Combine(install.Path, "SidebarMonitor.UI.exe");
         string vbs = Path.Combine(dir, "apply-update.vbs");
         await File.WriteAllLinesAsync(vbs, new[]
         {
             "Set sh = CreateObject(\"WScript.Shell\")",
-            $"sh.Run \"msiexec /i \"\"{msi}\"\" /qb\", 1, True",
+            $"sh.Run \"msiexec /i \"\"{msi}\"\" {flag}\", {show}, True",
             $"sh.Run \"\"\"{ui}\"\"\", 0, False",
         }, ct);
 

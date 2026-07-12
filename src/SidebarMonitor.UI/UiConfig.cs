@@ -24,6 +24,12 @@ public sealed class UiConfig
     /// the only network call is to GitHub's public API — nothing about you is sent. See PRIVACY.md.</summary>
     public bool CheckUpdates { get; set; }
 
+    /// <summary>Zero-friction updates: when a newer release is found, download and install it silently
+    /// (msiexec /qn — no prompt, no progress window, no browser) and relaunch the panel. Implies
+    /// <see cref="CheckUpdates"/>. Only truly hands-off where elevation is silent (UAC off / set to
+    /// elevate-without-prompting); elsewhere msiexec still raises the usual elevation prompt.</summary>
+    public bool AutoInstallUpdates { get; set; }
+
     // ── First-run / platform consent ──────────────────────────────────────────────────────────
     /// <summary>The vendor-specific first-run notice (AMD EULA or Intel ring0 info) has been shown.</summary>
     public bool FirstRunNoticeShown { get; set; }
