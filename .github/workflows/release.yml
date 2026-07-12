@@ -41,6 +41,12 @@ permissions:
 
 jobs:
   release:
+    # Skip the whole job until the private AMD SDK source is configured (see the header). Without it the
+    # build can't fetch AMD's proprietary bits and would fail on every tag; guarding on the AMD_SDK_REPO
+    # variable makes the run a clean SKIP instead of a red failure + email. Set that repo variable (and
+    # the AMD_SDK_REPO_TOKEN secret) to turn CI releases on. Until then, cut releases manually
+    # (installer/build.ps1 + `gh release create`).
+    if: ${{ vars.AMD_SDK_REPO != '' }}
     runs-on: windows-latest
     # secrets can't be read in a step-level `if`; surface presence as a job env flag instead.
     env:
