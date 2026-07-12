@@ -49,6 +49,10 @@ internal static class Program
 
         int seconds = IntArg(args, "--seconds=", 0);          // 0 = run until closed
         string? shot = args.FirstOrDefault(a => a.StartsWith("--shot="))?["--shot=".Length..];
+        // --frames=DIR dumps one RenderTargetBitmap PNG every ~400 ms for --seconds, for building a
+        // demo GIF (assembled separately). Rendering the visual tree needs no visible window.
+        string? framesDir = args.FirstOrDefault(a => a.StartsWith("--frames="))?["--frames=".Length..];
+        int frameMs = IntArg(args, "--frame-ms=", 400);
 
         var monitors = Native.EnumerateMonitors();
         if (cfg.Monitor >= monitors.Count) cfg.Monitor = monitors.Count - 1;
@@ -77,7 +81,25 @@ internal static class Program
         string[] Split(string prefix) =>
             args.FirstOrDefault(a => a.StartsWith(prefix))?[prefix.Length..].Split(',') ?? [];
 
-        if (seconds > 0)
+        if (framesDir is not null && seconds > 0)
+        {
+            win.Loaded += (_, _) =>
+            {
+                win.Apply(Split("--collapse="), Split("--expand="), Split("--hide="));
+                System.IO.Directory.CreateDirectory(framesDir);
+                int n = 0;
+                long end = Environment.TickCount64 + seconds * 1000L;
+                var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(frameMs) };
+                timer.Tick += (_, _) =>
+                {
+                    try { win.SaveScreenshot(System.IO.Path.Combine(framesDir, $"f{n:D3}.png")); } catch { }
+                    n++;
+                    if (Environment.TickCount64 >= end) { timer.Stop(); Console.WriteLine($"frames: {n} en {framesDir}"); win.Close(); }
+                };
+                timer.Start();
+            };
+        }
+        else if (seconds > 0)
         {
             win.Loaded += (_, _) =>
             {

@@ -6,7 +6,7 @@
 
 *CPU · per-core · GPU · memory · network · disks · processes — one lean panel on your second screen.*
 
-<img src="assets/screenshots/hero.png" alt="SidebarMonitor panel showing CPU, memory and dual-GPU sections" width="380">
+<img src="docs/img/demo.gif" alt="SidebarMonitor live: CPU per-core, memory and dual-GPU under load" width="380">
 
 </div>
 
