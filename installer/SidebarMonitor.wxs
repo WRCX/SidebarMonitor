@@ -16,7 +16,10 @@
            InstallerVersion="500"
            Compressed="yes">
 
-    <MajorUpgrade DowngradeErrorMessage="A newer version of SidebarMonitor is already installed." />
+    <!-- AllowSameVersionUpgrades lets the user switch between the full and lite installers (same
+         version, different bundling) without uninstalling first. -->
+    <MajorUpgrade AllowSameVersionUpgrades="yes"
+                  DowngradeErrorMessage="A newer version of SidebarMonitor is already installed." />
     <MediaTemplate EmbedCab="yes" />
 
     <!-- Task Manager / Add-Remove Programs identity. -->

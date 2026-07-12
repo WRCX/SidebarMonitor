@@ -37,9 +37,19 @@ wix extension add -g WixToolset.UI.wixext/5.0.2
 Then:
 
 ```powershell
-./installer/build.ps1            # publishes the 3 apps self-contained, then builds the MSI
-# -> installer/out/SidebarMonitor.msi
+./installer/build.ps1                       # full build -> installer/out/SidebarMonitor.msi
+./installer/build.ps1 -Lite -SkipPublish    # lite build -> installer/out/SidebarMonitor-lite.msi
 ```
+
+Two flavours are shipped so users pick how AMD's proprietary SDK reaches their machine:
+
+- **full** (`SidebarMonitor.msi`) — bundles AMD's `Platform.dll`, `Device.dll` and driver
+  (redistributed under AMD's EULA, accepted in-app on first run). Works offline.
+- **lite** (`SidebarMonitor-lite.msi`, `-Lite`) — ships **none** of AMD's binaries. `RyzenShim.dll`
+  then loads `Platform.dll` from the AMD Ryzen Master / Monitoring SDK the user installs; without it,
+  CPU sensors fall back to basic mode. Our own shims (`RyzenShim.dll`, `AdlxShim.dll`) and the Microsoft
+  VC runtime stay. Build full first, then lite with `-SkipPublish` (it reuses the stage and prunes the
+  AMD files). Both share an UpgradeCode with `AllowSameVersionUpgrades`, so users can switch either way.
 
 `installer/stage/` and `installer/out/` are gitignored: the staged publish and the `.msi` bundle the
 AMD SDK binaries + driver (proprietary — never committed) and the .NET runtime.

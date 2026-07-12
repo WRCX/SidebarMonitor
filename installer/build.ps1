@@ -7,7 +7,15 @@
 # (native/RyzenSdk/fetch.ps1) and RyzenShim.dll / AdlxShim.dll built.
 #
 # ASCII-only (Windows PowerShell 5.1 reads a BOM-less .ps1 as ANSI).
-param([string]$Version = '1.2.0.0', [switch]$SkipPublish)
+param(
+    [string]$Version = '1.2.0.0',
+    # -Lite builds the "no bundled AMD binaries" variant: the MSI omits AMD's proprietary DLLs +
+    # driver, so nothing of AMD's is redistributed. RyzenShim then loads Platform.dll from the AMD SDK
+    # the user has installed (Ryzen Master / the Monitoring SDK); without it, CPU sensors fall back to
+    # basic mode. ADLX (GPU) is unaffected — its runtime ships with the AMD driver anyway.
+    [switch]$Lite,
+    [switch]$SkipPublish
+)
 $ErrorActionPreference = 'Stop'
 # Normalise to a 4-part MSI ProductVersion (x.y.z.w). A tag like "1.3.0" becomes "1.3.0.0".
 while (($Version -split '\.').Count -lt 4) { $Version += '.0' }
@@ -102,9 +110,19 @@ $licTxt = (Get-Content (Join-Path $root 'LICENSE') -Raw) -replace '\\','\\' -rep
 $licTxt = ($licTxt -replace "`r?`n", '\par ')
 "{\rtf1\ansi\deff0{\fonttbl{\f0 Segoe UI;}}\fs18 $licTxt}" | Set-Content -Path $licRtf -Encoding ASCII
 
+# Lite variant: drop AMD's proprietary redistributables from the stage so the MSI ships none of them.
+# Only these are AMD's — RyzenShim.dll/AdlxShim.dll are our own object code and stay. The MS VC runtime
+# stays too (it's Microsoft's redistributable, not AMD's).
+if ($Lite) {
+    Write-Host '== Lite: removing bundled AMD binaries from stage ==' -ForegroundColor Yellow
+    foreach ($f in 'Platform.dll','Device.dll','AMDRyzenMasterDriver.sys','AMDRyzenMasterDriver.inf','AMDRyzenMasterDriver.cat') {
+        Remove-Item (Join-Path $stage $f) -Force -ErrorAction SilentlyContinue
+    }
+}
+
 Write-Host '== Building MSI with WiX ==' -ForegroundColor Cyan
 New-Item -ItemType Directory -Force $out | Out-Null
-$msi = Join-Path $out 'SidebarMonitor.msi'
+$msi = Join-Path $out ($Lite ? 'SidebarMonitor-lite.msi' : 'SidebarMonitor.msi')
 & wix build (Join-Path $here 'SidebarMonitor.wxs') `
     -ext WixToolset.UI.wixext `
     -d "Stage=$stage" -d "ProjectRoot=$root" -d "Version=$Version" `

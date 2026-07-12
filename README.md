@@ -62,20 +62,28 @@ Everything renders on any machine, but the **richest data depends on your hardwa
 
 ## Install
 
+Grab the MSI from [Releases](https://github.com/rubenarbos/SidebarMonitor/releases/latest). Two builds
+are offered so you can decide, explicitly, how AMD's proprietary sensor SDK gets onto your machine:
+
+| Download | AMD SDK binaries | Best for |
+|---|---|---|
+| **`SidebarMonitor.msi`** (full) | **Bundled** in the installer (redistributed under AMD's EULA, accepted on first run) | Most people — works fully offline, nothing else to install. |
+| **`SidebarMonitor-lite.msi`** | **None** — ships zero AMD binaries | Anyone who'd rather no vendor binaries be redistributed. Uses the AMD Ryzen Master / Monitoring SDK **you install yourself**; without it, CPU temp/power fall back to basic mode. |
+
+Both are identical apart from those few AMD DLLs. GPU sensors (NVML/ADLX) are unaffected either way —
+those ship with your GPU driver. Or install with **winget** (full build):
+
 ```powershell
-# From a checkout or a release download:
-./install.ps1        # self-elevates, installs to %LOCALAPPDATA%\SidebarMonitor\app
+winget install Rubenarbos.SidebarMonitor
 ```
 
-The installer publishes the three executables, registers the elevated helper as a **scheduled task** (runs at logon, no UAC prompt, hidden console) and the UI under the `HKCU\...\Run` key. On first launch you'll be shown the **AMD SDK licence** (only on AMD systems) and asked to accept it before CPU sensors are enabled.
+The installer puts the three apps in `Program Files\SidebarMonitor`, registers the elevated helper as a
+**scheduled task** (logon, no UAC prompt, hidden console) and the UI under the per-user `Run` key. On
+first launch you're shown the **AMD SDK licence** (only on AMD systems) and asked to accept it before
+CPU sensors are enabled. Uninstall from Add/Remove Programs.
 
-To remove everything:
-
-```powershell
-./uninstall.ps1 -Purge   # -Purge also deletes the saved config
-```
-
-*(A `winget` manifest and an optional Microsoft Store listing are planned.)*
+*(A developer `install.ps1` in the repo root does the same from a source checkout, installing to
+`%LOCALAPPDATA%`; `uninstall.ps1 -Purge` also deletes the saved config.)*
 
 ## How it works
 

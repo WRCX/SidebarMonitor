@@ -92,20 +92,26 @@ jobs:
           call native\RyzenShim\build.cmd || exit /b 1
           call native\AdlxShim\build.cmd  || exit /b 1
 
-      - name: Build MSI
+      - name: Build MSIs (full + lite)
         shell: pwsh
-        run: ./installer/build.ps1 -Version ${{ steps.ver.outputs.version }}
+        run: |
+          # Full = AMD binaries bundled (works offline). Lite = none of AMD's binaries redistributed;
+          # uses the AMD SDK the user installs. Build full first (it stages the AMD files), then lite
+          # (-SkipPublish reuses the stage and prunes them).
+          ./installer/build.ps1 -Version ${{ steps.ver.outputs.version }}
+          ./installer/build.ps1 -Version ${{ steps.ver.outputs.version }} -Lite -SkipPublish
 
-      # SignPath signs an *uploaded* artifact and returns the signed copy, which we drop back in place.
-      - name: Upload unsigned MSI
+      # SignPath signs an *uploaded* artifact and returns the signed copies. Both MSIs go in one
+      # artifact; configure the SignPath project's artifact "msi" to sign every *.msi it contains.
+      - name: Upload unsigned MSIs
         if: env.HAS_SIGNPATH == 'true'
         id: unsigned
         uses: actions/upload-artifact@v4
         with:
           name: SidebarMonitor-msi
-          path: installer/out/SidebarMonitor.msi
+          path: installer/out/*.msi
 
-      - name: Sign MSI (SignPath)
+      - name: Sign MSIs (SignPath)
         if: env.HAS_SIGNPATH == 'true'
         uses: signpath/github-action-submit-signing-request@v1
         with:
@@ -116,12 +122,12 @@ jobs:
           artifact-configuration-slug: msi
           github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
           wait-for-completion: true
-          output-artifact-directory: installer/out   # overwrites with the signed MSI
+          output-artifact-directory: installer/out   # overwrites with the signed MSIs
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: SidebarMonitor ${{ steps.ver.outputs.version }}
-          files: installer/out/SidebarMonitor.msi
+          files: installer/out/*.msi   # SidebarMonitor.msi (full) + SidebarMonitor-lite.msi
           generate_release_notes: true
           draft: true   # review + fill winget manifest, then publish
