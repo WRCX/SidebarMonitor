@@ -211,7 +211,7 @@ internal sealed class MainWindow : AppBarWindow
         tray.ToggleRequested += () => Visibility = Visibility == Visibility.Visible ? Visibility.Hidden : Visibility.Visible;
         tray.ConfigRequested += () => { if (ContextMenu is not null) ContextMenu.IsOpen = true; };
         tray.ExitRequested += Close;
-        tray.UpdateRequested += ApplyUpdate;
+        tray.UpdateRequested += () => ApplyUpdate();
     }
 
     // ---------------------------------------------------------------- updates
@@ -261,7 +261,7 @@ internal sealed class MainWindow : AppBarWindow
 
     /// <summary>Applies the pending update: MSI installs update in place (one UAC prompt, then the UI
     /// relaunches); dev/non-MSI installs just open the release page in the browser.</summary>
-    public async void ApplyUpdate()
+    public async void ApplyUpdate(Action<string>? onProgress = null)
     {
         if (_latest is null) return;
         string ver = $"v{_latest.Version.Major}.{_latest.Version.Minor}.{Math.Max(0, _latest.Version.Build)}";
@@ -273,14 +273,20 @@ internal sealed class MainWindow : AppBarWindow
             return;
         }
 
+        // Default flow: always confirm first, and reassure that nothing is lost. Config, layout and
+        // logs live in %LOCALAPPDATA% and are never touched by the MSI (it only replaces Program Files).
         var ok = MessageBox.Show(
-            Loc.T("Se descargará e instalará {0}. Windows pedirá permiso de administrador y el panel se reiniciará. ¿Continuar?", ver),
-            "SidebarMonitor", MessageBoxButton.OKCancel, MessageBoxImage.Information);
+            Loc.T("Se descargará e instalará {0}.\n\nSe conserva toda tu configuración (panel, ajustes, colocación, historial) — no se pierde nada. El panel se cerrará y se volverá a abrir solo, ya en la versión nueva.\n\n¿Actualizar ahora?", ver),
+            "SidebarMonitor", MessageBoxButton.OKCancel, MessageBoxImage.Question);
         if (ok != MessageBoxResult.OK) return;
 
-        _tray?.Notify(Loc.T("Descargando {0}…", ver));
-        try { await Updater.ApplyAsync(_latest, _install, Close); }
-        catch { _tray?.Notify(Loc.T("No se pudo actualizar. Prueba a descargarlo manualmente.")); }
+        // Visual feedback through every phase: Downloading %… → Installing… (msiexec shows its own
+        // progress bar too) → the panel closes and relaunches into the new version.
+        void Report(string s) { onProgress?.Invoke(s); _tray?.Notify(s); }
+        var progress = new Progress<string>(Report);
+        Report(Loc.T("Descargando {0}…", ver));
+        try { await Updater.ApplyAsync(_latest, _install, Close, silent: false, progress: progress); }
+        catch { Report(Loc.T("No se pudo actualizar. Prueba a descargarlo manualmente.")); }
     }
 
     private void Register(Section s)

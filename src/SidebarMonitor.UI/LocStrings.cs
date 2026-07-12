@@ -286,9 +286,11 @@ internal static class LocStrings
         ["Instalando {0} automáticamente…"] = "Installing {0} automatically…",
         ["Actualizando a {0}…"] = "Updating to {0}…",
         ["No se pudo actualizar automáticamente."] = "Automatic update failed.",
-        ["Se descargará e instalará {0}. Windows pedirá permiso de administrador y el panel se reiniciará. ¿Continuar?"]
-            = "{0} will be downloaded and installed. Windows will ask for administrator permission and the panel will restart. Continue?",
+        ["Se descargará e instalará {0}.\n\nSe conserva toda tu configuración (panel, ajustes, colocación, historial) — no se pierde nada. El panel se cerrará y se volverá a abrir solo, ya en la versión nueva.\n\n¿Actualizar ahora?"]
+            = "{0} will be downloaded and installed.\n\nAll your settings are kept (panel, options, placement, history) — nothing is lost. The panel will close and reopen by itself on the new version.\n\nUpdate now?",
         ["Descargando {0}…"] = "Downloading {0}…",
+        ["Descargando… {0}%"] = "Downloading… {0}%",
+        ["Instalando…"] = "Installing…",
         ["No se pudo actualizar. Prueba a descargarlo manualmente."] = "Update failed. Try downloading it manually.",
 
         // ── First-run dialog ──────────────────────────────────────────────────────────────────

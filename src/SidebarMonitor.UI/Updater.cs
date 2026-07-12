@@ -90,7 +90,8 @@ internal static class Updater
     /// nothing to apply (no asset / not MSI-installed); the caller should open <see cref="Release.HtmlUrl"/>
     /// in that case. One UAC prompt appears (per-machine MSI).
     /// </summary>
-    public static async Task<bool> ApplyAsync(Release r, Install install, Action shutdown, bool silent = false, CancellationToken ct = default)
+    public static async Task<bool> ApplyAsync(Release r, Install install, Action shutdown, bool silent = false,
+        IProgress<string>? progress = null, CancellationToken ct = default)
     {
         if (!install.FromMsi || install.Path is null || r.AssetUrl is null) return false;
 
@@ -102,10 +103,25 @@ internal static class Updater
         using (var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) })
         {
             http.DefaultRequestHeaders.UserAgent.ParseAdd("SidebarMonitor-Updater");
-            await using var src = await http.GetStreamAsync(r.AssetUrl, ct);
+            using var resp = await http.GetAsync(r.AssetUrl, HttpCompletionOption.ResponseHeadersRead, ct);
+            resp.EnsureSuccessStatusCode();
+            long? total = resp.Content.Headers.ContentLength;
+            await using var src = await resp.Content.ReadAsStreamAsync(ct);
             await using var dst = File.Create(msi);
-            await src.CopyToAsync(dst, ct);
+            var buf = new byte[81920];
+            long got = 0; int lastPct = -1, n;
+            while ((n = await src.ReadAsync(buf, ct)) > 0)
+            {
+                await dst.WriteAsync(buf.AsMemory(0, n), ct);
+                got += n;
+                if (total is > 0 && progress is not null)
+                {
+                    int pct = (int)(got * 100 / total.Value);
+                    if (pct != lastPct) { lastPct = pct; progress.Report(Loc.T("Descargando… {0}%", pct)); }
+                }
+            }
         }
+        progress?.Report(Loc.T("Instalando…"));
 
         // A detached, hidden relauncher: run msiexec (elevates; a prompt appears unless elevation is
         // silent), then start the new UI. wscript with window style 0 keeps it console-less and it is

@@ -8,6 +8,20 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 _Nothing yet._
 
+## [1.2.3] — 2026-07-13
+
+### Changed
+
+- **In-app update UX.** The default *Update now* flow now shows a **confirmation dialog** that reassures
+  nothing is lost — your settings, layout and history live in `%LOCALAPPDATA%` and the installer never
+  touches them — and then gives **live progress** (Downloading %… → Installing…) in the Updates panel
+  before the app closes and relaunches on the new version. The silent, zero-friction auto-install from
+  1.2.2 stays available but is clearly the **opt-in, non-default** choice (Settings → Updates).
+
+### Added
+
+- Download-progress percentage reported during an in-app update.
+
 ## [1.2.2] — 2026-07-13
 
 ### Added
@@ -68,7 +82,8 @@ First public release.
 
 > Not code-signed yet, so Windows SmartScreen may warn on first run — choose **More info → Run anyway**.
 
-[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.2.2...HEAD
+[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.2.3...HEAD
+[1.2.3]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.2.3
 [1.2.2]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.2.2
 [1.2.1]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.2.1
 [1.2.0]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.2.0

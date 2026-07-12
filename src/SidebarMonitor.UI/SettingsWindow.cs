@@ -412,7 +412,7 @@ internal sealed class SettingsWindow : Window
         check.Click += (_, _) => _host.RunUpdateCheck(true, s => status.Text = s);
         var apply = TextButton(Loc.T("Actualizar ahora"));
         apply.Margin = new Thickness(8, 12, 0, 0);
-        apply.Click += (_, _) => _host.ApplyUpdate();
+        apply.Click += (_, _) => _host.ApplyUpdate(s => status.Text = s);
 
         var row = new StackPanel { Orientation = Orientation.Horizontal };
         row.Children.Add(check);
