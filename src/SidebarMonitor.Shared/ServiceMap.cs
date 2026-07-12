@@ -79,8 +79,4 @@ public sealed class ServiceMap
         if (!_byPid.TryGetValue(pid, out var list) || list.Count == 0) return null;
         return list.Count == 1 ? list[0] : $"{list[0]}+{list.Count - 1}";
     }
-
-    /// <summary>The full service list a PID hosts, or null.</summary>
-    public IReadOnlyList<string>? Services(int pid) =>
-        _byPid.TryGetValue(pid, out var list) ? list : null;
 }

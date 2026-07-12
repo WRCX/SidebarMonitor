@@ -6,7 +6,12 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ## [Unreleased]
 
-_Nothing yet._
+### Maintainability (no behaviour change)
+
+- Continued the `MainWindow.cs` split from 1.2.4: window placement + edge-drag moved into
+  `MainWindow.Placement.cs` (partial class).
+- Removed confirmed-dead members (`ProcessNames.OnStop`, `ServiceMap.Services`, `RamInfo.Loaded`);
+  made `TestFakeFps` an `init` property.
 
 ## [1.2.4] — 2026-07-13
 

@@ -36,9 +36,8 @@ internal sealed class ProcessNames
     }
 
     public void OnStart(ProcessTraceData d) => _byPid[d.ProcessID] = Clean(d.ProcessName, d.ImageFileName);
-
-    /// <summary>Keep exited PIDs: samples for the window we are aggregating may still refer to them.</summary>
-    public void OnStop(ProcessTraceData d) { }
+    // Note: no OnStop handler — exited PIDs are intentionally kept, since samples for the window being
+    // aggregated may still refer to them.
 
     public string Get(int pid)
     {

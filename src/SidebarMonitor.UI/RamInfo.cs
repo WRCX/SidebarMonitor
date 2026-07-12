@@ -18,7 +18,6 @@ internal static class RamInfo
     private static readonly List<Stick> _sticks = [];
     private static readonly CultureInfo Ci = CultureInfo.InvariantCulture;
 
-    public static bool Loaded { get; private set; }
     public static bool HasData => _sticks.Count > 0;
 
     /// <summary>Query WMI off the UI thread, then invoke <paramref name="onLoaded"/> on it.</summary>
@@ -27,7 +26,6 @@ internal static class RamInfo
         var thread = new Thread(() =>
         {
             try { Query(); } catch { /* WMI absent or blocked: stay empty */ }
-            Loaded = true;
             try { onLoaded(); } catch { }
         })
         { IsBackground = true, Name = "RamInfo" };
