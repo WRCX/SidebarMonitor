@@ -1,0 +1,20 @@
+# winget installer manifest (schema 1.6). Template — the InstallerUrl, InstallerSha256 and
+# ProductCode are filled at release time from the actually-published MSI (installer/build.ps1
+# regenerates the ProductCode each build, so read it back from the released .msi).
+PackageIdentifier: Rubenarbos.SidebarMonitor
+PackageVersion: 1.2.0
+InstallerType: wix
+Scope: machine
+InstallModes:
+  - interactive
+  - silent
+  - silentWithProgress
+UpgradeBehavior: install
+Installers:
+  - Architecture: x64
+    # Release asset URL, e.g. https://github.com/rubenarbos/SidebarMonitor/releases/download/v1.2.0/SidebarMonitor.msi
+    InstallerUrl: <FILL-AT-RELEASE>
+    InstallerSha256: <FILL-AT-RELEASE-SHA256-OF-PUBLISHED-MSI>
+    ProductCode: '{DCE0D0CB-80AC-450B-A7B5-99AF15961AC8}'
+ManifestType: installer
+ManifestVersion: 1.6.0

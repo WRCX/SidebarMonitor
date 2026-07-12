@@ -5,6 +5,11 @@ obj/
 artifacts/
 publish/
 
+# Installer build artifacts. The staged publish and the .msi bundle the AMD SDK binaries + driver
+# (proprietary, never committed) plus the self-contained .NET runtime. Built by installer/build.ps1.
+installer/stage/
+installer/out/
+
 # Native shim build outputs (source + build.cmd are committed; run build.cmd to produce these)
 native/**/*.dll
 native/**/*.obj

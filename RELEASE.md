@@ -51,7 +51,7 @@ Leída la EULA local (`C:\Program Files\AMD\RyzenMasterMonitoringSDK\License.rtf
 ### P1 — importante para adopción
 - [ ] **UI en inglés** (i18n; mantener español). Es un mercado global. *(siguiente en la cola de P1)*
 - [x] **Ventana de ajustes** de verdad — `SettingsWindow.cs`, reemplaza el menú (podado a accesos rápidos).
-- [ ] **Instalador** propio (Inno Setup / WiX-MSI) con: EULA AMD, autostart opcional, tarea del helper elevado, desinstalación limpia. + **manifiesto winget**. Valorar **Microsoft Store** (canal de pago de baja fricción: 2-5 €).
+- [x] **Instalador** propio **WiX-MSI** (`installer/`, WiX v5): 3 apps self-contained a Program Files (sin prerequisito .NET), helper como tarea programada elevada, UI en Run key, shortcut, desinstalación limpia. EULA AMD se acepta in-app en 1er arranque (no en el MSI). + **manifiesto winget** (`installer/winget/`, plantilla con URL/hash a rellenar en release). Microsoft Store descartada por ahora (el sandbox MSIX choca con el helper elevado + tarea programada). *(pendiente: probar el MSI en VM; firma de código)*
 - [ ] **Autoactualización** o al menos aviso de versión nueva desde GitHub Releases (comparar con `AppVersion`).
 - [x] **README** con el pitch anti-WinRing0, tabla de features, requisitos y **capturas** (hero + secciones). En inglés (estándar OSS). El deep-dive técnico se movió a `docs/ARCHITECTURE.md`. *(pendiente: GIF de demo)*
 - [ ] **Landing** (GitHub Pages) + botón **café** (GitHub Sponsors / Buy Me a Coffee).
