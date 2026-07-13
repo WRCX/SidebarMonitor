@@ -6,6 +6,33 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ## [Unreleased]
 
+## [1.4.1] — 2026-07-14
+
+Polish and fixes on top of the 1.4.0 work. No MSI was cut for 1.4.0, so 1.4.1 is the first release and
+includes all of it.
+
+### Changed
+
+- **CPU and GPU model names now show in their section titles by default** (`CpuNameMode` /
+  `GpuNameMode` default to 1) — the first thing people look for, at no vertical cost.
+- `install.ps1` is Intel-friendly: it resolves `dotnet` even when it's not on PATH, skips the AMD
+  RyzenShim/SDK steps when the C++ toolchain/SDK is absent (Intel-only machines install fine), and
+  falls back to a non-AOT agent publish when the NativeAOT C++ linker isn't available.
+
+### Fixed
+
+- **Core colour palettes now use their full range regardless of core count.** Every preset was
+  hardwired to a 16-core spread, so an 8-core rainbow only reached red→green (half the wheel) while a
+  32-core one wrapped and repeated. The hue is now spread across the machine's actual core count, so
+  8-, 16- and 32-core systems all get the complete rainbow (and the full cool/warm/pastel bands),
+  evenly divided. The high-contrast (golden-angle) preset was already count-independent.
+- **Dead right-click + a painted edge strip after resizing/re-placing the panel.** The borderless
+  AppBar only re-asserted its client area (`WM_NCCALCSIZE` via `SWP_FRAMECHANGED`) at creation, so a
+  later placement — e.g. dragging the panel wider — could let the `WS_THICKFRAME` sizing border
+  return, re-inset the client, and offset every hit-test (right-clicks landed on the wrong element and
+  the context menu never opened). `SWP_FRAMECHANGED` is now applied on every re-placement and right
+  after a drag-resize, so no path can leave the frame in that state.
+
 ## [1.4.0] — 2026-07-13
 
 CPU sensors for **Intel** laptops/desktops via PawnIO (temperature, RAPL power, real per-core boost
@@ -71,28 +98,6 @@ Intel verified on an i7-4700HQ, fan verified on an ASUS N56JR.
   end-to-end. Vendor-agnostic (AMD + Intel laptops). Best-effort and flagged as such: a community map
   can point at the wrong register on an unverified model. Needs [PawnIO](https://pawnio.eu) installed;
   `LpcACPIEC.bin` is fetched by `native/PawnIO/fetch.ps1` alongside the other modules.
-
-### Changed
-
-- **CPU and GPU model names now show in their section titles by default** (`CpuNameMode` /
-  `GpuNameMode` default to 1) — the first thing people look for, at no vertical cost.
-- `install.ps1` is Intel-friendly: it resolves `dotnet` even when it's not on PATH, skips the AMD
-  RyzenShim/SDK steps when the C++ toolchain/SDK is absent (Intel-only machines install fine), and
-  falls back to a non-AOT agent publish when the NativeAOT C++ linker isn't available.
-
-### Fixed
-
-- **Core colour palettes now use their full range regardless of core count.** Every preset was
-  hardwired to a 16-core spread, so an 8-core rainbow only reached red→green (half the wheel) while a
-  32-core one wrapped and repeated. The hue is now spread across the machine's actual core count, so
-  8-, 16- and 32-core systems all get the complete rainbow (and the full cool/warm/pastel bands),
-  evenly divided. The high-contrast (golden-angle) preset was already count-independent.
-- **Dead right-click + a painted edge strip after resizing/re-placing the panel.** The borderless
-  AppBar only re-asserted its client area (`WM_NCCALCSIZE` via `SWP_FRAMECHANGED`) at creation, so a
-  later placement — e.g. dragging the panel wider — could let the `WS_THICKFRAME` sizing border
-  return, re-inset the client, and offset every hit-test (right-clicks landed on the wrong element and
-  the context menu never opened). `SWP_FRAMECHANGED` is now applied on every re-placement and right
-  after a drag-resize, so no path can leave the frame in that state.
 
 ## [1.3.0] — 2026-07-13
 
