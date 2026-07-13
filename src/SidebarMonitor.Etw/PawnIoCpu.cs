@@ -19,10 +19,6 @@ internal sealed class PawnIoCpu : IDisposable
     /// <summary>THM_TCON_CUR_TMP: current Tctl, SMN address on all Zen families (17h/19h/1Ah).</summary>
     private const uint ThmTconCurTmp = 0x00059800;
 
-    /// <summary>The one PM_Table layout we have validated (Phoenix, mapped empirically on a 7840HS
-    /// by diffing idle/load dumps — see docs/amd-advanced-pawnio.md). Any other version: Tctl only.</summary>
-    private const ulong PmTablePhoenix = 0x4C0007;
-
     /// <summary>Floats needed from the PM_Table head (the limit/value header); qwords = half.</summary>
     private const int PmFloats = 24;
 
@@ -68,7 +64,8 @@ internal sealed class PawnIoCpu : IDisposable
     private readonly ulong[] _out = new ulong[1];
     private readonly ulong[] _pmQwords = new ulong[PmFloats / 2];
     private readonly float[] _pmFloats = new float[PmFloats];
-    private ulong _pmVersion;   // 0 = PM_Table unavailable or layout unknown → Tctl only
+    private ulong _pmVersion;    // resolved PM_Table version, 0 = unresolved (no PM_Table access)
+    private bool _pmEnabled;     // we have an offset map for _pmVersion → power fields flow
 
     public bool IsOpen { get; private set; }
 
@@ -104,16 +101,17 @@ internal sealed class PawnIoCpu : IDisposable
 
             p.IsOpen = true;
 
-            // Resolve the PM_Table once (its address is stable per boot). Only a version we have a
-            // validated map for enables the power fields; anything else degrades to Tctl-only.
+            // Resolve the PM_Table once (its address is stable per boot). The version is kept even
+            // when we have no offset map for it — the diagnostics dump needs it — but only a mapped
+            // version enables the power fields; anything else degrades to Tctl-only.
             var out2 = new ulong[2];
             bool got = p.AcquirePci();
             try
             {
-                if (got && pawnio_execute(p._handle, "ioctl_resolve_pm_table", [], 0, out2, 2, out _) == 0
-                        && out2[0] == PmTablePhoenix)
+                if (got && pawnio_execute(p._handle, "ioctl_resolve_pm_table", [], 0, out2, 2, out _) == 0)
                 {
                     p._pmVersion = out2[0];
+                    p._pmEnabled = KnownPmTableVersion(out2[0]);
                     // Warm-up refresh: the first SMU transfer after resolve can bounce (busy/prereq);
                     // absorbing it here means TryRead's per-window refresh starts clean.
                     pawnio_execute(p._handle, "ioctl_update_pm_table", [], 0, [], 0, out _);
@@ -127,8 +125,12 @@ internal sealed class PawnIoCpu : IDisposable
         catch (Exception ex) { error = ex.Message; return null; }
     }
 
-    /// <summary>PM_Table version this CPU reports, 0 if unresolved; for the startup log.</summary>
+    /// <summary>PM_Table version this CPU reports, 0 if unresolved; for the log, the debug overlay
+    /// and the "add my CPU" diagnostics dump.</summary>
     public ulong PmTableVersion => _pmVersion;
+
+    /// <summary>True when the resolved version has an offset map (power fields will flow).</summary>
+    public bool PmTableSupported => _pmEnabled;
 
     private bool AcquirePci()
     {
@@ -153,7 +155,7 @@ internal sealed class PawnIoCpu : IDisposable
 
             // Power from the PM_Table (known layout only). A refresh can transiently bounce off a
             // busy SMU — then this window is temp-only, never stale power.
-            if (_pmVersion != 0
+            if (_pmEnabled
                 && pawnio_execute(_handle, "ioctl_update_pm_table", [], 0, [], 0, out _) == 0
                 && pawnio_execute(_handle, "ioctl_read_pm_table", [], 0, _pmQwords, (nuint)_pmQwords.Length, out _) == 0)
             {
@@ -167,23 +169,59 @@ internal sealed class PawnIoCpu : IDisposable
     }
 
     /// <summary>
-    /// Maps a known PM_Table layout onto <see cref="Data"/>'s power fields. Phoenix (0x4C0007),
-    /// mapped empirically on the 7840HS: interleaved limit/value pairs — STAPM [0]/[1],
-    /// fast PPT [2]/[3] (the fast value equals the socket power field at [47] in every capture),
-    /// slow PPT [4]/[5], VDD TDC [8]/[9], THM [16]/[17]. Guards keep a garbled read (zero limits,
-    /// absurd watts) from publishing.
+    /// Maps a known PM_Table layout onto <see cref="Data"/>'s power fields. Offsets are float
+    /// indexes. The header is interleaved limit/value pairs and its first six floats — STAPM [0]/[1]
+    /// and fast/slow PPT [2]/[3]/[4]/[5] — sit at the same place in every known APU table; only the
+    /// VDD TDC pair and the THM limit move by version. Sources: our empirical Phoenix map (0x4C0007,
+    /// live idle/load diffing on a 7840HS — docs/amd-advanced-pawnio.md), which agrees exactly with
+    /// the per-version tables RyzenAdj maintains (FlyGoat/RyzenAdj lib/api.c, ported here as data);
+    /// the fast PPT value equalled the socket-power field in every capture. Guards keep a garbled
+    /// read (zero limits, absurd watts) from publishing.
     /// </summary>
     public static bool TryMapPmTable(ulong version, ReadOnlySpan<float> t, ref Data d)
     {
-        if (version != PmTablePhoenix || t.Length < 18) return false;
-        float pptLimit = t[2], pptValue = t[3], tdcLimit = t[8], tdcValue = t[9], thmLimit = t[16];
+        int tdcL, tdcV, thmL;
+        switch (version)
+        {
+            // Raven Ridge / Picasso / Dali (Zen1 APUs). Their table has no trustworthy THM-limit
+            // slot (that offset holds a per-core temperature), so TjMaxC stays 0 and the UI keeps
+            // its generic thresholds.
+            case 0x1E0001 or 0x1E0002 or 0x1E0003 or 0x1E0004 or 0x1E0005 or 0x1E000A or 0x1E0101:
+                tdcL = 6; tdcV = 7; thmL = -1; break;
+
+            // The classic APU header: Renoir/Lucienne (0x37xxxx), Cezanne (0x40xxxx),
+            // Rembrandt (0x45xxxx), Phoenix/Hawk Point (0x4C0006-9; 0x4C0007 verified live).
+            case >= 0x370000 and <= 0x370005:
+            case >= 0x400001 and <= 0x400005:
+            case 0x450004 or 0x450005:
+            case >= 0x4C0006 and <= 0x4C0009:
+                tdcL = 8; tdcV = 9; thmL = 16; break;
+
+            // Strix Point / Krackan Point: the TDC block moved down.
+            case 0x5D0008 or 0x5D0009 or 0x5D000B or 0x650005:
+                tdcL = 12; tdcV = 13; thmL = 16; break;
+
+            default: return false;   // unknown layout: never guess offsets
+        }
+
+        if (t.Length < PmFloats) return false;
+        float pptLimit = t[2], pptValue = t[3];
         if (!(pptLimit > 0) || !(pptValue >= 0) || pptValue > 1000) return false;
         d.HasPower = true;
         d.PackageW = pptValue;
         d.PptPct = Math.Clamp(100f * pptValue / pptLimit, 0f, 200f);
-        d.TdcPct = tdcLimit > 0 ? Math.Clamp(100f * tdcValue / tdcLimit, 0f, 200f) : 0f;
-        d.TjMaxC = thmLimit is > 0 and < 150 ? thmLimit : 0f;
+        d.TdcPct = t[tdcL] > 0 ? Math.Clamp(100f * t[tdcV] / t[tdcL], 0f, 200f) : 0f;
+        d.TjMaxC = thmL >= 0 && t[thmL] is > 0 and < 150 ? t[thmL] : 0f;
         return true;
+    }
+
+    /// <summary>True when we have an offset map for this PM_Table version (see TryMapPmTable).</summary>
+    public static bool KnownPmTableVersion(ulong version)
+    {
+        var d = default(Data);
+        Span<float> probe = stackalloc float[PmFloats];
+        probe[2] = 1f;   // minimal plausible header so only the version switch decides
+        return TryMapPmTable(version, probe, ref d);
     }
 
     /// <summary>
@@ -196,6 +234,43 @@ internal sealed class PawnIoCpu : IDisposable
         double t = ((raw >> 21) & 0x7FF) * 0.125;
         if ((raw & (1u << 19)) != 0) t -= 49;
         return t;
+    }
+
+    /// <summary>
+    /// One-shot PM_Table dump for the community "support my CPU" flow (the GitHub issue template):
+    /// version + the first page of floats, invariant culture. Works on UNKNOWN versions on purpose —
+    /// that's the whole point. Null-safe text on any failure, never throws.
+    /// </summary>
+    public string DumpDiagnostics()
+    {
+        var sb = new System.Text.StringBuilder(8192);
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        sb.AppendLine(ci, $"pm_table_version=0x{_pmVersion:X}");
+        sb.AppendLine(ci, $"pm_table_mapped={_pmEnabled}");
+        if (_pmVersion == 0) { sb.AppendLine("pm_table: no resuelto (el SMU no devolvio la tabla)"); return sb.ToString(); }
+
+        if (!AcquirePci()) { sb.AppendLine("pm_table: mutex PCI ocupado, reintenta"); return sb.ToString(); }
+        try
+        {
+            // One page (512 qwords = 1024 floats) is the module's per-call cap and covers every
+            // known header; enough to map a new version.
+            var q = new ulong[512];
+            if (pawnio_execute(_handle, "ioctl_update_pm_table", [], 0, [], 0, out _) != 0)
+                sb.AppendLine("pm_table: update rebotado (SMU ocupado); volcando la ultima copia");
+            if (pawnio_execute(_handle, "ioctl_read_pm_table", [], 0, q, (nuint)q.Length, out _) != 0)
+            {
+                sb.AppendLine("pm_table: lectura fallida");
+                return sb.ToString();
+            }
+            var f = new float[q.Length * 2];
+            Buffer.BlockCopy(q, 0, f, 0, q.Length * 8);
+            for (int i = 0; i < f.Length; i++)
+                if (f[i] != 0 && float.IsFinite(f[i]) && MathF.Abs(f[i]) < 1e9f)
+                    sb.AppendLine(ci, $"[{i}]={f[i]:F4}");
+        }
+        catch (Exception ex) { sb.AppendLine("pm_table: excepcion " + ex.Message); }
+        finally { _pciMutex.ReleaseMutex(); }
+        return sb.ToString();
     }
 
     public void Dispose()

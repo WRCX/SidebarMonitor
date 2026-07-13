@@ -382,10 +382,41 @@ internal sealed class SettingsWindow : Window
             v => { _cfg.ShowFps = v; _cfg.Save(); SidebarMonitor.Shared.ConsentMarker.SetFps(v); }));
 
         if (SidebarMonitor.Shared.CpuVendor.IsAmd)
+        {
             p.Children.Add(Toggle(Loc.T("Sensores CPU avanzados (PawnIO)"),
                 Loc.T("Lee la temperatura real (Tctl) del SMU vía el driver firmado PawnIO. Imprescindible en portátiles Ryzen (el SDK de AMD no lee APUs móviles); en escritorio afina la media de die al hotspot que muestra HWiNFO. Requiere PawnIO instalado (github.com/namazso/PawnIO)."),
                 () => _cfg.AmdAdvanced,
                 v => { _cfg.AmdAdvanced = v; _cfg.Save(); SidebarMonitor.Shared.ConsentMarker.SetAmdAdvanced(v); }));
+
+            // "Support my CPU" flow: copies a plain-text report + the SMU PM_Table dump so the user
+            // can paste it into the GitHub issue template. Nothing is ever sent automatically.
+            var diag = TextButton(Loc.T("Copiar diagnóstico de sensores"));
+            diag.ToolTip = Loc.T("Copia al portapapeles el estado de los sensores y el volcado del PM_Table, para pedir soporte de tu CPU en GitHub. No envía nada por sí solo.");
+            diag.Click += async (_, _) =>
+            {
+                diag.IsEnabled = false;
+                object original = diag.Content;
+                try
+                {
+                    SidebarMonitor.Shared.DiagBridge.RequestDump();
+                    string report = _host.BuildSensorDiagnostics();
+                    string? dump = null;
+                    for (int i = 0; i < 25 && dump is null; i++)   // helper answers on its next 1 s window
+                    {
+                        await System.Threading.Tasks.Task.Delay(200);
+                        dump = SidebarMonitor.Shared.DiagBridge.TryReadDump();
+                    }
+                    report += "\n-- pm_table --\n" + (dump ?? Loc.T("(el helper no respondió; ¿está corriendo y con PawnIO activado?)"));
+                    Clipboard.SetText(report);
+                    diag.Content = Loc.T("¡Copiado al portapapeles!");
+                }
+                catch { diag.Content = Loc.T("No se pudo copiar"); }
+                await System.Threading.Tasks.Task.Delay(2500);
+                diag.Content = original;
+                diag.IsEnabled = true;
+            };
+            p.Children.Add(diag);
+        }
 
         var open = TextButton(Loc.T("Abrir carpeta de logs"));
         open.Click += (_, _) =>

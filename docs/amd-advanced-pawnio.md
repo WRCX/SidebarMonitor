@@ -37,10 +37,31 @@ power fields **only when the SDK isn't providing them** (`CpuSdkOk == 0`, i.e. l
 PM_Table version → power quietly off, Tctl still works. `EtwSnapshot.CpuPawnIoOk` is the bitmask
 (bit 0 temp, bit 1 power).
 
-Notes for the next family (Strix, family 1Ah): re-run the PoC's idle/load diff (the scratchpad
-`PawnIoPoc` "pmtable"/"watch" modes), confirm the limit/value pairs, and add the version to
-`PawnIoCpu.TryMapPmTable`. The first `ioctl_update_pm_table` after resolve can bounce with SMU
-prereq/busy (0x8007054F) — retry or absorb it as a warm-up call, as `TryOpen` does.
+### Multi-family coverage (added right after)
+
+The header layout above is not Phoenix-specific. Cross-checking against the per-version tables
+[RyzenAdj](https://github.com/FlyGoat/RyzenAdj) maintains (`lib/api.c`) showed our empirical map is
+the **standard APU header**: STAPM [0]/[1] and fast/slow PPT [2..5] sit at fixed offsets in *every*
+known version (RyzenAdj reads them unconditionally); only TDC and the THM limit move. Ported as
+data into `PawnIoCpu.TryMapPmTable`:
+
+| Family group | Versions | TDC lim/val | THM lim |
+|---|---|---|---|
+| Raven Ridge / Picasso / Dali (Zen1) | 0x1E0001-5, 0x1E000A, 0x1E0101 | [6]/[7] | — (slot holds a per-core temp; not trusted) |
+| Renoir/Lucienne → Hawk Point | 0x370000-5, 0x400001-5, 0x450004-5, 0x4C0006-9 | [8]/[9] | [16] |
+| Strix Point / Krackan Point | 0x5D0008/9/B, 0x650005 | [12]/[13] | [16] |
+
+Anything else (e.g. 0x4C0003-5, Van Gogh 0x3F0000, Strix Halo 0x64020C) stays Tctl-only — we never
+guess offsets. New versions arrive via the community flow: the **"Copy sensors diagnostics"**
+button (Settings → Diagnostics) copies the PM_Table version + a dump of the table, and the
+`.github/ISSUE_TEMPLATE/pm-table-support.yml` issue asks users to paste it. Map the header from the
+dump (the limit/value pairs are obvious: round limits, values tracking load), add the version to
+the switch, done.
+
+Practical notes: the first `ioctl_update_pm_table` after resolve can bounce with SMU prereq/busy
+(0x8007054F) — absorb it as a warm-up call, as `TryOpen` does. And never force-kill a process that
+holds PawnIO mid-ioctl: the debug driver build leaks its internal lock (every later load fails
+with ERROR_BUSY until reboot).
 
 ## What we already have (no ring0)
 

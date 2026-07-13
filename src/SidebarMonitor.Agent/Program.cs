@@ -249,6 +249,7 @@ internal static class Program
         // PawnIO: the helper already wrote these over the SDK fields, but the block above only
         // copies when the AMD SDK is up — and on laptops (mobile APUs) the SDK never is. Take
         // exactly the fields PawnIO owns this window (bit 0: Tctl; bit 1: PM_Table power).
+        s.CpuPmTableVersion = e.CpuPmTableVersion;
         if ((e.CpuPawnIoOk & 1) != 0)
         {
             s.Cpu.TempC = (float)e.CpuTempC;

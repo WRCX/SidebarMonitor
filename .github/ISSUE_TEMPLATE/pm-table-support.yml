@@ -1,0 +1,37 @@
+name: "CPU power support (PM_Table)"
+description: "SidebarMonitor shows the temperature of your Ryzen but not the watts? Paste the sensors diagnostics here so we can map your CPU's PM_Table version."
+title: "[PM_Table] Support for "
+labels: ["pm-table", "enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks! Adding your CPU usually takes one release. What we need is the report that the app
+        generates for you — nothing else, and nothing is ever sent automatically:
+
+        1. Install [PawnIO](https://pawnio.eu) and enable **Settings → Diagnostics → Advanced CPU
+           sensors (PawnIO)**.
+        2. Click **Copy sensors diagnostics** (same page). It copies a plain-text report — including
+           a dump of your CPU's PM_Table — to the clipboard.
+        3. Paste it below. That's it.
+  - type: input
+    id: cpu
+    attributes:
+      label: CPU model
+      placeholder: "e.g. AMD Ryzen 7 8845HS"
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Sensors diagnostics (paste from the app)
+      description: "Settings → Diagnostics → Copy sensors diagnostics"
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: reference
+    attributes:
+      label: Reference reading (optional)
+      description: "If you have HWiNFO or Ryzen Master open: what package power / temperature do they show at the same moment? Helps validate the mapping."
+      placeholder: "e.g. HWiNFO: 31.5 W, 62 °C"

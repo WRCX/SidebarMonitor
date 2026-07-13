@@ -7,7 +7,7 @@ public static class EtwLayout
 {
     /// <summary>'SBME' little-endian.</summary>
     public const uint Signature = 0x454D4253;
-    public const uint Version = 11;
+    public const uint Version = 12;
     public const string MapName = @"Local\SidebarMonitor.Etw";
 
     /// <summary>Segments drawn per core bar. Beyond this, the rest folds into "otros".</summary>
@@ -112,6 +112,11 @@ public struct EtwSnapshot
     /// providing them. Independent of CpuSdkOk on purpose: the Ryzen Master SDK doesn't read mobile
     /// APUs, so on laptops PawnIO is the only source for both.</summary>
     public byte CpuPawnIoOk;
+
+    /// <summary>PM_Table version the SMU reported (0 = PawnIO closed or table unresolved). Nonzero
+    /// with CpuPawnIoOk bit 1 clear = "we can read this CPU's table but don't know its layout yet" —
+    /// what the diagnostics dump + GitHub issue flow exists to fix.</summary>
+    public ulong CpuPmTableVersion;
 
     /// <summary>Drive temperatures (°C) by physical disk number, from the storage stack (admin).
     /// NaN = unknown. Covers the SATA disks the agent's unelevated NVMe path can't reach, closing

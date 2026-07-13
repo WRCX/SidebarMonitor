@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -37,6 +38,29 @@ internal sealed partial class MainWindow
     // change into the running UI. One dispatcher + a few accessors keeps the coupling small.
 
     private SettingsWindow? _settings;
+    private Snapshot _lastSnap;
+    private bool _haveSnap;
+
+    /// <summary>Plain-text sensors report for the "support my CPU" GitHub issue flow. Invariant
+    /// culture and stable keys on purpose — it's for a bug tracker, not for reading in-app.</summary>
+    internal string BuildSensorDiagnostics()
+    {
+        var ci = CultureInfo.InvariantCulture;
+        var sb = new System.Text.StringBuilder(512);
+        ref var s = ref _lastSnap;
+        sb.AppendLine(ci, $"app_version={CurrentVersionText}");
+        sb.AppendLine(ci, $"cpu={CpuVendor.Brand}");
+        sb.AppendLine(ci, $"vendor={CpuVendor.Maker}");
+        sb.AppendLine(ci, $"contracts=snap v{SnapshotLayout.Version} / etw v{EtwLayout.Version}");
+        sb.AppendLine(ci, $"helper={(_haveSnap && s.EtwAvailable ? "ok" : "no")}");
+        sb.AppendLine(ci, $"amd_sdk={(_haveSnap && s.CpuFromAmd ? "ok" : "no")}");
+        sb.AppendLine(ci, $"pawnio_toggle={_cfg.AmdAdvanced}");
+        sb.AppendLine(ci, $"pawnio_temp={(_haveSnap && s.CpuFromPawnIo ? "ok" : "no")}");
+        sb.AppendLine(ci, $"pm_table_version=0x{(_haveSnap ? s.CpuPmTableVersion : 0):X}");
+        if (_haveSnap)
+            sb.AppendLine(ci, $"temp_c={s.Cpu.TempC:F1} package_w={s.Cpu.PackagePowerW:F1} tjmax_c={s.Cpu.TjMaxC:F0}");
+        return sb.ToString();
+    }
 
     internal UiConfig Config => _cfg;
     internal GpuSection GpuSectionRef => _gpuSection;

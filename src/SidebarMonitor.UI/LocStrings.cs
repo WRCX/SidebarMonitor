@@ -267,6 +267,13 @@ internal static class LocStrings
         ["Sensores CPU avanzados (PawnIO)"] = "Advanced CPU sensors (PawnIO)",
         ["Lee la temperatura real (Tctl) del SMU vía el driver firmado PawnIO. Imprescindible en portátiles Ryzen (el SDK de AMD no lee APUs móviles); en escritorio afina la media de die al hotspot que muestra HWiNFO. Requiere PawnIO instalado (github.com/namazso/PawnIO)."]
             = "Reads the real temperature (Tctl) from the SMU via the signed PawnIO driver. Essential on Ryzen laptops (AMD's SDK can't read mobile APUs); on desktop it refines the die-average into the hotspot HWiNFO shows. Requires PawnIO installed (github.com/namazso/PawnIO).",
+        ["Copiar diagnóstico de sensores"] = "Copy sensors diagnostics",
+        ["Copia al portapapeles el estado de los sensores y el volcado del PM_Table, para pedir soporte de tu CPU en GitHub. No envía nada por sí solo."]
+            = "Copies the sensors state and the PM_Table dump to the clipboard, to request support for your CPU on GitHub. Nothing is sent automatically.",
+        ["(el helper no respondió; ¿está corriendo y con PawnIO activado?)"]
+            = "(the helper did not answer; is it running with PawnIO enabled?)",
+        ["¡Copiado al portapapeles!"] = "Copied to clipboard!",
+        ["No se pudo copiar"] = "Could not copy",
 
         // ── Updates ───────────────────────────────────────────────────────────────────────────
         ["Actualizaciones"] = "Updates",

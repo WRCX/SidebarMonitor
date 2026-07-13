@@ -278,6 +278,10 @@ internal sealed partial class MainWindow : AppBarWindow
 
         if (!_reader.TryRead(out var s)) return;
 
+        // Kept for the sensors-diagnostics report (Settings → Diagnóstico); one struct copy per tick.
+        _lastSnap = s;
+        _haveSnap = true;
+
         if (TestFakeFps)   // --fake-fps: sample data to preview the GAME section without a real game
         {
             NameField.Set(ref s.Frame.App, "Cyberpunk2077.exe");

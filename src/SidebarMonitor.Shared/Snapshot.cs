@@ -10,7 +10,7 @@ public static class SnapshotLayout
     public const uint Signature = 0x4E4D4253;
 
     /// <summary>Bump on any layout change. The reader refuses anything it does not know.</summary>
-    public const uint Version = 22;
+    public const uint Version = 23;
 
     /// <summary>
     /// Local\, not Global\. Creating a Global\ kernel object requires SeCreateGlobalPrivilege,
@@ -227,6 +227,10 @@ public struct Snapshot
     /// On laptops this is typically true with <see cref="CpuFromAmd"/> false, because the Ryzen
     /// Master SDK doesn't read mobile APUs. Shown in the debug overlay.</summary>
     public bool CpuFromPawnIo;
+
+    /// <summary>SMU PM_Table version via PawnIO (0 = none). For the debug overlay and the sensors
+    /// diagnostics report; nonzero without power flowing means "layout not mapped yet".</summary>
+    public ulong CpuPmTableVersion;
 
     // ---- Only populated when the elevated ETW helper is running ----
 

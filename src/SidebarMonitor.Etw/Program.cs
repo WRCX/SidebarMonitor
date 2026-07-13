@@ -85,6 +85,7 @@ internal static class Program
         // the publish timer (the marker can appear/disappear at any time), so here just the gates:
         // AMD only (the RyzenSMU module refuses anything else anyway) and skippable via --no-pawnio.
         PawnIoCpu? pawnIo = null;
+        string? pawnIoErr = null;   // last open failure, surfaced in the diagnostics dump
         bool pawnIoTried = false;   // one open attempt per marker transition, not one per second
         bool noPawnIo = args.Contains("--no-pawnio");
         if (noPawnIo)
@@ -286,8 +287,9 @@ internal static class Program
                 {
                     pawnIoTried = true;
                     pawnIo = PawnIoCpu.TryOpen(out string? pawnErr);
+                    pawnIoErr = pawnErr;
                     Console.WriteLine($"PawnIO RyzenSMU: {(pawnIo is not null
-                        ? $"abierto (Tctl via SMN; PM_Table v0x{pawnIo.PmTableVersion:X} {(pawnIo.PmTableVersion != 0 ? "-> potencia" : "no soportada, solo temp")})"
+                        ? $"abierto (Tctl via SMN; PM_Table v0x{pawnIo.PmTableVersion:X} {(pawnIo.PmTableSupported ? "-> potencia" : "sin mapa de offsets, solo temp")})"
                         : $"no disponible - {pawnErr}")}");
                 }
                 else if (!wanted)
@@ -296,6 +298,14 @@ internal static class Program
                     pawnIoTried = false;   // allow one fresh attempt if the user opts back in
                 }
             }
+            // On-demand PM_Table dump for the "support my CPU" GitHub-issue flow: the UI drops a
+            // request file, we answer next to it. Served even (especially) on unmapped versions.
+            if (DiagBridge.DumpRequested)
+                DiagBridge.WriteDump(pawnIo is not null
+                    ? pawnIo.DumpDiagnostics()
+                    : $"pawnio=cerrado ({pawnIoErr ?? "opt-in apagado o driver no instalado"})\n");
+
+            snapshot.CpuPmTableVersion = pawnIo?.PmTableVersion ?? 0;
             snapshot.CpuPawnIoOk = 0;
             if (pawnIo is not null && pawnIo.TryRead(out var pawnData))
             {

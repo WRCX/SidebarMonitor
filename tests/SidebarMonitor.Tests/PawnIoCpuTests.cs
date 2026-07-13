@@ -76,9 +76,54 @@ public class PawnIoCpuTests
     [Fact]
     public void MapPmTable_UnknownVersion_RefusesToGuess()
     {
+        // 0x4C0005 exists in the wild (early Phoenix AGESA) but RyzenAdj has no offsets for it.
         var d = default(PawnIoCpu.Data);
-        Assert.False(PawnIoCpu.TryMapPmTable(0x4C0008, PhoenixTable(), ref d));
+        Assert.False(PawnIoCpu.TryMapPmTable(0x4C0005, PhoenixTable(), ref d));
         Assert.False(d.HasPower);
+        Assert.False(PawnIoCpu.KnownPmTableVersion(0x4C0005));
+        Assert.False(PawnIoCpu.KnownPmTableVersion(0));
+    }
+
+    [Theory]
+    [InlineData(0x370005ul)]   // Renoir
+    [InlineData(0x400005ul)]   // Cezanne
+    [InlineData(0x450005ul)]   // Rembrandt
+    [InlineData(0x4C0008ul)]   // Hawk Point
+    public void MapPmTable_ClassicApuHeader_SameOffsetsAsPhoenix(ulong version)
+    {
+        var d = default(PawnIoCpu.Data);
+        Assert.True(PawnIoCpu.TryMapPmTable(version, PhoenixTable(), ref d));
+        Assert.Equal(43.373f, d.PackageW);
+        Assert.Equal(100f * 31.578f / 70f, d.TdcPct, 3);
+        Assert.Equal(100f, d.TjMaxC);
+    }
+
+    [Fact]
+    public void MapPmTable_StrixPoint_TdcMoved()
+    {
+        var t = new float[24];
+        t[2] = 54f; t[3] = 40f;          // fast PPT
+        t[12] = 70f; t[13] = 35f;        // TDC pair moved down on Strix
+        t[16] = 100f;
+        var d = default(PawnIoCpu.Data);
+        Assert.True(PawnIoCpu.TryMapPmTable(0x5D0008, t, ref d));
+        Assert.Equal(40f, d.PackageW);
+        Assert.Equal(50f, d.TdcPct);
+        Assert.Equal(100f, d.TjMaxC);
+    }
+
+    [Fact]
+    public void MapPmTable_RavenRidge_TdcAt6_NoTjmax()
+    {
+        var t = new float[24];
+        t[2] = 25f; t[3] = 12.5f;
+        t[6] = 45f; t[7] = 9f;           // Zen1 APU TDC pair
+        t[16] = 100f;                     // whatever sits here on Zen1 is NOT the THM limit
+        var d = default(PawnIoCpu.Data);
+        Assert.True(PawnIoCpu.TryMapPmTable(0x1E0004, t, ref d));
+        Assert.Equal(12.5f, d.PackageW);
+        Assert.Equal(20f, d.TdcPct);
+        Assert.Equal(0f, d.TjMaxC);      // deliberately not trusted on this family
     }
 
     [Fact]

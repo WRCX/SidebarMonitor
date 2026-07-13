@@ -4,6 +4,25 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 [Keep a Changelog](https://keepachangelog.com/). Versions track `Version` / `FileVersion`
 (`AssemblyVersion` is intentionally pinned and does **not** move per release).
 
+## [Unreleased]
+
+### Added
+
+- **PM_Table power on (almost) every Ryzen APU generation**, not just Phoenix: the per-version
+  offset maps for Raven Ridge/Picasso/Dali, Renoir/Lucienne, Cezanne, Rembrandt, Hawk Point and
+  Strix/Krackan Point were ported (as data) from the tables the
+  [RyzenAdj](https://github.com/FlyGoat/RyzenAdj) community maintains — which independently agree
+  with the map we derived live on the 7840HS. Unknown versions still degrade to Tctl-only, never
+  guessing offsets. (On Zen1 APUs the THM-limit slot is not trustworthy, so those keep the generic
+  temperature thresholds.)
+- **"Copy sensors diagnostics" button** (Settings → Diagnostics, AMD): copies a plain-text report —
+  sensor states, PM_Table version and a dump of the table — for the new **"CPU power support"
+  GitHub issue template**. This is the community path for mapping new CPU generations: explicit,
+  manual, nothing is ever sent automatically (see PRIVACY.md). The unelevated UI asks the elevated
+  helper for the dump through a request file next to the consent markers.
+- Debug overlay now shows the PM_Table version (`PawnIO✓ PM:0x4C0007`).
+  Contracts bumped: `Snapshot` v23, `EtwSnapshot` v12 (`CpuPmTableVersion`).
+
 ## [1.3.0] — 2026-07-13
 
 CPU sensors for Ryzen laptops via PawnIO: temperature (Tctl) and package power on mobile APUs,
