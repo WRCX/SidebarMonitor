@@ -1,7 +1,7 @@
 # Handoff — implement PawnIO CPU sensors (new session, on the AMD 7840HS laptop)
 
 > **STATUS 2026-07-13 — steps 1 & 2 DONE on the 7840HS.** PawnIO was already installed (2.2.0);
-> the interop + **AMD Tctl via SMN** shipped in `[Unreleased]` (Version 1.3.0): `PawnIoCpu.cs` in the
+> the interop + **AMD Tctl via SMN** shipped in **v1.3.0**: `PawnIoCpu.cs` in the
 > helper loads the **signed `RyzenSMU.bin`** from `namazso/PawnIO.Modules` (release PawnIO only loads
 > modules signed by that project — don't compile your own), reads `THM_TCON_CUR_TMP` under the
 > `Global\Access_PCI` mutex, and publishes over `EtwSnapshot.CpuTempC` (`CpuPawnIoOk`, etw v10, snap

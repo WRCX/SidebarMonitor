@@ -122,8 +122,9 @@ if ($Lite) {
 
 Write-Host '== Building MSI with WiX ==' -ForegroundColor Cyan
 New-Item -ItemType Directory -Force $out | Out-Null
-$msi = Join-Path $out ($Lite ? 'SidebarMonitor-lite.msi' : 'SidebarMonitor.msi')
-$flavor = $Lite ? 'lite' : 'full'
+# No ternary operator: that is PowerShell 7 syntax and this script targets Windows PowerShell 5.1.
+if ($Lite) { $msi = Join-Path $out 'SidebarMonitor-lite.msi'; $flavor = 'lite' }
+else       { $msi = Join-Path $out 'SidebarMonitor.msi';      $flavor = 'full' }
 & wix build (Join-Path $here 'SidebarMonitor.wxs') `
     -ext WixToolset.UI.wixext `
     -d "Stage=$stage" -d "ProjectRoot=$root" -d "Version=$Version" -d "Flavor=$flavor" `

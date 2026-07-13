@@ -4,7 +4,10 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 [Keep a Changelog](https://keepachangelog.com/). Versions track `Version` / `FileVersion`
 (`AssemblyVersion` is intentionally pinned and does **not** move per release).
 
-## [Unreleased]
+## [1.3.0] — 2026-07-13
+
+CPU sensors for Ryzen laptops via PawnIO: temperature (Tctl) and package power on mobile APUs,
+which the Ryzen Master SDK cannot read. Opt-in, HVCI-safe, verified on a 7840HS (Phoenix).
 
 ### Added
 
