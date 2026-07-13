@@ -274,9 +274,12 @@ internal sealed class SettingsWindow : Window
         p.Children.Add(Choice(Loc.T("Posición de la métrica"), Loc.T("Dónde va la frecuencia/temperatura en la fila."),
             [(Loc.T("Dentro"), 0), (Loc.T("Al final"), 1), (Loc.T("Fuera"), 2)], () => _cfg.CoreMetricPos,
             v => { _cfg.CoreMetricPos = v; _host.ApplyLive("cpugraph"); }));
-        p.Children.Add(Choice(Loc.T("Barra por núcleo"), Loc.T("Uso (%Util), residencia C0 (despierto), ambas superpuestas, o uso + marca de C0."),
+        p.Children.Add(Choice(Loc.T("Barra por núcleo"), Loc.T("Qué mide la barra: Uso (%Util), residencia C0 (despierto), ambas superpuestas, o uso + marca de C0. Funciona igual con cualquier gráfica principal."),
             [(Loc.T("Uso"), 0), ("C0", 1), (Loc.T("Combinada"), 2), (Loc.T("Uso+tick"), 3)], () => _cfg.CoreBarMode,
             v => { _cfg.CoreBarMode = v; _host.ApplyLive("cpugraph"); }));
+        p.Children.Add(Choice(Loc.T("Colorear barras"), Loc.T("Por proceso = quién usa cada núcleo (barra subdividida). Por núcleo = un color sólido por núcleo (casa con la gráfica y resalta el modo C0/combinada). Auto sigue a la gráfica principal (proceso en «Total», núcleo en las demás)."),
+            [(Loc.T("Auto"), 0), (Loc.T("Por proceso"), 1), (Loc.T("Por núcleo"), 2)], () => _cfg.CoreBarColorMode,
+            v => { _cfg.CoreBarColorMode = v; _host.ApplyLive("cpugraph"); }));
         p.Children.Add(Toggle(Loc.T("Marcar núcleos dormidos"), Loc.T("Atenúa y etiqueta «sleep» los núcleos aparcados (C0≈0), como Ryzen Master."), () => _cfg.MarkSleepCores, v => { _cfg.MarkSleepCores = v; _host.ApplyLive("cpugraph"); }));
 
         p.Children.Add(SubHeader(Loc.T("Modelo e indicadores")));

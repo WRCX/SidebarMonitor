@@ -6,6 +6,17 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ## [Unreleased]
 
+## [1.4.2] — 2026-07-14
+
+### Changed
+
+- **Per-core row colouring is now its own setting, decoupled from the main graph.** Choosing the main
+  CPU graph (Total / overlaid / grid) used to *silently* recolour the per-core rows (by process on
+  Total, by core otherwise), which made the "Barra por núcleo" mode (C0 / combined / usage+tick) look
+  like it only worked on some graphs. New **"Colorear barras"** option under CPU settings — **Auto**
+  (old behaviour: follow the graph), **Por proceso**, or **Por núcleo** — so each control does exactly
+  one thing and every bar mode works identically under any graph.
+
 ## [1.4.1] — 2026-07-14
 
 Polish and fixes on top of the 1.4.0 work. No MSI was cut for 1.4.0, so 1.4.1 is the first release and

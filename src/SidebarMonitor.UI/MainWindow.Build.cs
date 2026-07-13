@@ -130,7 +130,9 @@ internal sealed partial class MainWindow
         _cpuCoreSpark.Visibility = mode == 1 ? Visibility.Visible : Visibility.Collapsed;
         _cpuCoreGrid.Visibility = mode == 2 ? Visibility.Visible : Visibility.Collapsed;
         _cpuPct.Visibility = mode == 2 ? Visibility.Collapsed : Visibility.Visible;   // each grid cell has its own %
-        _coreRows.UseCoreColors = mode != 0;   // colour the bars by core when a per-core graph is shown
+        // Row colouring is now an explicit setting, no longer silently tied to the main graph. Auto (0)
+        // keeps the old behaviour (match the graph); 1 = always by process, 2 = always by core.
+        _coreRows.UseCoreColors = _cfg.CoreBarColorMode switch { 1 => false, 2 => true, _ => mode != 0 };
         _coreRows.ShowFreq = _cfg.ShowCoreFreq;
         _coreRows.ShowTemp = _cfg.ShowCoreTemp;
         _coreRows.MetricPos = _cfg.CoreMetricPos;

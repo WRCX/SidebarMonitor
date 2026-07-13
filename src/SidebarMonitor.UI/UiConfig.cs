@@ -93,6 +93,12 @@ public sealed class UiConfig
     /// 3 = work bar + an "awake" tick.</summary>
     public int CoreBarMode { get; set; }
 
+    /// <summary>How the per-core bars/index are coloured, independent of the main graph: 0 = auto
+    /// (by process on the Total graph, by core on the per-core graphs — matches the main graph),
+    /// 1 = always by process (who runs on each core, subdivided), 2 = always by core (one colour
+    /// per core). Decoupled so the main-graph choice no longer silently recolours the rows.</summary>
+    public int CoreBarColorMode { get; set; }
+
     /// <summary>Where to show the CPU model name: 0 = off, 1 = after the section title, 2 = inside
     /// the section (a line at the top, visible when expanded). Default 1: the model in the title is
     /// the first thing people look for and costs no vertical space.</summary>
