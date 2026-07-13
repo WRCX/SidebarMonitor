@@ -88,7 +88,7 @@ internal sealed class CoreRows : FrameworkElement
     private int TempLevel(float temp)
     {
         if (float.IsNaN(temp) || TjMaxC <= 0) return 0;
-        return temp >= TjMaxC - 4 ? 2 : temp >= TjMaxC - 12 ? 1 : 0;
+        return temp >= TjMaxC - Theme.TempHotMarginC ? 2 : temp >= TjMaxC - Theme.TempWarmMarginC ? 1 : 0;
     }
 
     /// <summary>

@@ -15,6 +15,9 @@ All notable changes to SidebarMonitor are documented here. The format is based o
   file now holds just the constructor/setup and the `Tick` hot path. Pure code movement, no logic change.
 - Removed confirmed-dead members (`ProcessNames.OnStop`, `ServiceMap.Services`, `RamInfo.Loaded`);
   made `TestFakeFps` an `init` property.
+- Deduplicated the `IntArg` CLI helper (was copied verbatim in all three entry points) into
+  `Shared.ArgParse.Int`; named the duplicated CPU-temperature thresholds (`Theme.TempHotMarginC` etc.)
+  so the whole-CPU and per-core severity checks share one source.
 
 ## [1.2.4] — 2026-07-13
 

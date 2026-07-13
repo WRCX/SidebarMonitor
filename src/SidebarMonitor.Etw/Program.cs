@@ -38,8 +38,8 @@ internal static class Program
             }
         }
 
-        int windowMs = IntArg(args, "--window=", 1000);
-        int stallSec = IntArg(args, "--stall=", 20);   // seconds of "NIC busy, ETW silent" before restart
+        int windowMs = ArgParse.Int(args, "--window=", 1000);
+        int stallSec = ArgParse.Int(args, "--stall=", 20);   // seconds of "NIC busy, ETW silent" before restart
         bool verbose = args.Contains("--verbose");
         int cores = Environment.ProcessorCount;
 
@@ -414,11 +414,6 @@ internal static class Program
         return total;
     }
 
-    private static int IntArg(string[] args, string prefix, int fallback)
-    {
-        string? a = args.FirstOrDefault(x => x.StartsWith(prefix, StringComparison.Ordinal));
-        return a is not null && int.TryParse(a[prefix.Length..], out int v) ? v : fallback;
-    }
 }
 
 /// <summary>

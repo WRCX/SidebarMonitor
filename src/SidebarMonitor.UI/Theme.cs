@@ -13,6 +13,14 @@ namespace SidebarMonitor.UI;
 /// </summary>
 internal static class Theme
 {
+    // CPU temperature severity thresholds, shared by the whole-CPU (MainWindow.TempLevel) and per-core
+    // (CoreRows.TempLevel) checks so they can't drift apart. Within HotMarginC of Tjmax = critical
+    // (red/blink); within WarmMarginC = serious (amber). Tjmax unknown → generic HotC/WarmC °C.
+    public const float TempHotMarginC = 4;
+    public const float TempWarmMarginC = 12;
+    public const float TempHotC = 90;
+    public const float TempWarmC = 80;
+
     public static readonly Brush Page = Freeze("#0D0D0D");        // window plane
     public static readonly Brush Surface = Freeze("#1A1A19");     // chart surface
     public static readonly Brush InkPrimary = Freeze("#FFFFFF");

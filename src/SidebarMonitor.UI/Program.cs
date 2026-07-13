@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Threading;
+using SidebarMonitor.Shared;
 
 namespace SidebarMonitor.UI;
 
@@ -30,8 +31,8 @@ internal static class Program
 
         // Command-line overrides are for debugging. Applying one makes the config ephemeral, so
         // a throwaway run never rewrites what the user configured through the menu.
-        if (IntArg(args, "--monitor=", -1) is var m and >= 0) { cfg.Monitor = m; cfg.Ephemeral = true; }
-        if (IntArg(args, "--width=", -1) is var w and > 0) { cfg.Width = w; cfg.Ephemeral = true; }
+        if (ArgParse.Int(args, "--monitor=", -1) is var m and >= 0) { cfg.Monitor = m; cfg.Ephemeral = true; }
+        if (ArgParse.Int(args, "--width=", -1) is var w and > 0) { cfg.Width = w; cfg.Ephemeral = true; }
         if (args.Contains("--left")) { cfg.EdgeLeft = true; cfg.Ephemeral = true; }
         if (args.Contains("--floating")) { cfg.Docked = false; cfg.Ephemeral = true; }
         if (args.Contains("--no-reserve")) { cfg.ReserveSpace = false; cfg.Ephemeral = true; }
@@ -45,15 +46,15 @@ internal static class Program
         if (args.Contains("--show-limits")) { cfg.ShowCpuLimits = true; cfg.Ephemeral = true; }
         if (args.Contains("--verbose")) { cfg.LogVerbose = true; cfg.Ephemeral = true; }
         if (args.Contains("--csv")) { cfg.LogCsv = true; cfg.Ephemeral = true; }
-        if (IntArg(args, "--cpu-name=", -1) is var cn and >= 0) { cfg.CpuNameMode = cn; cfg.Ephemeral = true; }
-        if (IntArg(args, "--gpu-name=", -1) is var gn and >= 0) { cfg.GpuNameMode = gn; cfg.Ephemeral = true; }
+        if (ArgParse.Int(args, "--cpu-name=", -1) is var cn and >= 0) { cfg.CpuNameMode = cn; cfg.Ephemeral = true; }
+        if (ArgParse.Int(args, "--gpu-name=", -1) is var gn and >= 0) { cfg.GpuNameMode = gn; cfg.Ephemeral = true; }
 
-        int seconds = IntArg(args, "--seconds=", 0);          // 0 = run until closed
+        int seconds = ArgParse.Int(args, "--seconds=", 0);          // 0 = run until closed
         string? shot = args.FirstOrDefault(a => a.StartsWith("--shot="))?["--shot=".Length..];
         // --frames=DIR dumps one RenderTargetBitmap PNG every ~400 ms for --seconds, for building a
         // demo GIF (assembled separately). Rendering the visual tree needs no visible window.
         string? framesDir = args.FirstOrDefault(a => a.StartsWith("--frames="))?["--frames=".Length..];
-        int frameMs = IntArg(args, "--frame-ms=", 400);
+        int frameMs = ArgParse.Int(args, "--frame-ms=", 400);
 
         var monitors = Native.EnumerateMonitors();
         if (cfg.Monitor >= monitors.Count) cfg.Monitor = monitors.Count - 1;
@@ -135,9 +136,4 @@ internal static class Program
         return 0;
     }
 
-    private static int IntArg(string[] args, string prefix, int fallback)
-    {
-        string? a = args.FirstOrDefault(x => x.StartsWith(prefix, StringComparison.Ordinal));
-        return a is not null && int.TryParse(a[prefix.Length..], out int v) ? v : fallback;
-    }
 }

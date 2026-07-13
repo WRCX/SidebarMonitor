@@ -590,8 +590,8 @@ internal sealed partial class MainWindow : AppBarWindow
     private static int TempLevel(float temp, float tjmax)
     {
         if (float.IsNaN(temp)) return 0;
-        float hot = tjmax > 0 ? tjmax - 4 : 90;
-        float warm = tjmax > 0 ? tjmax - 12 : 80;
+        float hot = tjmax > 0 ? tjmax - Theme.TempHotMarginC : Theme.TempHotC;
+        float warm = tjmax > 0 ? tjmax - Theme.TempWarmMarginC : Theme.TempWarmC;
         return temp >= hot ? 2 : temp >= warm ? 1 : 0;
     }
 

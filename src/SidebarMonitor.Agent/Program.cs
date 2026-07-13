@@ -38,10 +38,10 @@ internal static class Program
     {
         Console.OutputEncoding = System.Text.Encoding.UTF8;
 
-        int intervalMs = IntArg(args, "--interval=", 1000);
+        int intervalMs = ArgParse.Int(args, "--interval=", 1000);
         // Processes are the dominant cost (NtQuerySystemInformation, ~6-16 ms) and the least
         // time-sensitive number on screen, so they sample every Nth tick by default.
-        int procEvery = IntArg(args, "--proc-every=", 3);
+        int procEvery = ArgParse.Int(args, "--proc-every=", 3);
         bool verbose = args.Contains("--verbose");
         bool groupProcs = !args.Contains("--no-group");
 
@@ -594,9 +594,4 @@ internal static class Program
         s.TotalThreads = procs.TotalThreads;
     }
 
-    private static int IntArg(string[] args, string prefix, int fallback)
-    {
-        string? a = args.FirstOrDefault(x => x.StartsWith(prefix, StringComparison.Ordinal));
-        return a is not null && int.TryParse(a[prefix.Length..], out int v) ? v : fallback;
-    }
 }
