@@ -7,7 +7,7 @@ public static class EtwLayout
 {
     /// <summary>'SBME' little-endian.</summary>
     public const uint Signature = 0x454D4253;
-    public const uint Version = 9;
+    public const uint Version = 10;
     public const string MapName = @"Local\SidebarMonitor.Etw";
 
     /// <summary>Segments drawn per core bar. Beyond this, the rest folds into "otros".</summary>
@@ -103,6 +103,13 @@ public struct EtwSnapshot
     /// of the sample the core was awake. ~0 = parked/asleep — the "Sleep" state Ryzen Master shows.
     /// The agent maps these onto the logical rows. -1 when unavailable.</summary>
     public PhysCoreTempArray CpuCoreC0Pct;
+
+    // ---- From PawnIO's signed RyzenSMU module, when installed + opted in (advanced sensors) ----
+
+    /// <summary>True when PawnIO is providing Tctl; then CpuTempC holds Tctl (the hotspot HWiNFO
+    /// shows) instead of the SDK's die-average. Independent of CpuSdkOk on purpose: the Ryzen Master
+    /// SDK doesn't read mobile APUs, so on laptops this is the only CPU temperature there is.</summary>
+    public byte CpuPawnIoOk;
 
     /// <summary>Drive temperatures (°C) by physical disk number, from the storage stack (admin).
     /// NaN = unknown. Covers the SATA disks the agent's unelevated NVMe path can't reach, closing

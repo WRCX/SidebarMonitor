@@ -6,6 +6,21 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ## [Unreleased]
 
+### Added
+
+- **CPU temperature on Ryzen laptops** (and exact Tctl on desktop) via **PawnIO**: an opt-in
+  "Advanced CPU sensors" toggle (Settings → Diagnostics, AMD only) makes the elevated helper load
+  PawnIO's signed **RyzenSMU** module and read **Tctl** straight from the SMU's thermal register
+  (SMN `0x00059800`, serialized on the conventional `Global\Access_PCI` mutex). This is the first
+  CPU-temperature source that works on mobile APUs (Phoenix/7040 etc.), which the Ryzen Master
+  Monitoring SDK cannot read; on desktop it replaces the SDK's die-average with the hotspot HWiNFO
+  shows. Requires [PawnIO](https://pawnio.eu) installed (a signed, HVCI-safe driver); without it the
+  toggle degrades softly to the previous behaviour. The module binary (LGPL-2.1, from
+  `namazso/PawnIO.Modules`) is fetched by `native/PawnIO/fetch.ps1` and ships with its license text;
+  PawnIO's driver itself is never redistributed. Verified on a 7840HS against the live SMU readout.
+  Contracts bumped: `Snapshot` v22 (`CpuFromPawnIo` for the debug overlay), `EtwSnapshot` v10
+  (`CpuPawnIoOk`).
+
 ### Maintainability (no behaviour change)
 
 - **`MainWindow.cs` split from ~1600 lines to ~690** — the update code (`MainWindow.Updates.cs`),

@@ -39,6 +39,10 @@ public sealed class UiConfig
     /// <summary>Intel user acknowledged that deep CPU sensors (temp/power) need a ring0 driver (PawnIO)
     /// which isn't bundled yet — so the app runs in PDH-only mode without nagging again.</summary>
     public bool IntelRing0Ack { get; set; }
+    /// <summary>Advanced CPU sensors via the PawnIO signed driver: real Tctl from the SMU. The only
+    /// CPU temperature source on Ryzen laptops (the Ryzen Master SDK can't read mobile APUs). Off by
+    /// default; needs PawnIO installed. Mirrored to a marker file the elevated helper polls.</summary>
+    public bool AmdAdvanced { get; set; }
 
     // ── Diagnostics / logging ─────────────────────────────────────────────────────────────────
     /// <summary>Append every snapshot as a row to a CSV under %LOCALAPPDATA%\SidebarMonitor\logs.</summary>

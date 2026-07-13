@@ -381,6 +381,12 @@ internal sealed class SettingsWindow : Window
             () => _cfg.ShowFps,
             v => { _cfg.ShowFps = v; _cfg.Save(); SidebarMonitor.Shared.ConsentMarker.SetFps(v); }));
 
+        if (SidebarMonitor.Shared.CpuVendor.IsAmd)
+            p.Children.Add(Toggle(Loc.T("Sensores CPU avanzados (PawnIO)"),
+                Loc.T("Lee la temperatura real (Tctl) del SMU vía el driver firmado PawnIO. Imprescindible en portátiles Ryzen (el SDK de AMD no lee APUs móviles); en escritorio afina la media de die al hotspot que muestra HWiNFO. Requiere PawnIO instalado (github.com/namazso/PawnIO)."),
+                () => _cfg.AmdAdvanced,
+                v => { _cfg.AmdAdvanced = v; _cfg.Save(); SidebarMonitor.Shared.ConsentMarker.SetAmdAdvanced(v); }));
+
         var open = TextButton(Loc.T("Abrir carpeta de logs"));
         open.Click += (_, _) =>
         {

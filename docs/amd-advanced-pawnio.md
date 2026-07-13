@@ -1,10 +1,15 @@
 # AMD "advanced" CPU sensors via PawnIO (Tctl + SMU PM_Table) — design & plan
 
-> **Status: design/plan only. Not implemented, not tested.** This is an *optional, opt-in* layer on
-> top of what the AMD Ryzen Master Monitoring SDK already gives us (which needs no ring0 of ours). It
-> would add the few things the SDK does **not** expose, all of which live behind ring0. Low ROI, real
-> maintenance cost — documented so the decision to build it (or not) is deliberate. See also the
-> sibling [Intel plan](intel-pawnio.md); both would share the same PawnIO infrastructure.
+> **Status: part 1 (Tctl) IMPLEMENTED and verified on a 7840HS (Phoenix), 2026-07-13.** The helper's
+> `PawnIoCpu.cs` loads PawnIO's **signed `RyzenSMU.bin` module** (from `namazso/PawnIO.Modules` —
+> release PawnIO only loads modules signed by that project, so we use theirs instead of compiling our
+> own as originally planned) and reads Tctl each window, gated by the "Sensores CPU avanzados"
+> toggle (Settings → Diagnóstico → `ConsentMarker.AmdAdvancedEnabled`). The reach turned out to be
+> bigger than the "+3 °C" framing below: **on mobile APUs the Ryzen Master SDK doesn't work at all**,
+> so on laptops this is the *only* CPU temperature source. Part 2 (PM_Table: power/limits) is still
+> design-only — though note `RyzenSMU.bin` already exports `ioctl_resolve/update/read_pm_table`, so
+> only the per-generation offset maps remain on our side. See also the sibling
+> [Intel plan](intel-pawnio.md); both share the PawnIO infrastructure.
 
 ## What we already have (no ring0)
 

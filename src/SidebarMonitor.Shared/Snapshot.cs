@@ -10,7 +10,7 @@ public static class SnapshotLayout
     public const uint Signature = 0x4E4D4253;
 
     /// <summary>Bump on any layout change. The reader refuses anything it does not know.</summary>
-    public const uint Version = 21;
+    public const uint Version = 22;
 
     /// <summary>
     /// Local\, not Global\. Creating a Global\ kernel object requires SeCreateGlobalPrivilege,
@@ -222,6 +222,11 @@ public struct Snapshot
     /// <summary>CPU temp/power came from the AMD Ryzen Master SDK (via the elevated helper). False
     /// means the helper is not running or its SDK read failed, so temp/power show "—".</summary>
     public bool CpuFromAmd;
+
+    /// <summary>CPU temperature is Tctl from PawnIO's RyzenSMU module (the advanced opt-in path).
+    /// On laptops this is typically true with <see cref="CpuFromAmd"/> false, because the Ryzen
+    /// Master SDK doesn't read mobile APUs. Shown in the debug overlay.</summary>
+    public bool CpuFromPawnIo;
 
     // ---- Only populated when the elevated ETW helper is running ----
 

@@ -3,6 +3,13 @@
 > **Status: design + reference implementation, NOT yet built into the app and NOT tested.** It was
 > written on an AMD machine with no Intel CPU and no PawnIO installed. Treat the code below as a
 > starting point to validate on real Intel hardware, not a drop-in.
+>
+> **Update 2026-07-13 (learned while shipping the AMD Tctl path):** release PawnIO only loads
+> modules **signed by the PawnIO.Modules project**, so do NOT compile the `intel_msr.p` sketch below
+> — use the official signed **`IntelMSR.bin`** from `namazso/PawnIO.Modules` (already downloaded by
+> `native/PawnIO/fetch.ps1`; check its exported ioctl names in the repo's `IntelMSR.p`). The C#
+> interop pattern is done and living in `src/SidebarMonitor.Etw/PawnIoCpu.cs` (open/load/execute +
+> the `Global\Access_PCI` etiquette where applicable); the Intel source should mirror it.
 
 ## Why PawnIO (and not Intel XTU)
 

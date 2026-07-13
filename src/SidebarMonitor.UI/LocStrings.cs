@@ -264,6 +264,9 @@ internal static class LocStrings
         ["FPS de juegos (PresentMon)"] = "Game FPS (PresentMon)",
         ["Mide FPS/frametime/1% low/latencia/stutter del juego en primer plano vía ETW (sin inyección). El helper lanza PresentMon solo cuando está activado."]
             = "Measures the foreground game's FPS/frametime/1% low/latency/stutter via ETW (no injection). The helper runs PresentMon only when enabled.",
+        ["Sensores CPU avanzados (PawnIO)"] = "Advanced CPU sensors (PawnIO)",
+        ["Lee la temperatura real (Tctl) del SMU vía el driver firmado PawnIO. Imprescindible en portátiles Ryzen (el SDK de AMD no lee APUs móviles); en escritorio afina la media de die al hotspot que muestra HWiNFO. Requiere PawnIO instalado (github.com/namazso/PawnIO)."]
+            = "Reads the real temperature (Tctl) from the SMU via the signed PawnIO driver. Essential on Ryzen laptops (AMD's SDK can't read mobile APUs); on desktop it refines the die-average into the hotspot HWiNFO shows. Requires PawnIO installed (github.com/namazso/PawnIO).",
 
         // ── Updates ───────────────────────────────────────────────────────────────────────────
         ["Actualizaciones"] = "Updates",

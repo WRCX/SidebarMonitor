@@ -40,4 +40,18 @@
           CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- PawnIO's signed RyzenSMU module (LGPL-2.1, from namazso/PawnIO.Modules; populated by
+       native/PawnIO/fetch.ps1). Loaded through the user's PawnIO install when the advanced-sensors
+       opt-in is on. Absent (fetch.ps1 not run) = the PawnIO path reports "module not found". -->
+  <ItemGroup Condition="Exists('..\..\native\PawnIO\RyzenSMU.bin')">
+    <None Include="..\..\native\PawnIO\RyzenSMU.bin" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The module's LGPL-2.1 text must travel with the redistributed .bin. -->
+    <None Include="..\..\native\PawnIO\COPYING" Link="PawnIO.Modules-LICENSE.txt" CopyToOutputDirectory="PreserveNewest"
+          Condition="Exists('..\..\native\PawnIO\COPYING')" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SidebarMonitor.Tests" />
+  </ItemGroup>
+
 </Project>

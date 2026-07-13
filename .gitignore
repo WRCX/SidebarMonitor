@@ -27,3 +27,7 @@ native/AdlxSdk/SDK/
 
 # PresentMon CLI (MIT; fetch.ps1 downloads it) - not committed
 native/PresentMon/*.exe
+
+# PawnIO signed modules (LGPL-2.1, namazso/PawnIO.Modules; fetch.ps1 downloads them) - not committed
+native/PawnIO/*.bin
+native/PawnIO/COPYING

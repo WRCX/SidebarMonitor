@@ -180,6 +180,7 @@ internal static class Program
     {
         s.EtwAvailable = false;
         s.CpuFromAmd = false;
+        s.CpuFromPawnIo = false;
         if (etw is null) { Array.Fill(diskTemps, float.NaN); return null; }
 
         if (!etw.TryRead(out var e)) return etw;   // caught it mid-write; try again next tick
@@ -243,6 +244,15 @@ internal static class Program
         else
         {
             s.Cpu.BestCore = s.Cpu.SecondCore = -1;
+        }
+
+        // PawnIO Tctl: the helper already wrote it over CpuTempC, but the block above only copies
+        // when the AMD SDK is up — and on laptops (mobile APUs) the SDK never is. Take the one field
+        // PawnIO owns, whether it refined the SDK's die-average or is the only temperature there is.
+        if (e.CpuPawnIoOk != 0)
+        {
+            s.Cpu.TempC = (float)e.CpuTempC;
+            s.CpuFromPawnIo = true;
         }
         return etw;
     }

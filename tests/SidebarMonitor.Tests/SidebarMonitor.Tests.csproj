@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\SidebarMonitor.Shared\SidebarMonitor.Shared.csproj" />
     <ProjectReference Include="..\..\src\SidebarMonitor.UI\SidebarMonitor.UI.csproj" />
+    <ProjectReference Include="..\..\src\SidebarMonitor.Etw\SidebarMonitor.Etw.csproj" />
   </ItemGroup>
 
 </Project>

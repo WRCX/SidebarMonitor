@@ -81,6 +81,19 @@ internal static class Program
             Console.WriteLine($"AMD Ryzen SDK: {(ryzen is not null ? "OK" : $"no disponible - {ryzenErr}")}");
         }
 
+        // Advanced CPU sensors via PawnIO (Tctl straight from the SMU), opt-in. Opened lazily from
+        // the publish timer (the marker can appear/disappear at any time), so here just the gates:
+        // AMD only (the RyzenSMU module refuses anything else anyway) and skippable via --no-pawnio.
+        PawnIoCpu? pawnIo = null;
+        bool pawnIoTried = false;   // one open attempt per marker transition, not one per second
+        bool noPawnIo = args.Contains("--no-pawnio");
+        if (noPawnIo)
+            Console.WriteLine("PawnIO: desactivado por --no-pawnio.");
+        else if (!CpuVendor.IsAmd)
+            Console.WriteLine("PawnIO: omitido (CPU no AMD; el modulo RyzenSMU es solo Ryzen).");
+        else
+            Console.WriteLine($"PawnIO: {(ConsentMarker.AmdAdvancedEnabled ? "opt-in activo, se abrira en la primera ventana" : "en espera de opt-in (sensores avanzados)")}.");
+
         // Drive temps (SATA + NVMe) from the storage stack; needs admin, which we have.
         using var diskTemps = new DiskTempsWmi();
         Console.WriteLine("Temps de disco: por WMI (storage reliability counter)");
@@ -262,6 +275,32 @@ internal static class Program
             }
             else snapshot.CpuSdkOk = 0;
 
+            // PawnIO (advanced sensors, opt-in): Tctl from the SMU. The marker is polled each window
+            // so the toggle works hot, like the SDK consent and FPS. As the later source it overrides
+            // only the field it owns: the temperature (Tctl over the SDK's die-average — and on
+            // laptops, where the SDK can't read mobile APUs, the only CPU temperature there is).
+            if (!noPawnIo && CpuVendor.IsAmd)
+            {
+                bool wanted = ConsentMarker.AmdAdvancedEnabled;
+                if (wanted && pawnIo is null && !pawnIoTried)
+                {
+                    pawnIoTried = true;
+                    pawnIo = PawnIoCpu.TryOpen(out string? pawnErr);
+                    Console.WriteLine($"PawnIO RyzenSMU: {(pawnIo is not null ? "abierto (Tctl via SMN)" : $"no disponible - {pawnErr}")}");
+                }
+                else if (!wanted)
+                {
+                    if (pawnIo is not null) { pawnIo.Dispose(); pawnIo = null; Console.WriteLine("PawnIO RyzenSMU: cerrado (opt-out)."); }
+                    pawnIoTried = false;   // allow one fresh attempt if the user opts back in
+                }
+            }
+            snapshot.CpuPawnIoOk = 0;
+            if (pawnIo is not null && pawnIo.TryRead(out var pawnData))
+            {
+                snapshot.CpuPawnIoOk = 1;
+                snapshot.CpuTempC = pawnData.TctlC;
+            }
+
             diskTemps.Fill(ref snapshot);
 
             // Game frame-timing (PresentMon), opt-in via the marker the UI writes.
@@ -335,6 +374,7 @@ internal static class Program
         }
 
         CorePeakStore.Save(corePeak);
+        pawnIo?.Dispose();
         ryzen?.Dispose();
         writer.Dispose();
         Console.WriteLine($"Parado tras {published} publicaciones, {restarts} reinicios de sesion.");

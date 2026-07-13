@@ -65,10 +65,11 @@ internal sealed partial class MainWindow
         var ci = CultureInfo.InvariantCulture;
         string vendor = CpuVendor.Maker switch { CpuMaker.Amd => "AMD", CpuMaker.Intel => "Intel", _ => "?" };
         string sdk = s.CpuFromAmd ? "SDK✓" : CpuVendor.IsAmd ? "SDK✗ (EULA/helper)" : "SDK n/a";
+        string pawnIo = s.CpuFromPawnIo ? "PawnIO✓" : _cfg.AmdAdvanced ? "PawnIO✗" : "PawnIO○";
         string csv = _csv.IsRunning ? string.Create(ci, $"CSV●{_csv.RowCount}") : "CSV○";
         _debug.Text = string.Create(ci,
             $"{vendor} · {CpuVendor.Brand}\n" +
-            $"snap v{SnapshotLayout.Version} · etw v{EtwLayout.Version} · {sdk} · " +
+            $"snap v{SnapshotLayout.Version} · etw v{EtwLayout.Version} · {sdk} · {pawnIo} · " +
             $"{(s.EtwAvailable ? "helper✓" : "helper✗")} · {_cfg.RefreshMs}ms · age {age.TotalMilliseconds:F0}ms · {csv}\n" +
             $"cfg: temp={_cfg.ShowCoreTemp} bar={_cfg.CoreBarMode} pos={_cfg.CoreMetricPos} w={_cfg.Width} " +
             $"net={(_cfg.NetUnitsBinary ? "bin" : "dec")} dock={_cfg.Docked} cpuGraph={_cfg.CpuGraphMode} pal={_cfg.CorePalette}");

@@ -37,6 +37,25 @@ public static class ConsentMarker
         catch { /* non-fatal */ }
     }
 
+    /// <summary>Marker for "the user enabled the advanced CPU sensors via PawnIO" — gates the helper
+    /// loading the signed RyzenSMU module (Tctl on machines the Ryzen Master SDK can't read, i.e.
+    /// every mobile APU). Needs PawnIO installed; absence = the SDK-or-nothing behaviour.</summary>
+    private static string AmdAdvancedPath => Path.Combine(Dir, "amd-advanced-pawnio");
+
+    public static bool AmdAdvancedEnabled => File.Exists(AmdAdvancedPath);
+
+    /// <summary>Idempotently create/remove the PawnIO marker to match the UI's stored setting.</summary>
+    public static void SetAmdAdvanced(bool enabled)
+    {
+        try
+        {
+            Directory.CreateDirectory(Dir);
+            if (enabled) { if (!File.Exists(AmdAdvancedPath)) File.WriteAllText(AmdAdvancedPath, "advanced CPU sensors via PawnIO enabled by the user.\n"); }
+            else if (File.Exists(AmdAdvancedPath)) File.Delete(AmdAdvancedPath);
+        }
+        catch { /* non-fatal */ }
+    }
+
     /// <summary>Idempotently create/remove the marker to match the UI's stored consent.</summary>
     public static void SetAmdSdk(bool accepted)
     {

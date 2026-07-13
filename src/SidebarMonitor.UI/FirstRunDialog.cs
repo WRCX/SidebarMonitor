@@ -35,6 +35,7 @@ internal static class FirstRunDialog
         // deleted marker, a config copied between machines, or a future settings toggle).
         ConsentMarker.SetAmdSdk(cfg.AmdEulaAccepted);
         ConsentMarker.SetFps(cfg.ShowFps);   // gates the helper spawning PresentMon
+        ConsentMarker.SetAmdAdvanced(cfg.AmdAdvanced);   // gates the helper loading PawnIO (Tctl)
     }
 
     private static void ShowFor(UiConfig cfg)
