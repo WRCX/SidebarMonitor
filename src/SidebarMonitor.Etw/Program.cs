@@ -384,11 +384,35 @@ internal static class Program
                 snapshot.CpuTempC = intelData.TempC;
                 snapshot.CpuTjMaxC = intelData.TjMaxC;
                 snapshot.CpuThrottleFlags = intelData.ThrottleFlags;
-                snapshot.CpuPhysicalCores = 0;   // Intel fills per-LOGICAL temps directly (no phys map)
+                snapshot.CpuPhysicalCores = 0;   // Intel fills per-LOGICAL temps/C0 directly (no phys map)
                 int n = Math.Min(intelData.CoreCount, 16);
-                for (int i = 0; i < n; i++) snapshot.CpuCoreTempsC[i] = intelData.CoreTempsC[i];
+                for (int i = 0; i < n; i++)
+                {
+                    snapshot.CpuCoreTempsC[i] = intelData.CoreTempsC[i];
+                    if (intelData.CoreC0Pct is not null) snapshot.CpuCoreC0Pct[i] = intelData.CoreC0Pct[i];
+                }
                 // Real per-core boost clock (APERF/MPERF); 0 on the first window (no delta yet).
                 if (intelData.BestFreqMhz > 0) snapshot.CpuBestFreqMhz = intelData.BestFreqMhz;
+
+                // Best/second core from the real per-core clock, tracked as running peaks so the star
+                // converges on the favored (Turbo-Boost-Max) core instead of jumping — same method as
+                // the AMD SDK block. On parts with no favored core it settles on the historically
+                // highest-clocking logical core.
+                if (intelData.CoreFreqMhz is not null)
+                {
+                    int nc = Math.Min(n, corePeak.Length);
+                    for (int i = 0; i < nc; i++)
+                        if (intelData.CoreFreqMhz[i] > corePeak[i] && intelData.CoreFreqMhz[i] < 6000)
+                            corePeak[i] = intelData.CoreFreqMhz[i];   // cap glitches, like the AMD peak track
+                    int best = -1, second = -1;
+                    for (int i = 0; i < nc; i++)
+                    {
+                        if (best < 0 || corePeak[i] > corePeak[best]) { second = best; best = i; }
+                        else if (second < 0 || corePeak[i] > corePeak[second]) second = i;
+                    }
+                    snapshot.CpuBestCore = best;
+                    snapshot.CpuSecondCore = second;
+                }
                 if (intelData.HasPower)
                 {
                     snapshot.CpuIntelOk |= 2;

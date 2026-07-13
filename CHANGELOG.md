@@ -45,6 +45,12 @@ Intel verified on an i7-4700HQ, fan verified on an ASUS N56JR.
     `MSR_PLATFORM_INFO` — the achieved turbo (verified ~3.2 GHz all-core / ~3.0 idle on the 4700HQ,
     matching `MSR_TURBO_RATIO_LIMIT`), which PDH's averaged `% Processor Performance` smooths away.
     The "mejor núcleo" boost label now applies on Intel too.
+  - **Per-core C0 (active) residency and the best/second-core star on Intel**, so the combined core
+    bars, the "sleep" marking of parked cores and the boost star — previously AMD-SDK-only, and silent
+    no-ops on Intel — now work there. C0% is `ΔMPERF / (baseHz × Δt)` (MPERF advances at the base
+    frequency only in C0; the module's TSC read is unusable, so wall-clock Δt stands in — verified 98%
+    on a pinned core vs ~10% idle). Best/second core come from the same peak-tracked per-core clock as
+    the AMD path.
   - **Real throttle/limits on Intel**, replacing the AMD-only heuristic: the active binding cap comes
     straight from the `IA32_THERM_STATUS`/`IA32_PACKAGE_THERM_STATUS` status bits (thermal / power /
     current), and package power is shown as a % of **PL1** (`MSR_PKG_POWER_LIMIT`) — the Intel

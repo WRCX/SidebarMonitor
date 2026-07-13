@@ -51,6 +51,8 @@ internal sealed class IntelMsr : IDisposable
         public float PackageW;        // RAPL package power
         public float PptPct;          // package power as % of PL1 (the RAPL power limit), 0 = unknown
         public float BestFreqMhz;     // highest real per-core clock (APERF/MPERF), 0 until 2nd window
+        public float[] CoreFreqMhz;   // per-logical-core real clock (APERF/MPERF), 0 until 2nd window
+        public float[] CoreC0Pct;     // per-logical-core C0 (active) residency % = ΔMPERF/ΔTSC×100
         public byte ThrottleFlags;    // active caps: bit0 thermal, bit1 power, bit2 current
     }
 
@@ -86,9 +88,12 @@ internal sealed class IntelMsr : IDisposable
     private readonly ulong[] _in = new ulong[1];
     private readonly ulong[] _out = new ulong[1];
     private readonly float[] _coreTemps = new float[MaxCores];
+    private readonly float[] _coreFreq = new float[MaxCores];    // per-core real clock this window
+    private readonly float[] _coreC0 = new float[MaxCores];      // per-core C0 residency % this window
     private readonly ulong[] _lastAperf = new ulong[MaxCores];   // previous-window APERF per core
     private readonly ulong[] _lastMperf = new ulong[MaxCores];   // previous-window MPERF per core
-    private bool _haveClockBase;      // true once _lastAperf/_lastMperf hold a prior sample
+    private long _lastClockStamp;     // Stopwatch ticks at the previous APERF/MPERF sample
+    private bool _haveClockBase;      // true once the _last* counters hold a prior sample
     private int _tjMax = 100;         // default; overwritten from 0x1A2 at open when plausible
     private double _baseMhz = 2400;   // base (non-turbo) frequency; APERF/MPERF ratio scales off it
     private double _energyUnit;        // joules per RAPL tick, 0 = no RAPL on this part
@@ -182,12 +187,12 @@ internal sealed class IntelMsr : IDisposable
         try
         {
             int cores = Math.Min(Environment.ProcessorCount, MaxCores);
-            for (int i = 0; i < _coreTemps.Length; i++) _coreTemps[i] = float.NaN;
+            for (int i = 0; i < _coreTemps.Length; i++) { _coreTemps[i] = float.NaN; _coreFreq[i] = 0; _coreC0[i] = -1; }
 
             // Per-core reads on a dedicated thread: SetThreadAffinityMask pins whoever calls it (the
             // GetCurrentThread pseudo-handle is per-caller), so this keeps the publish thread from
-            // being stranded on one core if anything throws mid-loop. One pass reads all three
-            // per-core MSRs (temp, APERF, MPERF) on each pinned core.
+            // being stranded on one core if anything throws mid-loop. One pass reads all four per-core
+            // MSRs (temp, APERF, MPERF, TSC) on each pinned core.
             float[] temps = _coreTemps;
             int hottest = int.MinValue;
             byte thr = 0;
@@ -230,10 +235,17 @@ internal sealed class IntelMsr : IDisposable
                 thr |= ThrottleBits(pkgThr);
             data.ThrottleFlags = thr;
 
-            // Real per-core clock via APERF/MPERF, differenced against the previous window. Highest
-            // core = the achieved boost clock (the single-core turbo PDH's averaged % smooths away).
+            // Per-core clock and C0 residency, differenced against the previous window:
+            //   clock = base × ΔAPERF/ΔMPERF (the achieved boost the averaged PDH % smooths away),
+            //   C0%   = ΔMPERF / (baseHz × Δt) × 100 — MPERF advances at the base (invariant-TSC)
+            //           frequency only while in C0, so its rate over wall-clock Δt is the busy fraction.
+            //           (turbostat uses ΔMPERF/ΔTSC, but this module's rdmsr on the TSC returns a
+            //           constant, so wall-clock stands in for the TSC — same result, verified live.)
+            long stamp = Stopwatch.GetTimestamp();
             if (_haveClockBase)
             {
+                double dt = (stamp - _lastClockStamp) / (double)Stopwatch.Frequency;
+                double mperfPerSec = _baseMhz * 1e6;
                 double best = 0;
                 for (int i = 0; i < cores; i++)
                 {
@@ -241,13 +253,18 @@ internal sealed class IntelMsr : IDisposable
                     if (dm > 0)
                     {
                         double mhz = _baseMhz * da / dm;
-                        if (mhz > best && mhz < 12000) best = mhz;   // guard a wrapped/garbage delta
+                        if (mhz < 12000) { _coreFreq[i] = (float)mhz; if (mhz > best) best = mhz; }   // guard wrap
                     }
+                    if (dt > 0 && mperfPerSec > 0)
+                        _coreC0[i] = (float)Math.Clamp(100.0 * dm / (mperfPerSec * dt), 0, 100);
                 }
                 data.BestFreqMhz = (float)best;
             }
+            _lastClockStamp = stamp;
             for (int i = 0; i < cores; i++) { _lastAperf[i] = aperf[i]; _lastMperf[i] = mperf[i]; }
             _haveClockBase = true;
+            data.CoreFreqMhz = _coreFreq;
+            data.CoreC0Pct = _coreC0;
 
             // RAPL package power: difference this window's accumulating energy against the last.
             if (_energyUnit > 0 && ReadMsr(MSR_PKG_ENERGY_STATUS, out ulong eRaw))

@@ -273,11 +273,18 @@ internal static class Program
             s.Cpu.TempC = (float)e.CpuTempC;
             if (e.CpuTjMaxC > 0) s.Cpu.TjMaxC = e.CpuTjMaxC;
             for (int i = 0; i < s.Cpu.CoreCount && i < 16; i++)
+            {
                 s.Cpu.CoreTempC[i] = e.CpuCoreTempsC[i];
+                s.Cpu.CoreC0Pct[i] = e.CpuCoreC0Pct[i];   // per-logical C0 residency (MPERF/TSC)
+            }
             s.Cpu.ThrottleFlags = e.CpuThrottleFlags;
             // Real per-core boost clock (APERF/MPERF) — the true achieved turbo PDH's averaged %
             // undershoots. Max() keeps it from ever reading below the PDH-derived per-core rows.
             if (e.CpuBestFreqMhz > 0) s.Cpu.FreqBestMhz = Math.Max(s.Cpu.FreqBestMhz, e.CpuBestFreqMhz);
+            // Best/second core + physical count (0 → the UI maps the star 1:1 onto logical rows).
+            s.Cpu.BestCore = e.CpuBestCore;
+            s.Cpu.SecondCore = e.CpuSecondCore;
+            s.Cpu.PhysicalCores = e.CpuPhysicalCores;
             s.CpuFromIntel = true;
         }
         if ((e.CpuIntelOk & 2) != 0)
