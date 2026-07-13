@@ -130,8 +130,12 @@ internal abstract class AppBarWindow : Window
             else
             {
                 RemoveAppBar();
+                // SWP_FRAMECHANGED forces WM_NCCALCSIZE (our handler => client area = whole window) on
+                // every re-placement, not just the first. Without it, a later placement/resize can let
+                // the WS_THICKFRAME sizing border re-appear and re-inset the client, which offsets all
+                // hit-testing (dead right-click, wrong element) and paints a visible edge strip.
                 Native.SetWindowPos(_hwnd, topmost ? Native.HWND_TOPMOST : Native.HWND_NOTOPMOST,
-                    (int)floatX, (int)floatY, strip, (int)floatHeight, Native.SWP_NOACTIVATE);
+                    (int)floatX, (int)floatY, strip, (int)floatHeight, Native.SWP_NOACTIVATE | Native.SWP_FRAMECHANGED);
             }
         }
         finally { _placing = false; }
@@ -161,7 +165,7 @@ internal abstract class AppBarWindow : Window
         var mon = MonitorRect();
         int x = EdgeLeft ? mon.Left : mon.Right - strip;
         Native.SetWindowPos(_hwnd, topmost ? Native.HWND_TOPMOST : Native.HWND_NOTOPMOST,
-            x, mon.Top, strip, mon.Bottom - mon.Top, Native.SWP_NOACTIVATE);
+            x, mon.Top, strip, mon.Bottom - mon.Top, Native.SWP_NOACTIVATE | Native.SWP_FRAMECHANGED);
     }
 
     private void SetTopmost(bool topmost)
@@ -170,8 +174,10 @@ internal abstract class AppBarWindow : Window
         ex = topmost ? ex | Native.WS_EX_TOPMOST : ex & ~Native.WS_EX_TOPMOST;
         Native.SetWindowLongPtr(_hwnd, Native.GWL_EXSTYLE, new IntPtr(ex));
 
+        // FRAMECHANGED re-asserts the borderless client area even on a topmost-only toggle (NOSIZE
+        // otherwise skips WM_NCCALCSIZE), so this path can't leave the thick frame painted either.
         Native.SetWindowPos(_hwnd, topmost ? Native.HWND_TOPMOST : Native.HWND_NOTOPMOST,
-            0, 0, 0, 0, Native.SWP_NOACTIVATE | Native.SWP_NOMOVE | Native.SWP_NOSIZE);
+            0, 0, 0, 0, Native.SWP_NOACTIVATE | Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_FRAMECHANGED);
     }
 
     private void EnsureAppBar()
@@ -213,7 +219,7 @@ internal abstract class AppBarWindow : Window
         Native.SHAppBarMessage(Native.ABM_SETPOS, ref abd);
 
         Native.SetWindowPos(_hwnd, Native.HWND_TOPMOST,
-            abd.rc.Left, abd.rc.Top, abd.rc.Width, abd.rc.Height, Native.SWP_NOACTIVATE);
+            abd.rc.Left, abd.rc.Top, abd.rc.Width, abd.rc.Height, Native.SWP_NOACTIVATE | Native.SWP_FRAMECHANGED);
     }
 
     /// <summary>Moves a floating window to an absolute screen position, in physical pixels.</summary>
@@ -291,6 +297,12 @@ internal abstract class AppBarWindow : Window
 
         if (msg == Native.WM_EXITSIZEMOVE)
         {
+            // Right after a drag-resize, re-assert the borderless client area so the sizing frame can
+            // never linger (which would break right-click hit-testing and paint an edge strip). This
+            // is the exact path a user hits by widening the panel; belt-and-suspenders with the
+            // FRAMECHANGED now on every re-placement below.
+            Native.SetWindowPos(_hwnd, IntPtr.Zero, 0, 0, 0, 0,
+                Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOZORDER | Native.SWP_NOACTIVATE | Native.SWP_FRAMECHANGED);
             Resized?.Invoke();
         }
 

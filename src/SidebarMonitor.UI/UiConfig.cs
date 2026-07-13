@@ -94,11 +94,12 @@ public sealed class UiConfig
     public int CoreBarMode { get; set; }
 
     /// <summary>Where to show the CPU model name: 0 = off, 1 = after the section title, 2 = inside
-    /// the section (a line at the top, visible when expanded).</summary>
-    public int CpuNameMode { get; set; }
+    /// the section (a line at the top, visible when expanded). Default 1: the model in the title is
+    /// the first thing people look for and costs no vertical space.</summary>
+    public int CpuNameMode { get; set; } = 1;
     /// <summary>Where to show the primary GPU model name: 0 = off, 1 = after the GPU section title,
-    /// 2 = inside (each GPU block already shows its own name when expanded).</summary>
-    public int GpuNameMode { get; set; }
+    /// 2 = inside (each GPU block already shows its own name when expanded). Default 1, like the CPU.</summary>
+    public int GpuNameMode { get; set; } = 1;
 
     /// <summary>RAM module info (from WMI) in the MEMORIA section: 0 = off, 1 = compact summary
     /// ("2× 16 GiB DDR5-6000"), 2 = full per-stick detail as text (slot, size, speed, maker, part).</summary>

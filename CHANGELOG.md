@@ -65,6 +65,23 @@ Intel verified on an i7-4700HQ, fan verified on an ASUS N56JR.
   can point at the wrong register on an unverified model. Needs [PawnIO](https://pawnio.eu) installed;
   `LpcACPIEC.bin` is fetched by `native/PawnIO/fetch.ps1` alongside the other modules.
 
+### Changed
+
+- **CPU and GPU model names now show in their section titles by default** (`CpuNameMode` /
+  `GpuNameMode` default to 1) — the first thing people look for, at no vertical cost.
+- `install.ps1` is Intel-friendly: it resolves `dotnet` even when it's not on PATH, skips the AMD
+  RyzenShim/SDK steps when the C++ toolchain/SDK is absent (Intel-only machines install fine), and
+  falls back to a non-AOT agent publish when the NativeAOT C++ linker isn't available.
+
+### Fixed
+
+- **Dead right-click + a painted edge strip after resizing/re-placing the panel.** The borderless
+  AppBar only re-asserted its client area (`WM_NCCALCSIZE` via `SWP_FRAMECHANGED`) at creation, so a
+  later placement — e.g. dragging the panel wider — could let the `WS_THICKFRAME` sizing border
+  return, re-inset the client, and offset every hit-test (right-clicks landed on the wrong element and
+  the context menu never opened). `SWP_FRAMECHANGED` is now applied on every re-placement and right
+  after a drag-resize, so no path can leave the frame in that state.
+
 ## [1.3.0] — 2026-07-13
 
 CPU sensors for Ryzen laptops via PawnIO: temperature (Tctl) and package power on mobile APUs,
