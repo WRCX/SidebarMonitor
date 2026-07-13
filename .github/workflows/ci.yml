@@ -23,3 +23,7 @@ jobs:
 
       - name: Build (Release)
         run: dotnet build SidebarMonitor.slnx -c Release --nologo
+
+      - name: Test (unit)
+        # Only the pure-logic unit tests (no hardware/OS/admin needed). Integration/E2E run locally.
+        run: dotnet test SidebarMonitor.slnx -c Release --filter Category=Unit --no-build --nologo

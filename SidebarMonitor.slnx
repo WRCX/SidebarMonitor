@@ -9,4 +9,7 @@
     <Project Path="src/SidebarMonitor.Shared/SidebarMonitor.Shared.csproj" />
     <Project Path="src/SidebarMonitor.UI/SidebarMonitor.UI.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SidebarMonitor.Tests/SidebarMonitor.Tests.csproj" />
+  </Folder>
 </Solution>

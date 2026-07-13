@@ -91,7 +91,7 @@ internal static class Updater
     public static string Format(Version v) => $"v{v.Major}.{v.Minor}.{Math.Max(0, v.Build)}";
 
     /// <summary>Parses a release tag ("v1.2.3", or "v1.2.3-rc1" with the pre-release suffix stripped).</summary>
-    private static bool TryParseTag(string tag, out Version ver)
+    internal static bool TryParseTag(string tag, out Version ver)
     {
         string t = tag.TrimStart('v', 'V');
         int dash = t.IndexOf('-');
@@ -102,7 +102,7 @@ internal static class Updater
     }
 
     /// <summary>Only accept an asset URL over HTTPS from a GitHub host — its MSI is later run elevated.</summary>
-    private static bool IsTrustedGitHubUrl(string? url) =>
+    internal static bool IsTrustedGitHubUrl(string? url) =>
         Uri.TryCreate(url, UriKind.Absolute, out var u) && u.Scheme == Uri.UriSchemeHttps &&
         (u.Host == "github.com" || u.Host.EndsWith(".github.com", StringComparison.OrdinalIgnoreCase)
                                 || u.Host.EndsWith(".githubusercontent.com", StringComparison.OrdinalIgnoreCase));
