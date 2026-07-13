@@ -18,8 +18,15 @@ All notable changes to SidebarMonitor are documented here. The format is based o
   toggle degrades softly to the previous behaviour. The module binary (LGPL-2.1, from
   `namazso/PawnIO.Modules`) is fetched by `native/PawnIO/fetch.ps1` and ships with its license text;
   PawnIO's driver itself is never redistributed. Verified on a 7840HS against the live SMU readout.
-  Contracts bumped: `Snapshot` v22 (`CpuFromPawnIo` for the debug overlay), `EtwSnapshot` v10
-  (`CpuPawnIoOk`).
+  Contracts bumped: `Snapshot` v22 (`CpuFromPawnIo` for the debug overlay), `EtwSnapshot` v11
+  (`CpuPawnIoOk` bitmask).
+- **CPU package power on Ryzen laptops** via the same PawnIO path: the SMU's **PM_Table**
+  (`ioctl_resolve/update/read_pm_table` on the signed module) provides package watts, PPT/TDC usage
+  and the real 100 °C throttle limit — so the temperature colour thresholds and the "Límites" row
+  now work on laptops too. Only on the PM_Table layout validated empirically on the 7840HS
+  (Phoenix, version `0x4C0007`, map documented in `docs/amd-advanced-pawnio.md`); any other version
+  degrades to Tctl-only. On desktops with the Ryzen Master SDK the SDK's power figures stay
+  authoritative — PawnIO only ever overrides the fields it owns.
 
 ### Maintainability (no behaviour change)
 

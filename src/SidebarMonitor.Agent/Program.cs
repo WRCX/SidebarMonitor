@@ -246,13 +246,20 @@ internal static class Program
             s.Cpu.BestCore = s.Cpu.SecondCore = -1;
         }
 
-        // PawnIO Tctl: the helper already wrote it over CpuTempC, but the block above only copies
-        // when the AMD SDK is up — and on laptops (mobile APUs) the SDK never is. Take the one field
-        // PawnIO owns, whether it refined the SDK's die-average or is the only temperature there is.
-        if (e.CpuPawnIoOk != 0)
+        // PawnIO: the helper already wrote these over the SDK fields, but the block above only
+        // copies when the AMD SDK is up — and on laptops (mobile APUs) the SDK never is. Take
+        // exactly the fields PawnIO owns this window (bit 0: Tctl; bit 1: PM_Table power).
+        if ((e.CpuPawnIoOk & 1) != 0)
         {
             s.Cpu.TempC = (float)e.CpuTempC;
             s.CpuFromPawnIo = true;
+        }
+        if ((e.CpuPawnIoOk & 2) != 0)
+        {
+            s.Cpu.PackagePowerW = e.CpuPackageW;
+            s.Cpu.PptPct = e.CpuPptPct;
+            s.Cpu.TdcPct = e.CpuTdcPct;
+            s.Cpu.TjMaxC = e.CpuTjMaxC;
         }
         return etw;
     }

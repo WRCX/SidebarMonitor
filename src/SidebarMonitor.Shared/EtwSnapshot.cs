@@ -7,7 +7,7 @@ public static class EtwLayout
 {
     /// <summary>'SBME' little-endian.</summary>
     public const uint Signature = 0x454D4253;
-    public const uint Version = 10;
+    public const uint Version = 11;
     public const string MapName = @"Local\SidebarMonitor.Etw";
 
     /// <summary>Segments drawn per core bar. Beyond this, the rest folds into "otros".</summary>
@@ -106,9 +106,11 @@ public struct EtwSnapshot
 
     // ---- From PawnIO's signed RyzenSMU module, when installed + opted in (advanced sensors) ----
 
-    /// <summary>True when PawnIO is providing Tctl; then CpuTempC holds Tctl (the hotspot HWiNFO
-    /// shows) instead of the SDK's die-average. Independent of CpuSdkOk on purpose: the Ryzen Master
-    /// SDK doesn't read mobile APUs, so on laptops this is the only CPU temperature there is.</summary>
+    /// <summary>Bitmask of what PawnIO provided this window. Bit 0: CpuTempC holds Tctl (the hotspot
+    /// HWiNFO shows) instead of the SDK's die-average. Bit 1: the power fields (CpuPackageW,
+    /// CpuPptPct, CpuTdcPct, CpuTjMaxC) came from the SMU's PM_Table — only set when the SDK isn't
+    /// providing them. Independent of CpuSdkOk on purpose: the Ryzen Master SDK doesn't read mobile
+    /// APUs, so on laptops PawnIO is the only source for both.</summary>
     public byte CpuPawnIoOk;
 
     /// <summary>Drive temperatures (°C) by physical disk number, from the storage stack (admin).

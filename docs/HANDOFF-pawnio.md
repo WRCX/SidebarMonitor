@@ -6,10 +6,14 @@
 > modules signed by that project — don't compile your own), reads `THM_TCON_CUR_TMP` under the
 > `Global\Access_PCI` mutex, and publishes over `EtwSnapshot.CpuTempC` (`CpuPawnIoOk`, etw v10, snap
 > v22). Gated by Settings → Diagnóstico → "Sensores CPU avanzados (PawnIO)". Verified live: 51–57 °C
-> on this laptop where temp was "—". Remaining: **step 3** (Intel MSR, on the 7700K — see the updated
-> note in `docs/intel-pawnio.md`), **step 4** (power: RAPL / PM_Table — `RyzenSMU.bin` already exports
-> the pm_table ioctls), and **installing a 1.3.0 MSI on this laptop** (the running install is 1.2.4,
-> which predates the feature; flip the toggle after installing).
+> on this laptop where temp was "—". **Step 4 (AMD power) is ALSO DONE for Phoenix**: the PM_Table
+> (version `0x4C0007`) was mapped empirically on this laptop (offsets + method in
+> `docs/amd-advanced-pawnio.md`) and the helper now publishes package W, PPT/TDC % and the real
+> 100 °C THM limit on laptops (etw v11; SDK stays authoritative on desktops). Verified live:
+> ~34 W / 62 °C end-to-end. Remaining: **step 3** (Intel MSR, on the 7700K — see the updated note in
+> `docs/intel-pawnio.md`), AMD PM_Table maps for other families (Strix etc.), and **installing a
+> 1.3.0 MSI on this laptop** (the running install is 1.2.4, which predates the feature; flip the
+> toggle after installing).
 
 This file is the context carrier for a **new Claude Code session on a different machine** (the 7840HS
 laptop). The prior work happened on the 7800X3D desktop; Claude's local memory there does **not** travel,

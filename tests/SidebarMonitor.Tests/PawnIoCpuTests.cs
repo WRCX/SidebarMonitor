@@ -47,4 +47,57 @@ public class PawnIoCpuTests
         ulong raw = 0x7FFUL << 21;
         Assert.Equal(255.875, PawnIoCpu.DecodeTctl(raw));
     }
+
+    // ── PM_Table (Phoenix 0x4C0007) — values below were captured live on the 7840HS ─────────────
+
+    private static float[] PhoenixTable()
+    {
+        var t = new float[24];
+        t[0] = 45f; t[1] = 40.5f;      // STAPM limit/value
+        t[2] = 45f; t[3] = 43.373f;    // fast PPT limit/value (== socket power)
+        t[4] = 45f; t[5] = 34.911f;    // slow PPT limit/value
+        t[8] = 70f; t[9] = 31.578f;    // VDD TDC limit/value
+        t[16] = 100f; t[17] = 77.196f; // THM limit/value
+        return t;
+    }
+
+    [Fact]
+    public void MapPmTable_Phoenix_FillsPowerFields()
+    {
+        var d = default(PawnIoCpu.Data);
+        Assert.True(PawnIoCpu.TryMapPmTable(0x4C0007, PhoenixTable(), ref d));
+        Assert.True(d.HasPower);
+        Assert.Equal(43.373f, d.PackageW);
+        Assert.Equal(100f * 43.373f / 45f, d.PptPct, 3);
+        Assert.Equal(100f * 31.578f / 70f, d.TdcPct, 3);
+        Assert.Equal(100f, d.TjMaxC);
+    }
+
+    [Fact]
+    public void MapPmTable_UnknownVersion_RefusesToGuess()
+    {
+        var d = default(PawnIoCpu.Data);
+        Assert.False(PawnIoCpu.TryMapPmTable(0x4C0008, PhoenixTable(), ref d));
+        Assert.False(d.HasPower);
+    }
+
+    [Fact]
+    public void MapPmTable_GarbledRead_IsRejected()
+    {
+        // Zeroed table (failed DMA / short read): a zero PPT limit must not divide or publish.
+        var d = default(PawnIoCpu.Data);
+        Assert.False(PawnIoCpu.TryMapPmTable(0x4C0007, new float[24], ref d));
+        Assert.False(d.HasPower);
+    }
+
+    [Fact]
+    public void MapPmTable_AbsurdThmLimit_DropsTjmaxKeepsPower()
+    {
+        var t = PhoenixTable();
+        t[16] = 4000f;   // garbage where the THM limit should be
+        var d = default(PawnIoCpu.Data);
+        Assert.True(PawnIoCpu.TryMapPmTable(0x4C0007, t, ref d));
+        Assert.Equal(0f, d.TjMaxC);
+        Assert.Equal(43.373f, d.PackageW);
+    }
 }

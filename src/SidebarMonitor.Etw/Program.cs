@@ -286,7 +286,9 @@ internal static class Program
                 {
                     pawnIoTried = true;
                     pawnIo = PawnIoCpu.TryOpen(out string? pawnErr);
-                    Console.WriteLine($"PawnIO RyzenSMU: {(pawnIo is not null ? "abierto (Tctl via SMN)" : $"no disponible - {pawnErr}")}");
+                    Console.WriteLine($"PawnIO RyzenSMU: {(pawnIo is not null
+                        ? $"abierto (Tctl via SMN; PM_Table v0x{pawnIo.PmTableVersion:X} {(pawnIo.PmTableVersion != 0 ? "-> potencia" : "no soportada, solo temp")})"
+                        : $"no disponible - {pawnErr}")}");
                 }
                 else if (!wanted)
                 {
@@ -299,6 +301,16 @@ internal static class Program
             {
                 snapshot.CpuPawnIoOk = 1;
                 snapshot.CpuTempC = pawnData.TctlC;
+                // Power from the PM_Table, but only where the SDK isn't providing it (laptops):
+                // on desktop the SDK's PPT/TDC/Tjmax stay authoritative and PawnIO owns Tctl only.
+                if (pawnData.HasPower && snapshot.CpuSdkOk == 0)
+                {
+                    snapshot.CpuPawnIoOk |= 2;
+                    snapshot.CpuPackageW = pawnData.PackageW;
+                    snapshot.CpuPptPct = pawnData.PptPct;
+                    snapshot.CpuTdcPct = pawnData.TdcPct;
+                    snapshot.CpuTjMaxC = pawnData.TjMaxC;
+                }
             }
 
             diskTemps.Fill(ref snapshot);

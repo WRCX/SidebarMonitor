@@ -1,15 +1,46 @@
 # AMD "advanced" CPU sensors via PawnIO (Tctl + SMU PM_Table) — design & plan
 
-> **Status: part 1 (Tctl) IMPLEMENTED and verified on a 7840HS (Phoenix), 2026-07-13.** The helper's
-> `PawnIoCpu.cs` loads PawnIO's **signed `RyzenSMU.bin` module** (from `namazso/PawnIO.Modules` —
-> release PawnIO only loads modules signed by that project, so we use theirs instead of compiling our
-> own as originally planned) and reads Tctl each window, gated by the "Sensores CPU avanzados"
-> toggle (Settings → Diagnóstico → `ConsentMarker.AmdAdvancedEnabled`). The reach turned out to be
-> bigger than the "+3 °C" framing below: **on mobile APUs the Ryzen Master SDK doesn't work at all**,
-> so on laptops this is the *only* CPU temperature source. Part 2 (PM_Table: power/limits) is still
-> design-only — though note `RyzenSMU.bin` already exports `ioctl_resolve/update/read_pm_table`, so
-> only the per-generation offset maps remain on our side. See also the sibling
-> [Intel plan](intel-pawnio.md); both share the PawnIO infrastructure.
+> **Status: parts 1 (Tctl) AND 2 (PM_Table power, Phoenix only) IMPLEMENTED and verified on a
+> 7840HS, 2026-07-13.** The helper's `PawnIoCpu.cs` loads PawnIO's **signed `RyzenSMU.bin` module**
+> (from `namazso/PawnIO.Modules` — release PawnIO only loads modules signed by that project, so we
+> use theirs instead of compiling our own as originally planned), reads Tctl each window, and — on
+> the one PM_Table version we've mapped (see below) — package power, PPT/TDC usage and the real
+> THM limit. Gated by the "Sensores CPU avanzados" toggle (Settings → Diagnóstico →
+> `ConsentMarker.AmdAdvancedEnabled`). The reach turned out to be bigger than the "+3 °C" framing
+> below: **on mobile APUs the Ryzen Master SDK doesn't work at all**, so on laptops this is the
+> *only* source for both temperature and power. See also the sibling [Intel plan](intel-pawnio.md);
+> both share the PawnIO infrastructure.
+
+## Empirical PM_Table map — Phoenix, version 0x4C0007 (mapped on the 7840HS, 2026-07-13)
+
+Method: three `ioctl_update/read_pm_table` captures (idle → 16-thread load → idle) and a 40 s
+sampled watch; fields identified by their limits' round values and how the values track load.
+Floats, interleaved limit/value pairs:
+
+| Float idx | Field | Evidence |
+|---|---|---|
+| [0]/[1] | **STAPM** limit/value (W) | 45.0 fixed; value 30→40.5 under load, slow filter |
+| [2]/[3] | **fast PPT** limit/value (W) | 45.0 fixed; value saturates at ~44 against it under load |
+| [4]/[5] | **slow PPT** limit/value (W) | 45.0 fixed; value lags the fast one (slower filter) |
+| [8]/[9] | **VDD TDC** limit/value (A) | 70.0 fixed; 18→31 A under load |
+| [16]/[17] | **THM** limit/value (°C) | 100.0 fixed → the real Tjmax for the UI's colour thresholds |
+| [22]-[25] | STT skin limits/values (°C) | 80.0 fixed pairs |
+| [28]/[29] | voltages (V) | 1.45 / 1.13 |
+| [33]/[34]/[37]/[38] | current Tctl (°C) | tracks the SMN 0x59800 readout exactly |
+| [47] | socket power (W) | **identical to [3] in every capture** — what we publish as package W |
+| [48] | ~4.400 GHz, constant | **NOT the global boost limit**: stays 4.4 under 1-thread load (would rise toward 5.1 if it were the dynamic ceiling). Left unpublished; `LimitMhz` stays reserved |
+| [49]-[58] | per-core freq limits (GHz) | 5.125 = the SKU's max boost |
+| [256+] | DPM clock tables (MHz) | 1600/1440/1309/1200... states |
+
+Integration rule (the audit's seam): PawnIO overrides only what it owns — **Tctl always**; the
+power fields **only when the SDK isn't providing them** (`CpuSdkOk == 0`, i.e. laptops). Unknown
+PM_Table version → power quietly off, Tctl still works. `EtwSnapshot.CpuPawnIoOk` is the bitmask
+(bit 0 temp, bit 1 power).
+
+Notes for the next family (Strix, family 1Ah): re-run the PoC's idle/load diff (the scratchpad
+`PawnIoPoc` "pmtable"/"watch" modes), confirm the limit/value pairs, and add the version to
+`PawnIoCpu.TryMapPmTable`. The first `ioctl_update_pm_table` after resolve can bounce with SMU
+prereq/busy (0x8007054F) — retry or absorb it as a warm-up call, as `TryOpen` does.
 
 ## What we already have (no ring0)
 
