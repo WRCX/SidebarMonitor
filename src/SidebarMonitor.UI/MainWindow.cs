@@ -368,10 +368,11 @@ internal sealed partial class MainWindow : AppBarWindow
             {
                 _bestFreqPeakMhz = Math.Max(_bestFreqPeakMhz, c.FreqBestMhz);
                 double cur = c.FreqBestMhz / 1000.0, peak = _bestFreqPeakMhz / 1000.0;
-                // "mejor núcleo" needs a real per-core boost clock: the AMD SDK's dCurrentFreq, or
-                // Intel's APERF/MPERF (via PawnIO). Without either (AMD with no helper, or Intel opt-out)
-                // FreqBest is just the fastest core by PDH — say so honestly by dropping the label.
-                string bestLabel = s.CpuFromAmd || s.CpuFromIntel ? Loc.T(" (mejor núcleo)") : "";
+                // "(mejor núcleo)" is an AMD-only label: the SDK gives a specific favored core's clock,
+                // and CPPC preferred cores are real on every modern Ryzen. On Intel we show the real
+                // boost value (fastest core via APERF/MPERF) but drop the label — a favored core is a
+                // Turbo-Boost-Max-3.0 concept that doesn't apply to most/older Intel parts.
+                string bestLabel = s.CpuFromAmd ? Loc.T(" (mejor núcleo)") : "";
                 _cpuBoost.Text = string.Create(ci, $"boost {cur:F2} / {peak:F2} GHz{bestLabel}");
                 _cpuBoost.Visibility = Visibility.Visible;
             }

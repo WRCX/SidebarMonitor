@@ -391,28 +391,17 @@ internal static class Program
                     snapshot.CpuCoreTempsC[i] = intelData.CoreTempsC[i];
                     if (intelData.CoreC0Pct is not null) snapshot.CpuCoreC0Pct[i] = intelData.CoreC0Pct[i];
                 }
-                // Real per-core boost clock (APERF/MPERF); 0 on the first window (no delta yet).
+                // Real per-core boost clock (APERF/MPERF); 0 on the first window (no delta yet). This
+                // is the "fastest core right now" value shown on the boost line.
                 if (intelData.BestFreqMhz > 0) snapshot.CpuBestFreqMhz = intelData.BestFreqMhz;
 
-                // Best/second core from the real per-core clock, tracked as running peaks so the star
-                // converges on the favored (Turbo-Boost-Max) core instead of jumping — same method as
-                // the AMD SDK block. On parts with no favored core it settles on the historically
-                // highest-clocking logical core.
-                if (intelData.CoreFreqMhz is not null)
-                {
-                    int nc = Math.Min(n, corePeak.Length);
-                    for (int i = 0; i < nc; i++)
-                        if (intelData.CoreFreqMhz[i] > corePeak[i] && intelData.CoreFreqMhz[i] < 6000)
-                            corePeak[i] = intelData.CoreFreqMhz[i];   // cap glitches, like the AMD peak track
-                    int best = -1, second = -1;
-                    for (int i = 0; i < nc; i++)
-                    {
-                        if (best < 0 || corePeak[i] > corePeak[best]) { second = best; best = i; }
-                        else if (second < 0 || corePeak[i] > corePeak[second]) second = i;
-                    }
-                    snapshot.CpuBestCore = best;
-                    snapshot.CpuSecondCore = second;
-                }
+                // NOTE: no best-core "star" on Intel. A favored core (one that boosts higher than the
+                // rest) is a Turbo-Boost-Max-3.0 thing — Skylake/Broadwell-E onward, and only some
+                // SKUs. On everything older (Haswell etc.) all cores share the same turbo bins, so a
+                // star would just mark an arbitrary core. AMD keeps it (CPPC preferred cores are real
+                // on every modern Ryzen). If wanted on modern Intel, detect favored cores from
+                // IA32_HWP_CAPABILITIES (0x771) per-core "Highest Performance" and only star when they
+                // actually differ. BestCore/SecondCore stay -1 here (the agent's else branch set them).
                 if (intelData.HasPower)
                 {
                     snapshot.CpuIntelOk |= 2;

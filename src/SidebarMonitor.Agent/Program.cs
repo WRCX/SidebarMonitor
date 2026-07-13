@@ -281,10 +281,7 @@ internal static class Program
             // Real per-core boost clock (APERF/MPERF) — the true achieved turbo PDH's averaged %
             // undershoots. Max() keeps it from ever reading below the PDH-derived per-core rows.
             if (e.CpuBestFreqMhz > 0) s.Cpu.FreqBestMhz = Math.Max(s.Cpu.FreqBestMhz, e.CpuBestFreqMhz);
-            // Best/second core + physical count (0 → the UI maps the star 1:1 onto logical rows).
-            s.Cpu.BestCore = e.CpuBestCore;
-            s.Cpu.SecondCore = e.CpuSecondCore;
-            s.Cpu.PhysicalCores = e.CpuPhysicalCores;
+            // No best-core star on Intel (favored cores are TBM-3.0-only); BestCore/SecondCore stay -1.
             s.CpuFromIntel = true;
         }
         if ((e.CpuIntelOk & 2) != 0)
