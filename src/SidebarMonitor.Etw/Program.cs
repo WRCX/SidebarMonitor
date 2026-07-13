@@ -383,6 +383,7 @@ internal static class Program
                 snapshot.CpuIntelOk = 1;
                 snapshot.CpuTempC = intelData.TempC;
                 snapshot.CpuTjMaxC = intelData.TjMaxC;
+                snapshot.CpuVidV = intelData.VidV;   // core voltage (0 = unavailable on this part)
                 snapshot.CpuThrottleFlags = intelData.ThrottleFlags;
                 snapshot.CpuPhysicalCores = 0;   // Intel fills per-LOGICAL temps/C0 directly (no phys map)
                 int n = Math.Min(intelData.CoreCount, 16);

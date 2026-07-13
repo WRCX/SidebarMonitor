@@ -6,6 +6,16 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ## [Unreleased]
 
+## [1.4.3] — 2026-07-14
+
+### Added
+
+- **Core voltage (VID) on Intel** — the "Mostrar VID (voltaje)" line now works on Intel too, read from
+  `IA32_PERF_STATUS` (0x198) bits [47:32] / 8192. Reliable on Sandy Bridge → Broadwell (verified
+  ~1.04 V on an i7-4700HQ); Skylake onward moved the voltage regulator and no longer exposes a clean
+  Vcore there, so the value is range-guarded (0.2–1.6 V) and shows "—" when implausible. Best-effort,
+  like the other per-generation Intel bits.
+
 ## [1.4.2] — 2026-07-14
 
 ### Changed

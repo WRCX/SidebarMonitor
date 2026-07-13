@@ -32,6 +32,7 @@ internal sealed class IntelMsr : IDisposable
     private const uint MSR_PKG_POWER_LIMIT       = 0x610;
     private const uint MSR_PKG_ENERGY_STATUS     = 0x611;
     private const uint MSR_PLATFORM_INFO         = 0x0CE;
+    private const uint IA32_PERF_STATUS          = 0x198;
     private const uint IA32_MPERF                = 0x0E7;
     private const uint IA32_APERF                = 0x0E8;
 
@@ -50,6 +51,7 @@ internal sealed class IntelMsr : IDisposable
         public bool HasPower;         // false on the first window (no delta yet) or absent RAPL
         public float PackageW;        // RAPL package power
         public float PptPct;          // package power as % of PL1 (the RAPL power limit), 0 = unknown
+        public float VidV;            // core voltage (IA32_PERF_STATUS), 0 = unavailable/implausible
         public float BestFreqMhz;     // highest real per-core clock (APERF/MPERF), 0 until 2nd window
         public float[] CoreFreqMhz;   // per-logical-core real clock (APERF/MPERF), 0 until 2nd window
         public float[] CoreC0Pct;     // per-logical-core C0 (active) residency % = ΔMPERF/ΔTSC×100
@@ -234,6 +236,16 @@ internal sealed class IntelMsr : IDisposable
             if (ReadMsr(IA32_PACKAGE_THERM_STATUS, out ulong pkgThr) && (pkgThr & (1UL << 31)) != 0)
                 thr |= ThrottleBits(pkgThr);
             data.ThrottleFlags = thr;
+
+            // Core voltage (Vcore): IA32_PERF_STATUS bits [47:32] / 8192 V. Reliable on Sandy Bridge
+            // → Broadwell; Skylake onward moved the VR and this field no longer holds a clean Vcore,
+            // so guard the range and leave it 0 (→ "—") where it's implausible. Verified ~1.04 V on
+            // an i7-4700HQ.
+            if (ReadMsr(IA32_PERF_STATUS, out ulong perfStatus))
+            {
+                float v = (float)(((perfStatus >> 32) & 0xFFFF) / 8192.0);
+                if (v is > 0.2f and < 1.6f) data.VidV = v;
+            }
 
             // Per-core clock and C0 residency, differenced against the previous window:
             //   clock = base × ΔAPERF/ΔMPERF (the achieved boost the averaged PDH % smooths away),

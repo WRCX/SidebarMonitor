@@ -272,6 +272,7 @@ internal static class Program
         {
             s.Cpu.TempC = (float)e.CpuTempC;
             if (e.CpuTjMaxC > 0) s.Cpu.TjMaxC = e.CpuTjMaxC;
+            if (e.CpuVidV > 0) s.Cpu.VidV = e.CpuVidV;   // core voltage (IA32_PERF_STATUS), 0 = n/a
             for (int i = 0; i < s.Cpu.CoreCount && i < 16; i++)
             {
                 s.Cpu.CoreTempC[i] = e.CpuCoreTempsC[i];
