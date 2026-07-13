@@ -83,7 +83,9 @@ internal sealed partial class MainWindow
         _cpuName.TextWrapping = TextWrapping.NoWrap;
         _cpuName.Visibility = Visibility.Collapsed;   // shown only in "inside" name mode
         panel.Children.Add(_cpuName);
-        panel.Children.Add(StatRow((_cpuFreqCaption, _cpuFreq), Cap("W", _cpuWatts), Cap("°C", _cpuTemp)));
+        // Fan (%) sits fixed next to °C for everyone — "—" when the model has no EC map or the opt-in
+        // is off. Read from the embedded controller via PawnIO (see EcFan in the helper).
+        panel.Children.Add(StatRow((_cpuFreqCaption, _cpuFreq), Cap("W", _cpuWatts), Cap("°C", _cpuTemp), Cap("%vent", _cpuFan)));
         UpdateFreqCaption();
 
         // The three graph modes live stacked; only one is visible. The % label overlays the two

@@ -1,15 +1,25 @@
 # Intel CPU sensors via PawnIO — design & plan
 
-> **Status: design + reference implementation, NOT yet built into the app and NOT tested.** It was
-> written on an AMD machine with no Intel CPU and no PawnIO installed. Treat the code below as a
-> starting point to validate on real Intel hardware, not a drop-in.
+> **Status: BUILT and VALIDATED on real Intel hardware (2026-07-13).** Shipped in `[Unreleased]`.
+> The live implementation is `src/SidebarMonitor.Etw/IntelMsr.cs` (mirrors `PawnIoCpu.cs`): it loads
+> the signed **`IntelMSR.bin`**, reads Tjmax + per-core `IA32_THERM_STATUS` + RAPL package power, and
+> the helper fills the same `EtwSnapshot` CPU fields the AMD SDK does, gated by
+> `ConsentMarker.IntelSensorsEnabled` (Settings → Diagnostics → "Sensores CPU (PawnIO)", Intel only).
+> The agent's `MergeEtw` copies them 1:1 (`CpuIntelOk` bitmask → `CpuFromIntel`). Contracts:
+> `EtwSnapshot` v13, `Snapshot` v24.
 >
-> **Update 2026-07-13 (learned while shipping the AMD Tctl path):** release PawnIO only loads
-> modules **signed by the PawnIO.Modules project**, so do NOT compile the `intel_msr.p` sketch below
-> — use the official signed **`IntelMSR.bin`** from `namazso/PawnIO.Modules` (already downloaded by
-> `native/PawnIO/fetch.ps1`; check its exported ioctl names in the repo's `IntelMSR.p`). The C#
-> interop pattern is done and living in `src/SidebarMonitor.Etw/PawnIoCpu.cs` (open/load/execute +
-> the `Global\Access_PCI` etiquette where applicable); the Intel source should mirror it.
+> **Verified end-to-end on an i7-4700HQ (Haswell, 4c/8t):** Tjmax 100 °C; per-core temps that differ
+> per core and track load (60 → 72 °C hottest core idle→load; package temp consistent); RAPL package
+> power 3 → 36 W standalone and 23 → 41 W through the full helper→agent→UI pipeline under all-core
+> load. This answered the design's open questions: PawnIO **does** run the MSR IOCTL on the caller's
+> pinned processor (per-core affinity works), and Haswell exposes all three RAPL domains
+> (package/PP0/DRAM). The reference sketches below are kept for context; the real code is the source
+> of truth.
+>
+> **Note on the module:** release PawnIO only loads modules **signed by the PawnIO.Modules project**,
+> so we use the official signed **`IntelMSR.bin`** (fetched by `native/PawnIO/fetch.ps1`). Its
+> **verified export is `ioctl_read_msr`** (1 in = MSR index, 1 out = 64-bit value); `main()` gates on
+> Intel + x64 and refuses to load elsewhere. Do NOT compile the `intel_msr.p` sketch below.
 
 ## Why PawnIO (and not Intel XTU)
 

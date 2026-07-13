@@ -43,6 +43,14 @@ public sealed class UiConfig
     /// CPU temperature source on Ryzen laptops (the Ryzen Master SDK can't read mobile APUs). Off by
     /// default; needs PawnIO installed. Mirrored to a marker file the elevated helper polls.</summary>
     public bool AmdAdvanced { get; set; }
+    /// <summary>Intel CPU sensors via the PawnIO signed driver: per-core temperature (IA32_THERM_STATUS)
+    /// and RAPL package power. Intel ships no monitoring SDK, so this is the only CPU temp/watts source
+    /// on Intel. Off by default; needs PawnIO installed. Mirrored to a marker file the helper polls.</summary>
+    public bool IntelSensors { get; set; }
+    /// <summary>Laptop fan monitoring via PawnIO's LpcACPIEC (embedded-controller) + the per-model NBFC
+    /// register map. Vendor-agnostic; off by default; needs PawnIO installed. Best-effort — a
+    /// community map may read a wrong register on an unverified model. Mirrored to a marker file.</summary>
+    public bool FanPawnIo { get; set; }
 
     // ── Diagnostics / logging ─────────────────────────────────────────────────────────────────
     /// <summary>Append every snapshot as a row to a CSV under %LOCALAPPDATA%\SidebarMonitor\logs.</summary>

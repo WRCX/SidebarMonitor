@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Management;
 using System.Security.Principal;
 using Microsoft.Diagnostics.Tracing.Parsers;
 using Microsoft.Diagnostics.Tracing.Session;
@@ -95,6 +96,36 @@ internal static class Program
         else
             Console.WriteLine($"PawnIO: {(ConsentMarker.AmdAdvancedEnabled ? "opt-in activo, se abrira en la primera ventana" : "en espera de opt-in (sensores avanzados)")}.");
 
+        // Intel CPU sensors via PawnIO (per-core temp via IA32_THERM_STATUS + RAPL package power),
+        // opt-in. Same lazy-open-from-the-timer shape as the AMD PawnIO path: here just the gates.
+        // Intel only (the IntelMSR module refuses anything else) and skippable via --no-intel; a
+        // --force-intel bypasses the consent marker for testing (mirrors --force-sdk).
+        IntelMsr? intelMsr = null;
+        string? intelErr = null;
+        bool intelTried = false;
+        bool noIntel = args.Contains("--no-intel");
+        bool forceIntel = args.Contains("--force-intel");
+        if (noIntel)
+            Console.WriteLine("Intel MSR: desactivado por --no-intel.");
+        else if (!CpuVendor.IsIntel && !forceIntel)
+            Console.WriteLine("Intel MSR: omitido (CPU no Intel; el modulo IntelMSR es solo Intel).");
+        else
+            Console.WriteLine($"Intel MSR (PawnIO): {(ConsentMarker.IntelSensorsEnabled || forceIntel ? "opt-in activo, se abrira en la primera ventana" : "en espera de opt-in (sensores Intel)")}.");
+
+        // Laptop fan (%) via PawnIO's LpcACPIEC + the per-model NBFC register map. Vendor-agnostic,
+        // opt-in, best-effort (a community map can point at the wrong register on an unverified model).
+        // Lazy-opened from the timer like the other PawnIO paths; here just the gates and DMI model.
+        EcFan? ecFan = null;
+        string? ecFanErr = null;
+        bool ecFanTried = false;
+        bool noFan = args.Contains("--no-fan");
+        bool forceFan = args.Contains("--force-fan");
+        string[] fanModels = DmiModels();
+        if (noFan)
+            Console.WriteLine("Ventilador (EC/PawnIO): desactivado por --no-fan.");
+        else
+            Console.WriteLine($"Ventilador (EC/PawnIO): {(ConsentMarker.FanPawnIoEnabled || forceFan ? "opt-in activo, se abrira en la primera ventana" : "en espera de opt-in (ventilador)")} (modelo DMI: {(fanModels.Length > 0 ? string.Join(" / ", fanModels) : "desconocido")}).");
+
         // Drive temps (SATA + NVMe) from the storage stack; needs admin, which we have.
         using var diskTemps = new DiskTempsWmi();
         Console.WriteLine("Temps de disco: por WMI (storage reliability counter)");
@@ -175,6 +206,7 @@ internal static class Program
 
         var snapshot = default(EtwSnapshot);
         long published = 0;
+        float fanPct = float.NaN;   // last good EC fan duty %; kept across a contended window
 
         // Running peak clock per physical core, to derive the best/second-best (highest-boosting)
         // cores. Persisted across launches and never reset: the CPPC preferred cores are fixed, so
@@ -323,6 +355,71 @@ internal static class Program
                 }
             }
 
+            // Intel CPU sensors (opt-in): per-core temp + RAPL package power. The marker is polled
+            // each window so the toggle works hot. Intel has no SDK block above, so this is the sole
+            // CPU temp/power source on Intel — it fills the same EtwSnapshot fields the AMD SDK does.
+            if (!noIntel && (CpuVendor.IsIntel || forceIntel))
+            {
+                bool wanted = forceIntel || ConsentMarker.IntelSensorsEnabled;
+                if (wanted && intelMsr is null && !intelTried)
+                {
+                    intelTried = true;
+                    intelMsr = IntelMsr.TryOpen(out intelErr);
+                    Console.WriteLine($"Intel MSR (PawnIO): {(intelMsr is not null
+                        ? $"abierto (Tjmax {intelMsr.TjMaxC:F0} C, temp por-nucleo + potencia RAPL)"
+                        : $"no disponible - {intelErr}")}");
+                }
+                else if (!wanted)
+                {
+                    if (intelMsr is not null) { intelMsr.Dispose(); intelMsr = null; Console.WriteLine("Intel MSR: cerrado (opt-out)."); }
+                    intelTried = false;   // allow one fresh attempt if the user opts back in
+                }
+            }
+
+            snapshot.CpuIntelOk = 0;
+            snapshot.CpuThrottleFlags = 0;
+            if (intelMsr is not null && intelMsr.TryRead(out var intelData))
+            {
+                snapshot.CpuIntelOk = 1;
+                snapshot.CpuTempC = intelData.TempC;
+                snapshot.CpuTjMaxC = intelData.TjMaxC;
+                snapshot.CpuThrottleFlags = intelData.ThrottleFlags;
+                snapshot.CpuPhysicalCores = 0;   // Intel fills per-LOGICAL temps directly (no phys map)
+                int n = Math.Min(intelData.CoreCount, 16);
+                for (int i = 0; i < n; i++) snapshot.CpuCoreTempsC[i] = intelData.CoreTempsC[i];
+                // Real per-core boost clock (APERF/MPERF); 0 on the first window (no delta yet).
+                if (intelData.BestFreqMhz > 0) snapshot.CpuBestFreqMhz = intelData.BestFreqMhz;
+                if (intelData.HasPower)
+                {
+                    snapshot.CpuIntelOk |= 2;
+                    snapshot.CpuPackageW = intelData.PackageW;
+                    snapshot.CpuPptPct = intelData.PptPct;   // package power as % of PL1
+                }
+            }
+
+            // Laptop fan % via the EC (opt-in). Marker polled each window so the toggle works hot.
+            if (!noFan)
+            {
+                bool wantFan = forceFan || ConsentMarker.FanPawnIoEnabled;
+                if (wantFan && ecFan is null && !ecFanTried)
+                {
+                    ecFanTried = true;
+                    ecFan = EcFan.TryOpen(fanModels, out ecFanErr);
+                    Console.WriteLine($"Ventilador (EC/PawnIO): {(ecFan is not null ? $"abierto (modelo {ecFan.Model})" : $"no disponible - {ecFanErr}")}");
+                }
+                else if (!wantFan && ecFan is not null)
+                {
+                    ecFan.Dispose(); ecFan = null; ecFanTried = false; fanPct = float.NaN;
+                    Console.WriteLine("Ventilador (EC/PawnIO): cerrado (opt-out).");
+                }
+            }
+            if (ecFan is not null)
+            {
+                float p = ecFan.TryReadPct();
+                if (!float.IsNaN(p)) fanPct = p;   // keep last good if this window was contended
+            }
+            snapshot.CpuFanPct = fanPct;
+
             diskTemps.Fill(ref snapshot);
 
             // Game frame-timing (PresentMon), opt-in via the marker the UI writes.
@@ -396,6 +493,8 @@ internal static class Program
         }
 
         CorePeakStore.Save(corePeak);
+        ecFan?.Dispose();
+        intelMsr?.Dispose();
         pawnIo?.Dispose();
         ryzen?.Dispose();
         writer.Dispose();
@@ -455,6 +554,28 @@ internal static class Program
             np.TxBytesPerSec = top[i].Tx / seconds;
         }
         s.NetProcCount = top.Length;
+    }
+
+    /// <summary>The machine's DMI identifiers (system model + baseboard product) to match against the
+    /// NBFC fan-register map. NBFC keys on the DMI product name; we try both and dedupe.</summary>
+    private static string[] DmiModels()
+    {
+        var list = new List<string>(2);
+        void Add(string q, string prop)
+        {
+            try
+            {
+                using var s = new ManagementObjectSearcher($"SELECT {prop} FROM {q}");
+                foreach (ManagementObject mo in s.Get())
+                    using (mo)
+                        if (mo[prop] is string m && !string.IsNullOrWhiteSpace(m) && !list.Contains(m.Trim()))
+                            list.Add(m.Trim());
+            }
+            catch { /* WMI hiccup — the fan path just stays unsupported */ }
+        }
+        Add("Win32_ComputerSystem", "Model");
+        Add("Win32_BaseBoard", "Product");
+        return list.ToArray();
     }
 
     /// <summary>Sum of RX+TX bytes across up, non-loopback interfaces. The ground truth the ETW

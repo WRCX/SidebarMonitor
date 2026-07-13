@@ -41,20 +41,29 @@ $runName  = 'SidebarMonitor'
 $vsInstaller = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer'
 if (Test-Path $vsInstaller) { $env:PATH = "$vsInstaller;$env:PATH" }
 
+# dotnet no siempre esta en el PATH (p.ej. instalaciones nuevas). Resolverlo explicitamente.
+$dotnet = (Get-Command dotnet -ErrorAction SilentlyContinue).Source
+if (-not $dotnet) {
+    $cand = Join-Path $env:ProgramFiles 'dotnet\dotnet.exe'
+    if (Test-Path $cand) { $dotnet = $cand } else { throw 'No se encontro dotnet: instala el SDK de .NET 10 (https://dot.net).' }
+}
+
 Write-Host "== SidebarMonitor: instalando en $app ==`n" -ForegroundColor Cyan
 
-# 1. Puente nativo al SDK de AMD.
+# 1. Puente nativo al SDK de AMD. OPCIONAL: en un equipo Intel (o sin toolchain C++/SDK de AMD) se
+#    omite y el stack se instala igual -- los sensores avanzados de AMD simplemente no estaran, pero
+#    los de Intel (MSR) y el ventilador (EC) via PawnIO funcionan sin este puente.
 $shim = Join-Path $root 'native\RyzenShim\RyzenShim.dll'
 if (-not (Test-Path $shim)) {
-    Write-Host "[1/6] Compilando RyzenShim.dll..." -ForegroundColor Cyan
-    & (Join-Path $root 'native\RyzenShim\build.cmd')
-    if (-not (Test-Path $shim)) { throw "No se pudo compilar RyzenShim.dll (falta el toolchain C++ o el SDK de AMD?)." }
+    Write-Host "[1/6] Compilando RyzenShim.dll (opcional, AMD)..." -ForegroundColor Cyan
+    try { & (Join-Path $root 'native\RyzenShim\build.cmd') } catch { }
+    if (-not (Test-Path $shim)) { Write-Host "  Omitido: sin toolchain C++/SDK de AMD. Los sensores CPU de AMD via SDK no estaran (Intel/EC no se ven afectados)." -ForegroundColor Yellow }
 } else { Write-Host "[1/6] RyzenShim.dll ya presente." -ForegroundColor DarkGray }
 
-# 2. DLLs del SDK empaquetadas.
+# 2. DLLs del SDK de AMD empaquetadas (opcional, misma logica que el puente).
 if (-not (Test-Path (Join-Path $root 'native\RyzenSdk\Platform.dll'))) {
-    Write-Host "[2/6] Empaquetando DLLs del SDK de AMD..." -ForegroundColor Cyan
-    & (Join-Path $root 'native\RyzenSdk\fetch.ps1')
+    Write-Host "[2/6] Empaquetando DLLs del SDK de AMD (opcional)..." -ForegroundColor Cyan
+    try { & (Join-Path $root 'native\RyzenSdk\fetch.ps1') } catch { Write-Host "  Omitido: no se pudo obtener el SDK de AMD (no necesario en Intel)." -ForegroundColor Yellow }
 } else { Write-Host "[2/6] DLLs del SDK ya empaquetadas." -ForegroundColor DarkGray }
 
 # 3. Parar lo que este corriendo y soltar la tarea, para no chocar con los ficheros al publicar.
@@ -75,13 +84,20 @@ New-Item -ItemType Directory -Force $app | Out-Null
 $sc = if ($SelfContained) { 'true' } else { 'false' }
 
 # El agente es AOT (nativo, siempre self-contained); helper y UI, framework-dependent salvo -SelfContained.
-& dotnet publish (Join-Path $root 'src\SidebarMonitor.Agent\SidebarMonitor.Agent.csproj') `
-    -c Release -r win-x64 -o $app --nologo -v q
-if ($LASTEXITCODE) { throw "Fallo la publicacion del agente." }
-& dotnet publish (Join-Path $root 'src\SidebarMonitor.Etw\SidebarMonitor.Etw.csproj') `
+# El agente publica con NativeAOT, que necesita el toolchain C++ (link.exe). Si no esta, se
+# reintenta sin AOT como self-contained (nativo no, pero funciona igual y sin runtime instalado).
+$agentCsproj = Join-Path $root 'src\SidebarMonitor.Agent\SidebarMonitor.Agent.csproj'
+& $dotnet publish $agentCsproj -c Release -r win-x64 -o $app --nologo -v q
+if ($LASTEXITCODE) {
+    Write-Host "  AOT fallo (sin toolchain C++). Publicando el agente sin AOT (self-contained)..." -ForegroundColor Yellow
+    & $dotnet publish $agentCsproj -c Release -r win-x64 --self-contained true `
+        -p:PublishAot=false -p:IsAotCompatible=false -o $app --nologo -v q
+    if ($LASTEXITCODE) { throw "Fallo la publicacion del agente (con y sin AOT)." }
+}
+& $dotnet publish (Join-Path $root 'src\SidebarMonitor.Etw\SidebarMonitor.Etw.csproj') `
     -c Release -r win-x64 --self-contained $sc -o $app --nologo -v q
 if ($LASTEXITCODE) { throw "Fallo la publicacion del helper." }
-& dotnet publish (Join-Path $root 'src\SidebarMonitor.UI\SidebarMonitor.UI.csproj') `
+& $dotnet publish (Join-Path $root 'src\SidebarMonitor.UI\SidebarMonitor.UI.csproj') `
     -c Release -r win-x64 --self-contained $sc -o $app --nologo -v q
 if ($LASTEXITCODE) { throw "Fallo la publicacion de la UI." }
 

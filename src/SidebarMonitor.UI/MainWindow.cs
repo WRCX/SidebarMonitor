@@ -52,6 +52,7 @@ internal sealed partial class MainWindow : AppBarWindow
     private readonly TextBlock _cpuFreqCaption = Theme.Text("GHz", 9, Theme.InkMuted);
     private readonly TextBlock _cpuWatts = Stat();
     private readonly TextBlock _cpuTemp = Stat();
+    private readonly TextBlock _cpuFan = Stat();
     private readonly TextBlock _cpuPct;
     private readonly Sparkline _cpuSpark = new(Theme.SeriesCpu) { FixedMax = 100 };
     private readonly CoreSparkline _cpuCoreSpark = new(height: 48);
@@ -339,6 +340,8 @@ internal sealed partial class MainWindow : AppBarWindow
             _cpuFreq.Text = float.IsNaN(freq) ? "—" : string.Create(ci, $"{freq / 1000:F2}");
             _cpuWatts.Text = float.IsNaN(c.PackagePowerW) ? "—" : string.Create(ci, $"{c.PackagePowerW:F1}");
             _cpuTemp.Text = float.IsNaN(c.TempC) ? "—" : string.Create(ci, $"{c.TempC:F1}");
+            // Fan %, fixed for everyone: EC duty where the model is mapped + opt-in on, "—" otherwise.
+            _cpuFan.Text = float.IsNaN(c.FanPct) ? "—" : string.Create(ci, $"{c.FanPct:F0}");
             // Colour the temperature by how close it is to the SDK's throttle limit (Tjmax/cHTC),
             // and pulse red once it's within a few degrees — you can't miss it about to throttle.
             int tlvl = TempLevel(c.TempC, c.TjMaxC);
@@ -365,9 +368,10 @@ internal sealed partial class MainWindow : AppBarWindow
             {
                 _bestFreqPeakMhz = Math.Max(_bestFreqPeakMhz, c.FreqBestMhz);
                 double cur = c.FreqBestMhz / 1000.0, peak = _bestFreqPeakMhz / 1000.0;
-                // "mejor núcleo" is only meaningful with the AMD SDK's per-core boost clock. Without it
-                // (Intel, or AMD with no helper) FreqBest is just the fastest core by PDH — say so honestly.
-                string bestLabel = s.CpuFromAmd ? Loc.T(" (mejor núcleo)") : "";
+                // "mejor núcleo" needs a real per-core boost clock: the AMD SDK's dCurrentFreq, or
+                // Intel's APERF/MPERF (via PawnIO). Without either (AMD with no helper, or Intel opt-out)
+                // FreqBest is just the fastest core by PDH — say so honestly by dropping the label.
+                string bestLabel = s.CpuFromAmd || s.CpuFromIntel ? Loc.T(" (mejor núcleo)") : "";
                 _cpuBoost.Text = string.Create(ci, $"boost {cur:F2} / {peak:F2} GHz{bestLabel}");
                 _cpuBoost.Visibility = Visibility.Visible;
             }
@@ -378,7 +382,10 @@ internal sealed partial class MainWindow : AppBarWindow
             // Thermal uses die-avg ≥ Tjmax−3: validated under load, the average tracks the hotspot
             // (Tctl) within ~3°, so that's the real throttle point without needing the Tctl sensor.
             var extra = new List<string>(6);
-            bool throttle = c.TjMaxC > 0 && !float.IsNaN(c.TempC) && c.TempC >= c.TjMaxC - 3f;
+            // Thermal throttle: Intel's real PROCHOT/thermal bit, or (AMD, or as a fallback) the
+            // die temperature within 3° of Tjmax.
+            bool throttle = (c.ThrottleFlags & 1) != 0
+                            || (c.TjMaxC > 0 && !float.IsNaN(c.TempC) && c.TempC >= c.TjMaxC - 3f);
             if (_cfg.ShowCpuVid && c.VidV > 0) extra.Add(string.Create(ci, $"VID {c.VidV:F3}V"));
             if (_cfg.ShowCpuLimits)
             {
@@ -615,9 +622,16 @@ internal sealed partial class MainWindow : AppBarWindow
         var warn = new List<string>(3);
         bool haveTemp = c.TjMaxC > 0 && !float.IsNaN(c.TempC);
 
-        if (c.PptPct >= 99) hard.Add(Loc.T("POT")); else if (c.PptPct >= 95) warn.Add(Loc.T("POT"));
-        if (c.TdcPct >= 99 || c.EdcPct >= 99) hard.Add(Loc.T("CORR")); else if (c.TdcPct >= 95 || c.EdcPct >= 95) warn.Add(Loc.T("CORR"));
-        if (haveTemp && c.TempC >= c.TjMaxC - 3) hard.Add(Loc.T("TÉRM")); else if (haveTemp && c.TempC >= c.TjMaxC - 7) warn.Add(Loc.T("TÉRM"));
+        // ThrottleFlags carries Intel's *authoritative* active-cap bits (from IA32_THERM_STATUS); AMD
+        // leaves them 0 and the cap is inferred from the PPT/TDC/EDC percentages. Either route counts
+        // as a hard throttle.
+        bool flagThermal = (c.ThrottleFlags & 1) != 0;
+        bool flagPower   = (c.ThrottleFlags & 2) != 0;
+        bool flagCurrent = (c.ThrottleFlags & 4) != 0;
+
+        if (flagPower || c.PptPct >= 99) hard.Add(Loc.T("POT")); else if (c.PptPct >= 95) warn.Add(Loc.T("POT"));
+        if (flagCurrent || c.TdcPct >= 99 || c.EdcPct >= 99) hard.Add(Loc.T("CORR")); else if (c.TdcPct >= 95 || c.EdcPct >= 95) warn.Add(Loc.T("CORR"));
+        if (flagThermal || (haveTemp && c.TempC >= c.TjMaxC - 3)) hard.Add(Loc.T("TÉRM")); else if (haveTemp && c.TempC >= c.TjMaxC - 7) warn.Add(Loc.T("TÉRM"));
 
         if (hard.Count > 0) return (Loc.T("throttle: {0}", string.Join("+", hard)), 2);
         if (warn.Count > 0) return (Loc.T("cerca de throttle: {0}", string.Join("+", warn)), 1);

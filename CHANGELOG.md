@@ -6,6 +6,13 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-07-13
+
+CPU sensors for **Intel** laptops/desktops via PawnIO (temperature, RAPL power, real per-core boost
+clock, throttle/limits) and **laptop fan %** via the embedded controller — the coverage half that the
+AMD-only paths couldn't reach. Plus wider AMD PM_Table generation support. All opt-in and HVCI-safe;
+Intel verified on an i7-4700HQ, fan verified on an ASUS N56JR.
+
 ### Added
 
 - **PM_Table power on (almost) every Ryzen APU generation**, not just Phoenix: the per-version
@@ -22,6 +29,41 @@ All notable changes to SidebarMonitor are documented here. The format is based o
   helper for the dump through a request file next to the consent markers.
 - Debug overlay now shows the PM_Table version (`PawnIO✓ PM:0x4C0007`).
   Contracts bumped: `Snapshot` v23, `EtwSnapshot` v12 (`CpuPmTableVersion`).
+- **CPU sensors on Intel via PawnIO** — the coverage other half of the laptop story. Intel ships no
+  monitoring SDK, so an opt-in "CPU sensors (PawnIO)" toggle (Settings → Diagnostics, Intel only)
+  makes the elevated helper load PawnIO's signed **IntelMSR** module and read **per-core temperature**
+  (`IA32_THERM_STATUS` 0x19C = Tjmax − readout, Tjmax from `MSR_TEMPERATURE_TARGET` 0x1A2) plus
+  **package power** from **RAPL** (`MSR_RAPL_POWER_UNIT` 0x606 × Δ`MSR_PKG_ENERGY_STATUS` 0x611 / Δt,
+  32-bit wrap-safe). Per-core reads pin the reading thread to each logical core; no PCI mutex is
+  needed (MSR reads don't share a config window like the AMD SMU). Requires
+  [PawnIO](https://pawnio.eu) installed; without it the toggle degrades softly to PDH-only. Same
+  fetched `IntelMSR.bin` (LGPL-2.1, `namazso/PawnIO.Modules`); PawnIO's driver is never
+  redistributed. **Verified live on an i7-4700HQ (Haswell)**: 71 → 81 °C and 23 → 41 W across idle
+  and all-core load, end-to-end through the helper→agent→UI contract. Contracts bumped: `Snapshot`
+  v24 (`CpuFromIntel`), `EtwSnapshot` v13 (`CpuIntelOk` bitmask).
+  - **Real per-core boost clock on Intel** via `IA32_APERF`/`IA32_MPERF` × the base ratio from
+    `MSR_PLATFORM_INFO` — the achieved turbo (verified ~3.2 GHz all-core / ~3.0 idle on the 4700HQ,
+    matching `MSR_TURBO_RATIO_LIMIT`), which PDH's averaged `% Processor Performance` smooths away.
+    The "mejor núcleo" boost label now applies on Intel too.
+  - **Real throttle/limits on Intel**, replacing the AMD-only heuristic: the active binding cap comes
+    straight from the `IA32_THERM_STATUS`/`IA32_PACKAGE_THERM_STATUS` status bits (thermal / power /
+    current), and package power is shown as a % of **PL1** (`MSR_PKG_POWER_LIMIT`) — the Intel
+    analogue of AMD's PPT% (verified 76% under load / 9% idle against the 47 W TDP). The throttle
+    indicator (POT/CORR/TÉRM) and the limits line now work on Intel.
+  - **Fan speed tile, fixed for every platform**, next to the temperature — shows the fan **duty %**
+    where the laptop is supported and **"—"** otherwise. Contracts bumped again: `Snapshot` v25
+    (`ThrottleFlags`, `FanPct`), `EtwSnapshot` v14 (`CpuThrottleFlags`, `CpuFanPct`).
+- **Laptop fan monitoring via PawnIO (embedded controller)** — a new opt-in "Ventilador vía PawnIO
+  (experimental)" toggle (Settings → Diagnostics, every machine) makes the elevated helper load
+  PawnIO's signed **LpcACPIEC** module and read the fan level straight from the ACPI **embedded
+  controller** (the standard 0x66/0x62 read handshake, serialized on `Global\Access_EC`, read-only —
+  the fan is never written). Which EC register holds the fan level, and its range, is per laptop
+  model: that mapping is a **fact table of 305 models derived from NoteBook FanControl** (nbfc-linux,
+  GPL-3.0) — `FanDb.tsv`, embedded — matched against the machine's DMI model string. Unlisted model =
+  "—". **Verified live on an ASUS N56JR** (EC register 0x97, level 0..8): 25% idle → 62% under load,
+  end-to-end. Vendor-agnostic (AMD + Intel laptops). Best-effort and flagged as such: a community map
+  can point at the wrong register on an unverified model. Needs [PawnIO](https://pawnio.eu) installed;
+  `LpcACPIEC.bin` is fetched by `native/PawnIO/fetch.ps1` alongside the other modules.
 
 ## [1.3.0] — 2026-07-13
 

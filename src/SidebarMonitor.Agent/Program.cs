@@ -181,6 +181,7 @@ internal static class Program
         s.EtwAvailable = false;
         s.CpuFromAmd = false;
         s.CpuFromPawnIo = false;
+        s.CpuFromIntel = false;
         if (etw is null) { Array.Fill(diskTemps, float.NaN); return null; }
 
         if (!etw.TryRead(out var e)) return etw;   // caught it mid-write; try again next tick
@@ -202,6 +203,7 @@ internal static class Program
         s.NetProcCount = e.NetProcCount;
         s.NetProcs = e.NetProcs;
         s.Frame = e.Frame;   // game frame-timing (PresentMon), or empty when off/idle
+        s.Cpu.FanPct = e.CpuFanPct;   // EC fan duty % (helper); NaN → UI shows "—"
         s.EtwAvailable = true;
 
         // CPU temp and package power come solely from the AMD SDK (via the helper): it works with
@@ -262,6 +264,27 @@ internal static class Program
             s.Cpu.TdcPct = e.CpuTdcPct;
             s.Cpu.TjMaxC = e.CpuTjMaxC;
         }
+
+        // Intel MSR path (no SDK block runs on Intel): temp + Tjmax + per-LOGICAL-core temps (bit 0),
+        // RAPL package power (bit 1). The temps map 1:1 to the logical rows — no physical→logical
+        // expansion, unlike the AMD SDK — so copy straight across.
+        if ((e.CpuIntelOk & 1) != 0)
+        {
+            s.Cpu.TempC = (float)e.CpuTempC;
+            if (e.CpuTjMaxC > 0) s.Cpu.TjMaxC = e.CpuTjMaxC;
+            for (int i = 0; i < s.Cpu.CoreCount && i < 16; i++)
+                s.Cpu.CoreTempC[i] = e.CpuCoreTempsC[i];
+            s.Cpu.ThrottleFlags = e.CpuThrottleFlags;
+            // Real per-core boost clock (APERF/MPERF) — the true achieved turbo PDH's averaged %
+            // undershoots. Max() keeps it from ever reading below the PDH-derived per-core rows.
+            if (e.CpuBestFreqMhz > 0) s.Cpu.FreqBestMhz = Math.Max(s.Cpu.FreqBestMhz, e.CpuBestFreqMhz);
+            s.CpuFromIntel = true;
+        }
+        if ((e.CpuIntelOk & 2) != 0)
+        {
+            s.Cpu.PackagePowerW = e.CpuPackageW;
+            s.Cpu.PptPct = e.CpuPptPct;   // package power as % of PL1 (Intel's PPT analogue)
+        }
         return etw;
     }
 
@@ -296,6 +319,8 @@ internal static class Program
         cpu.PptPct = cpu.TdcPct = cpu.EdcPct = 0;
         cpu.BestCore = cpu.SecondCore = -1;
         cpu.PhysicalCores = 0;
+        cpu.ThrottleFlags = 0;
+        cpu.FanPct = float.NaN;   // filled by the helper (EC via PawnIO); "—" until then
 
         int n = 0;
         foreach (var s in pdh.CpuPerCore())

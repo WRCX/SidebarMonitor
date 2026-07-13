@@ -282,7 +282,7 @@ internal sealed class SettingsWindow : Window
         p.Children.Add(SubHeader(Loc.T("Modelo e indicadores")));
         p.Children.Add(Choice(Loc.T("Modelo de CPU"), Loc.T("Dónde mostrar el nombre del procesador."),
             [(Loc.T("No"), 0), (Loc.T("En título"), 1), (Loc.T("Dentro"), 2)], () => _cfg.CpuNameMode, v => { _cfg.CpuNameMode = v; _cfg.Save(); }));
-        p.Children.Add(Toggle(Loc.T("Indicador de throttle (POT/CORR/TÉRM)"), Loc.T("Qué tope duro frena el boost ahora. Del SDK de AMD."), () => _cfg.ShowThrottle, v => { _cfg.ShowThrottle = v; _cfg.Save(); }));
+        p.Children.Add(Toggle(Loc.T("Indicador de throttle (POT/CORR/TÉRM)"), Loc.T("Qué tope duro frena el boost ahora. En AMD, del SDK/PawnIO (PPT/TDC/EDC); en Intel, de los bits de estado del MSR (térmico/potencia/corriente)."), () => _cfg.ShowThrottle, v => { _cfg.ShowThrottle = v; _cfg.Save(); }));
         p.Children.Add(Toggle(Loc.T("Boost logrado / pico"), Loc.T("Frecuencia del mejor núcleo vs su pico de sesión."), () => _cfg.ShowBoost, v => { _cfg.ShowBoost = v; _cfg.Save(); }));
         p.Children.Add(Toggle(Loc.T("Mostrar VID (voltaje)"), null, () => _cfg.ShowCpuVid, v => { _cfg.ShowCpuVid = v; _cfg.Save(); }));
         p.Children.Add(Toggle(Loc.T("Mostrar límites (PPT/TDC/EDC/térmico)"), null, () => _cfg.ShowCpuLimits, v => { _cfg.ShowCpuLimits = v; _cfg.Save(); }));
@@ -417,6 +417,22 @@ internal sealed class SettingsWindow : Window
             };
             p.Children.Add(diag);
         }
+
+        if (SidebarMonitor.Shared.CpuVendor.IsIntel)
+        {
+            p.Children.Add(Toggle(Loc.T("Sensores CPU (PawnIO)"),
+                Loc.T("Lee la temperatura por núcleo (MSR IA32_THERM_STATUS) y la potencia de paquete (RAPL) vía el driver firmado PawnIO. Es la única vía a temp/vatios de CPU en Intel: Intel no ofrece SDK de monitorización. Requiere PawnIO instalado (github.com/namazso/PawnIO)."),
+                () => _cfg.IntelSensors,
+                v => { _cfg.IntelSensors = v; _cfg.Save(); SidebarMonitor.Shared.ConsentMarker.SetIntelSensors(v); }));
+        }
+
+        // Fan (%) via the embedded controller — vendor-agnostic, so offered on every machine. Best-
+        // effort: the register map is community data (NBFC), so an unlisted or unverified model shows
+        // "—" or, rarely, a wrong value. Made explicit in the description.
+        p.Children.Add(Toggle(Loc.T("Ventilador vía PawnIO (experimental)"),
+            Loc.T("Lee el % del ventilador desde el controlador embebido (EC) del portátil vía el driver firmado PawnIO, usando un mapa de registros por modelo tomado de NoteBook FanControl. Best-effort: si tu modelo no está en el mapa verás «—», y en un modelo no verificado el valor podría ser impreciso. Requiere PawnIO instalado."),
+            () => _cfg.FanPawnIo,
+            v => { _cfg.FanPawnIo = v; _cfg.Save(); SidebarMonitor.Shared.ConsentMarker.SetFanPawnIo(v); }));
 
         var open = TextButton(Loc.T("Abrir carpeta de logs"));
         open.Click += (_, _) =>

@@ -7,7 +7,7 @@ public static class EtwLayout
 {
     /// <summary>'SBME' little-endian.</summary>
     public const uint Signature = 0x454D4253;
-    public const uint Version = 12;
+    public const uint Version = 14;
     public const string MapName = @"Local\SidebarMonitor.Etw";
 
     /// <summary>Segments drawn per core bar. Beyond this, the rest folds into "otros".</summary>
@@ -117,6 +117,24 @@ public struct EtwSnapshot
     /// with CpuPawnIoOk bit 1 clear = "we can read this CPU's table but don't know its layout yet" —
     /// what the diagnostics dump + GitHub issue flow exists to fix.</summary>
     public ulong CpuPmTableVersion;
+
+    // ---- From PawnIO's signed IntelMSR module, when installed + opted in (Intel CPUs only) ----
+
+    /// <summary>Bitmask of what the Intel MSR path provided this window. Bit 0: CpuTempC holds the
+    /// hottest logical-core temperature (Tjmax − IA32_THERM_STATUS readout), CpuTjMaxC holds the real
+    /// Tjmax, and CpuCoreTempsC[i] holds the per-LOGICAL-core temperature (1:1, not the AMD physical
+    /// mapping). Bit 1: CpuPackageW holds RAPL package power. 0 = Intel path closed or read failed.
+    /// Mutually exclusive with the AMD sources in practice (a CPU is one vendor).</summary>
+    public byte CpuIntelOk;
+
+    /// <summary>Active throttle cap as flags (bit0 thermal, bit1 power, bit2 current), from Intel's
+    /// IA32_THERM_STATUS / IA32_PACKAGE_THERM_STATUS status bits. 0 on AMD (limiter comes from the
+    /// PPT/TDC/EDC percentages there).</summary>
+    public byte CpuThrottleFlags;
+
+    /// <summary>Fan duty % (0..100) from the elevated helper's embedded-controller read (PawnIO +
+    /// the per-model NBFC register map), NaN when unsupported/off. Fills Snapshot.Cpu.FanPct.</summary>
+    public float CpuFanPct;
 
     /// <summary>Drive temperatures (°C) by physical disk number, from the storage stack (admin).
     /// NaN = unknown. Covers the SATA disks the agent's unelevated NVMe path can't reach, closing

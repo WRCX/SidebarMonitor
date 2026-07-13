@@ -75,6 +75,26 @@ below, each under its own terms. Their inclusion does **not** place them under t
 - **Source:** https://github.com/dotnet/runtime
 - © .NET Foundation and Contributors.
 
+## PawnIO.Modules (signed PawnIO modules)
+
+- **Used for:** the advanced CPU sensors via PawnIO — AMD Tctl/PM_Table (`RyzenSMU.bin`), Intel
+  temperature/RAPL power/clock (`IntelMSR.bin`) and laptop fan reading through the ACPI embedded
+  controller (`LpcACPIEC.bin`). The modules run inside the user-installed PawnIO driver.
+- **Files redistributed by the installer** (object code only, the signed `.bin` modules): fetched by
+  `native/PawnIO/fetch.ps1`; the LGPL text (`COPYING`) travels with them. PawnIO's kernel **driver**
+  itself is **never** redistributed — the user installs it from https://pawnio.eu.
+- **License:** LGPL-2.1.
+- **Source:** https://github.com/namazso/PawnIO.Modules
+
+## NoteBook FanControl (fan-register data)
+
+- **Used for:** the per-laptop-model embedded-controller fan register map (`src/SidebarMonitor.Etw/FanDb.tsv`).
+  Only the **factual data** (model → EC register + value range) was extracted from NBFC's configs; no
+  NBFC source code is used or redistributed.
+- **License:** GPL-3.0 (the NBFC project). The extracted register facts are used as data, with
+  attribution here and in the `FanDb.tsv` header.
+- **Source:** https://github.com/nbfc-linux/nbfc-linux (and the original https://github.com/hirschmann/nbfc)
+
 ---
 
 *If you believe an attribution is missing or incorrect, please open an issue.*

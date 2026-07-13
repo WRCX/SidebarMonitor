@@ -50,6 +50,25 @@
           Condition="Exists('..\..\native\PawnIO\COPYING')" />
   </ItemGroup>
 
+  <!-- PawnIO's signed IntelMSR module (LGPL-2.1, same source/licence as RyzenSMU above). Loaded
+       through the user's PawnIO install when the Intel-sensors opt-in is on. Absent (fetch.ps1 not
+       run) = the Intel MSR path reports "module not found". -->
+  <ItemGroup Condition="Exists('..\..\native\PawnIO\IntelMSR.bin')">
+    <None Include="..\..\native\PawnIO\IntelMSR.bin" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- PawnIO's signed LpcACPIEC module (LGPL-2.1): raw ACPI embedded-controller port I/O, used to
+       read the laptop fan level (see EcFan.cs). Absent (fetch.ps1 not run) = the fan path is off. -->
+  <ItemGroup Condition="Exists('..\..\native\PawnIO\LpcACPIEC.bin')">
+    <None Include="..\..\native\PawnIO\LpcACPIEC.bin" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- Per-model EC fan-register map (facts derived from NoteBook FanControl / nbfc-linux, GPL-3.0),
+       consumed by EcFan.cs. Embedded so it travels with the helper. -->
+  <ItemGroup>
+    <EmbeddedResource Include="FanDb.tsv" />
+  </ItemGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="SidebarMonitor.Tests" />
   </ItemGroup>

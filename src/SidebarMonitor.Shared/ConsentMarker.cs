@@ -56,6 +56,46 @@ public static class ConsentMarker
         catch { /* non-fatal */ }
     }
 
+    /// <summary>Marker for "the user enabled Intel CPU sensors via PawnIO" — gates the helper loading
+    /// the signed IntelMSR module (per-core temp via IA32_THERM_STATUS + RAPL package power). Intel
+    /// ships no monitoring SDK, so on Intel this is the ONLY route to CPU temp/watts. Needs PawnIO
+    /// installed; absence = temp/power stay "—" (PDH-only behaviour).</summary>
+    private static string IntelSensorsPath => Path.Combine(Dir, "intel-sensors-pawnio");
+
+    public static bool IntelSensorsEnabled => File.Exists(IntelSensorsPath);
+
+    /// <summary>Idempotently create/remove the Intel-sensors marker to match the UI's stored setting.</summary>
+    public static void SetIntelSensors(bool enabled)
+    {
+        try
+        {
+            Directory.CreateDirectory(Dir);
+            if (enabled) { if (!File.Exists(IntelSensorsPath)) File.WriteAllText(IntelSensorsPath, "Intel CPU sensors via PawnIO enabled by the user.\n"); }
+            else if (File.Exists(IntelSensorsPath)) File.Delete(IntelSensorsPath);
+        }
+        catch { /* non-fatal */ }
+    }
+
+    /// <summary>Marker for "the user enabled laptop fan monitoring via PawnIO" — gates the helper
+    /// loading the signed LpcACPIEC module and reading the embedded controller. Vendor-agnostic (works
+    /// on AMD and Intel laptops); community-sourced per-model register map, so explicitly opt-in and
+    /// flagged as best-effort. Needs PawnIO installed.</summary>
+    private static string FanPawnIoPath => Path.Combine(Dir, "fan-pawnio");
+
+    public static bool FanPawnIoEnabled => File.Exists(FanPawnIoPath);
+
+    /// <summary>Idempotently create/remove the fan marker to match the UI's stored setting.</summary>
+    public static void SetFanPawnIo(bool enabled)
+    {
+        try
+        {
+            Directory.CreateDirectory(Dir);
+            if (enabled) { if (!File.Exists(FanPawnIoPath)) File.WriteAllText(FanPawnIoPath, "laptop fan monitoring via PawnIO enabled by the user.\n"); }
+            else if (File.Exists(FanPawnIoPath)) File.Delete(FanPawnIoPath);
+        }
+        catch { /* non-fatal */ }
+    }
+
     /// <summary>Idempotently create/remove the marker to match the UI's stored consent.</summary>
     public static void SetAmdSdk(bool accepted)
     {

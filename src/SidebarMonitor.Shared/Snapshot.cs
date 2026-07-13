@@ -10,7 +10,7 @@ public static class SnapshotLayout
     public const uint Signature = 0x4E4D4253;
 
     /// <summary>Bump on any layout change. The reader refuses anything it does not know.</summary>
-    public const uint Version = 23;
+    public const uint Version = 25;
 
     /// <summary>
     /// Local\, not Global\. Creating a Global\ kernel object requires SeCreateGlobalPrivilege,
@@ -92,6 +92,18 @@ public struct CpuInfo
     public int BestCore, SecondCore;
     /// <summary>Physical core count, to map a physical best-core index onto the logical rows.</summary>
     public int PhysicalCores;
+
+    /// <summary>Which hard cap is actively throttling right now, as flags: bit0 thermal, bit1 power,
+    /// bit2 current. Set from Intel's IA32_THERM_STATUS/PACKAGE_THERM_STATUS status bits; on AMD it
+    /// stays 0 and the limiter is derived from the PPT/TDC/EDC percentages instead.</summary>
+    public byte ThrottleFlags;
+
+    /// <summary>Fan duty as a percentage (0..100), read from the laptop's embedded controller via
+    /// PawnIO using a per-model register map ported from NoteBook FanControl's config database. NaN
+    /// when the model isn't in the map, the opt-in is off, or PawnIO isn't installed. The UI always
+    /// shows a fan tile, rendering "—" when this is NaN. Community-sourced and best-effort: on an
+    /// unverified model it may read a wrong register — surfaced to the user as such.</summary>
+    public float FanPct;
 
     public CoreUsageArray CoreUsagePct;
 }
@@ -227,6 +239,11 @@ public struct Snapshot
     /// On laptops this is typically true with <see cref="CpuFromAmd"/> false, because the Ryzen
     /// Master SDK doesn't read mobile APUs. Shown in the debug overlay.</summary>
     public bool CpuFromPawnIo;
+
+    /// <summary>CPU temp/power came from PawnIO's IntelMSR module (per-core IA32_THERM_STATUS + RAPL).
+    /// Intel's only route to CPU sensors — there is no Intel monitoring SDK, so on Intel this stands
+    /// in for <see cref="CpuFromAmd"/>. Shown in the debug overlay.</summary>
+    public bool CpuFromIntel;
 
     /// <summary>SMU PM_Table version via PawnIO (0 = none). For the debug overlay and the sensors
     /// diagnostics report; nonzero without power flowing means "layout not mapped yet".</summary>

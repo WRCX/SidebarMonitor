@@ -36,6 +36,8 @@ internal static class FirstRunDialog
         ConsentMarker.SetAmdSdk(cfg.AmdEulaAccepted);
         ConsentMarker.SetFps(cfg.ShowFps);   // gates the helper spawning PresentMon
         ConsentMarker.SetAmdAdvanced(cfg.AmdAdvanced);   // gates the helper loading PawnIO (Tctl)
+        ConsentMarker.SetIntelSensors(cfg.IntelSensors); // gates the helper loading PawnIO (Intel MSR)
+        ConsentMarker.SetFanPawnIo(cfg.FanPawnIo);       // gates the helper loading PawnIO (EC fan)
     }
 
     private static void ShowFor(UiConfig cfg)

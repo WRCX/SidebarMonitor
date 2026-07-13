@@ -65,8 +65,12 @@ internal sealed partial class MainWindow
         var ci = CultureInfo.InvariantCulture;
         string vendor = CpuVendor.Maker switch { CpuMaker.Amd => "AMD", CpuMaker.Intel => "Intel", _ => "?" };
         string sdk = s.CpuFromAmd ? "SDK✓" : CpuVendor.IsAmd ? "SDK✗ (EULA/helper)" : "SDK n/a";
-        string pawnIo = s.CpuFromPawnIo ? "PawnIO✓" : _cfg.AmdAdvanced ? "PawnIO✗" : "PawnIO○";
+        // On Intel the "PawnIO" token reports the IntelMSR path (temp+RAPL); on AMD, the RyzenSMU path.
+        string pawnIo = CpuVendor.IsIntel
+            ? (s.CpuFromIntel ? "Intel✓" : _cfg.IntelSensors ? "Intel✗" : "Intel○")
+            : (s.CpuFromPawnIo ? "PawnIO✓" : _cfg.AmdAdvanced ? "PawnIO✗" : "PawnIO○");
         if (s.CpuPmTableVersion != 0) pawnIo += string.Create(CultureInfo.InvariantCulture, $" PM:0x{s.CpuPmTableVersion:X}");
+        pawnIo += !float.IsNaN(s.Cpu.FanPct) ? " Fan✓" : _cfg.FanPawnIo ? " Fan✗" : " Fan○";
         string csv = _csv.IsRunning ? string.Create(ci, $"CSV●{_csv.RowCount}") : "CSV○";
         _debug.Text = string.Create(ci,
             $"{vendor} · {CpuVendor.Brand}\n" +
