@@ -82,6 +82,11 @@ Intel verified on an i7-4700HQ, fan verified on an ASUS N56JR.
 
 ### Fixed
 
+- **Core colour palettes now use their full range regardless of core count.** Every preset was
+  hardwired to a 16-core spread, so an 8-core rainbow only reached red→green (half the wheel) while a
+  32-core one wrapped and repeated. The hue is now spread across the machine's actual core count, so
+  8-, 16- and 32-core systems all get the complete rainbow (and the full cool/warm/pastel bands),
+  evenly divided. The high-contrast (golden-angle) preset was already count-independent.
 - **Dead right-click + a painted edge strip after resizing/re-placing the panel.** The borderless
   AppBar only re-asserted its client area (`WM_NCCALCSIZE` via `SWP_FRAMECHANGED`) at creation, so a
   later placement — e.g. dragging the panel wider — could let the `WS_THICKFRAME` sizing border

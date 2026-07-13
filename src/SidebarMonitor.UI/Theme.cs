@@ -67,6 +67,11 @@ internal static class Theme
     /// <summary>Active per-core colour preset: 0 rainbow, 1 high-contrast, 2 cool, 3 warm, 4 pastel.</summary>
     public static int CorePalette { get; private set; }
 
+    /// <summary>How many cores the palette spreads its colours across. Every preset uses its FULL
+    /// range over exactly this many cores, so an 8-core rainbow spans the whole wheel just like a
+    /// 32-core one — not a fixed 16-core slice of it. Default 16 until the first snapshot sets it.</summary>
+    private static int _coreCount = 16;
+
     /// <summary>Switch the per-core palette and drop the caches so every core widget recolours. The
     /// widgets that cache pens/brushes (CoreSparkline, CoreGrid) reset separately; CoreRows reads
     /// CoreBrush live and only needs an InvalidateVisual.</summary>
@@ -77,23 +82,39 @@ internal static class Theme
         CoreColorCache.Clear();   // CoreBrush derives from CoreColor, so this recolours everything
     }
 
+    /// <summary>Set the core count the palette spans. Returns true when it changed — the caller then
+    /// resets the pen-caching widgets (CoreSparkline/CoreGrid), exactly like a palette switch.</summary>
+    public static bool SetCoreCount(int n)
+    {
+        n = Math.Clamp(n, 1, 512);
+        if (n == _coreCount) return false;
+        _coreCount = n;
+        CoreColorCache.Clear();
+        return true;
+    }
+
     /// <summary>
-    /// A distinct colour per core index. 16 cores are 16 forced categories that cannot fold into
-    /// "other", so this is a legitimate generated ramp. Five presets trade off identity vs harmony:
-    /// an even HSL wheel (rainbow), a golden-angle spread (max contrast between neighbours), and
-    /// hue-limited cool/warm/pastel schemes. The offset keeps core 0 off pure red (a status colour).
+    /// A distinct colour per core index, spread across the palette's FULL range over the actual core
+    /// count (see <see cref="_coreCount"/>) — so 8 cores get the whole rainbow, not a red→green slice,
+    /// and 32 cores get the same wheel finely divided. Five presets trade identity vs harmony: an even
+    /// HSL wheel (rainbow/pastel), a golden-angle spread (max contrast between neighbours, and the one
+    /// preset that is count-independent by nature), and hue-limited cool/warm bands. The +25° offset
+    /// keeps core 0 off pure red (a status colour).
     /// </summary>
     public static Color CoreColor(int index)
     {
         if (CoreColorCache.TryGetValue(index, out var cached)) return cached;
-        double alt = index % 2 == 0 ? 0 : 1;   // small lightness alternation to separate neighbours
+        int n = Math.Max(1, _coreCount);
+        double alt = index % 2 == 0 ? 0 : 1;              // small lightness alternation to separate neighbours
+        double wheel = (double)index / n;                 // 0..1 over the full hue wheel (last core leaves a gap before wrapping)
+        double band = n > 1 ? (double)index / (n - 1) : 0; // 0..1 spanning a limited hue band end-to-end
         Color c = CorePalette switch
         {
-            1 => FromHsl((index * 137.5 + 25) % 360, 0.72, 0.55 + alt * 0.12),          // high-contrast (golden angle)
-            2 => FromHsl(180 + index * 120.0 / 15.0, 0.58, 0.60 + alt * 0.06),          // cool: cyan→blue→violet
-            3 => FromHsl((300 + index * 150.0 / 15.0) % 360, 0.66, 0.58 + alt * 0.06),  // warm: magenta→red→orange→yellow
-            4 => FromHsl((index * 360.0 / 16.0 + 25) % 360, 0.42, 0.72),                // pastel
-            _ => FromHsl((index * 360.0 / 16.0 + 25) % 360, 0.68, 0.62),                // rainbow (default)
+            1 => FromHsl((index * 137.5 + 25) % 360, 0.72, 0.55 + alt * 0.12),   // high-contrast (golden angle)
+            2 => FromHsl(180 + 120.0 * band, 0.58, 0.60 + alt * 0.06),           // cool: cyan→blue→violet
+            3 => FromHsl((300 + 150.0 * band) % 360, 0.66, 0.58 + alt * 0.06),   // warm: magenta→red→orange→yellow
+            4 => FromHsl((25 + 360.0 * wheel) % 360, 0.42, 0.72),                // pastel
+            _ => FromHsl((25 + 360.0 * wheel) % 360, 0.68, 0.62),                // rainbow (default)
         };
         CoreColorCache[index] = c;
         return c;

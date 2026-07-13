@@ -319,6 +319,12 @@ internal sealed partial class MainWindow : AppBarWindow
         var ci = CultureInfo.InvariantCulture;
         ref var c = ref s.Cpu;
 
+        // Spread the core palette across THIS machine's core count so every preset uses its full
+        // colour range (an 8-core rainbow spans the whole wheel, not just red→green). On the rare
+        // change (first snapshot, or a topology change) reset the pen-caching widgets, like a palette
+        // switch does.
+        if (Theme.SetCoreCount(c.CoreCount)) { _cpuCoreSpark.ResetColors(); _cpuCoreGrid.ResetColors(); }
+
         // CPU model name, where the user asked for it: after the title, inside the section, or off.
         string cpuName = NameField.Get(ref c.Name);
         Find("cpu").SetTitleSuffix(_cfg.CpuNameMode == 1 ? ShortCpuName(cpuName) : "");
