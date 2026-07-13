@@ -69,6 +69,12 @@ if (-not (Test-Path (Join-Path $root 'native\RyzenSdk\Platform.dll'))) {
 # 3. Parar lo que este corriendo y soltar la tarea, para no chocar con los ficheros al publicar.
 Write-Host "[3/6] Parando el stack anterior (si lo hay)..." -ForegroundColor Cyan
 Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+# Cerrar la UI CON GRACIA primero: es un AppBar (reserva espacio en pantalla). Un kill duro no corre
+# su OnClosing/RemoveAppBar, y DWM deja la franja/superficie vieja pintada hasta que repinta la UI
+# nueva (el "rectangulo azul" transitorio). CloseMainWindow envia WM_CLOSE -> cierre limpio. El MSI ya
+# lo hace via el Restart Manager de Windows; esto iguala la ruta manual.
+Get-Process SidebarMonitor.UI -ErrorAction SilentlyContinue | ForEach-Object { $_.CloseMainWindow() | Out-Null }
+Start-Sleep -Milliseconds 400
 Get-Process SidebarMonitor.UI, SidebarMonitor.Agent, SidebarMonitor.Etw -ErrorAction SilentlyContinue |
     Stop-Process -Force
 Get-CimInstance Win32_Process -Filter "Name='wscript.exe'" -ErrorAction SilentlyContinue |
