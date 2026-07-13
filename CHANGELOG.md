@@ -8,8 +8,11 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ### Maintainability (no behaviour change)
 
-- Continued the `MainWindow.cs` split from 1.2.4: window placement + edge-drag moved into
-  `MainWindow.Placement.cs` (partial class).
+- **`MainWindow.cs` split from ~1600 lines to ~690** — the update code (`MainWindow.Updates.cs`),
+  window placement + drag (`MainWindow.Placement.cs`), section-building + layout helpers
+  (`MainWindow.Build.cs`), the context-menu builder (`MainWindow.Menu.cs`), and the section-state /
+  Settings-facade / test hooks (`MainWindow.Settings.cs`) each moved into a `partial` file. The main
+  file now holds just the constructor/setup and the `Tick` hot path. Pure code movement, no logic change.
 - Removed confirmed-dead members (`ProcessNames.OnStop`, `ServiceMap.Services`, `RamInfo.Loaded`);
   made `TestFakeFps` an `init` property.
 
