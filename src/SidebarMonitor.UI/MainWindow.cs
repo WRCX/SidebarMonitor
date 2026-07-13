@@ -24,6 +24,8 @@ internal sealed partial class MainWindow : AppBarWindow
     private readonly Dictionary<string, long> _sectionLastTick = [];   // per-section refresh gating
     private SeqLockReader<Snapshot>? _reader;
     private System.Diagnostics.Process? _ownedAgent;
+    private DateTime _nextAgentLaunch = DateTime.MinValue;   // backoff gate for (re)launching the agent
+    private int _agentLaunchStreak;                          // consecutive launches without healthy data
     private TrayIcon? _tray;
 
     private readonly List<Section> _sections = [];
@@ -299,8 +301,19 @@ internal sealed partial class MainWindow : AppBarWindow
         if (age > TimeSpan.FromSeconds(10))
         {
             _status.Text = Loc.T("agente parado ({0:F0} s)", age.TotalSeconds);
+            // The agent crashed leaving its map frozen. Once it's actually gone, drop the stale
+            // reader and relaunch so we rebind to the new agent's map instead of reading a dead one
+            // forever. TryLaunchAgent self-throttles via backoff, so this can't spawn a loop.
+            if (_ownedAgent is null or { HasExited: true })
+            {
+                _reader?.Dispose();
+                _reader = null;
+                TryLaunchAgent();
+            }
             return;
         }
+        _agentLaunchStreak = 0;   // fresh data is flowing — clear the relaunch backoff
+
         // The elevated helper carries CPU temp/power (AMD SDK), SATA temps and per-process
         // attribution. When it is up we say nothing; when it is down, that is the only thing worth
         // flagging — everything else the unelevated agent covers on its own.
@@ -682,8 +695,15 @@ internal sealed partial class MainWindow : AppBarWindow
     private void TryLaunchAgent()
     {
         if (_ownedAgent is { HasExited: false }) return;
+        if (DateTime.UtcNow < _nextAgentLaunch) return;   // still backing off from the last attempt
         string path = Path.Combine(AppContext.BaseDirectory, "SidebarMonitor.Agent.exe");
         if (!File.Exists(path)) return;
+
+        // Back off after each launch so an agent that crashes on startup can't spawn a process
+        // every tick. Grows 2,4,8,16,30s and is reset to zero once healthy data flows again.
+        _agentLaunchStreak = Math.Min(_agentLaunchStreak + 1, 5);
+        _nextAgentLaunch = DateTime.UtcNow + TimeSpan.FromSeconds(Math.Min(30, 2 << (_agentLaunchStreak - 1)));
+
         try
         {
             _ownedAgent = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path)

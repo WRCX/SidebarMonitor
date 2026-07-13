@@ -97,6 +97,7 @@ internal static class Program
             var prevNet = nics.Select(Stats).ToArray();
             long prevNetStamp = Stopwatch.GetTimestamp();
             long lastNicRefresh = prevNetStamp;
+            bool forceNicRefresh = false;
 
             var snapshot = default(Snapshot);
 
@@ -136,14 +137,16 @@ internal static class Program
                 FillDisks(ref snapshot, pdh, inventory, diskTemps, etwDiskTemps);
 
                 // Adapters come and go (VPN up, dock unplugged); rescanning every tick is wasteful.
-                if (Stopwatch.GetElapsedTime(lastNicRefresh).TotalSeconds >= 30)
+                // A mid-sample disappearance (forceNicRefresh) rescans on the next tick regardless.
+                if (forceNicRefresh || Stopwatch.GetElapsedTime(lastNicRefresh).TotalSeconds >= 30)
                 {
                     nics = ActiveNics();
                     prevNet = nics.Select(Stats).ToArray();
                     prevNetStamp = Stopwatch.GetTimestamp();
                     lastNicRefresh = Stopwatch.GetTimestamp();
+                    forceNicRefresh = false;
                 }
-                FillNics(ref snapshot, nics, ref prevNet, ref prevNetStamp);
+                forceNicRefresh = FillNics(ref snapshot, nics, ref prevNet, ref prevNetStamp);
 
                 // On skipped ticks the previous top list stays in the snapshot untouched.
                 if (ticks % procEvery == 0) FillProcs(ref snapshot, procs, groupProcs);
@@ -588,13 +591,24 @@ internal static class Program
             .Take(SnapshotLayout.MaxNics)
             .ToArray();
 
-    private static (long Rx, long Tx) Stats(NetworkInterface n)
+    private static (long Rx, long Tx)? Stats(NetworkInterface n)
     {
-        var s = n.GetIPStatistics();
-        return (s.BytesReceived, s.BytesSent);
+        // GetIfEntry2 throws NetworkInformationException if the adapter vanished since we enumerated
+        // it (VPN down, dock unplugged, USB NIC pulled). Swallow it: null means "gone this sample".
+        try
+        {
+            var s = n.GetIPStatistics();
+            return (s.BytesReceived, s.BytesSent);
+        }
+        catch (NetworkInformationException)
+        {
+            return null;
+        }
     }
 
-    private static void FillNics(ref Snapshot s, NetworkInterface[] nics, ref (long Rx, long Tx)[] prev, ref long prevStamp)
+    /// <returns>true if an adapter disappeared mid-sample, so the caller can rescan the interface
+    /// list on the next tick instead of waiting out the periodic refresh.</returns>
+    private static bool FillNics(ref Snapshot s, NetworkInterface[] nics, ref (long Rx, long Tx)?[] prev, ref long prevStamp)
     {
         double secs = Stopwatch.GetElapsedTime(prevStamp).TotalSeconds;
         prevStamp = Stopwatch.GetTimestamp();
@@ -602,20 +616,29 @@ internal static class Program
 
         uint primary = PrimaryInterfaceIndex();
 
+        bool vanished = false;
+        int written = 0;
         for (int i = 0; i < nics.Length; i++)
         {
             var now = Stats(nics[i]);
-            ref var nic = ref s.Nics[i];
+            if (now is null) { vanished = true; continue; }   // gone since we enumerated; drop it
+
+            ref var nic = ref s.Nics[written];
             NameField.Set(ref nic.Name, nics[i].Name);
-            // Clamp negatives: a counter wrap (32-bit driver rollover) or an interface reset makes
-            // now < prev, which would otherwise show a huge negative spike.
-            nic.RxBytesPerSec = Math.Max(0, now.Rx - prev[i].Rx) / secs;
-            nic.TxBytesPerSec = Math.Max(0, now.Tx - prev[i].Tx) / secs;
+            // A fresh adapter (prev null) shows no delta on its first sample. Clamp negatives: a
+            // counter wrap (32-bit driver rollover) or an interface reset makes now < prev, which
+            // would otherwise show a huge negative spike.
+            long prevRx = prev[i]?.Rx ?? now.Value.Rx;
+            long prevTx = prev[i]?.Tx ?? now.Value.Tx;
+            nic.RxBytesPerSec = Math.Max(0, now.Value.Rx - prevRx) / secs;
+            nic.TxBytesPerSec = Math.Max(0, now.Value.Tx - prevTx) / secs;
             nic.LinkBitsPerSec = (ulong)Math.Max(0, nics[i].Speed);
             nic.IsPrimary = InterfaceIndex(nics[i]) == primary && primary != 0;
             prev[i] = now;
+            written++;
         }
-        s.NicCount = nics.Length;
+        s.NicCount = written;
+        return vanished;
     }
 
     private static uint InterfaceIndex(NetworkInterface nic)

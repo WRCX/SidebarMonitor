@@ -16,6 +16,19 @@ All notable changes to SidebarMonitor are documented here. The format is based o
   Vcore there, so the value is range-guarded (0.2–1.6 V) and shows "—" when implausible. Best-effort,
   like the other per-generation Intel bits.
 
+### Fixed
+
+- **Agent no longer crashes when a network adapter disappears mid-sample.** If an interface went away
+  between the periodic rescan and a per-tick read (VPN torn down, dock unplugged, USB NIC pulled),
+  `GetIPStatistics` threw an uncaught `NetworkInformationException` (from `GetIfEntry2`) and took the
+  whole agent process down. `Stats` now swallows that exception, `FillNics` skips the vanished
+  adapter and forces an interface rescan on the next tick.
+- **UI now relaunches a crashed agent instead of showing "agente parado" forever.** When the agent
+  died it left its shared-memory map behind with a frozen timestamp; the reader stayed bound to the
+  dead map and the status line counted up indefinitely. On a stale snapshot the UI now drops the
+  stale reader and relaunches the agent, throttled by an exponential backoff (2→30 s) so a
+  crash-on-startup can't spawn a process every tick.
+
 ## [1.4.2] — 2026-07-14
 
 ### Changed
@@ -269,7 +282,9 @@ First public release.
 
 > Not code-signed yet, so Windows SmartScreen may warn on first run — choose **More info → Run anyway**.
 
-[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.2.4...HEAD
+[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.4.3...HEAD
+[1.4.3]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.4.3
+[1.3.0]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.3.0
 [1.2.4]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.2.4
 [1.2.3]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.2.3
 [1.2.2]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.2.2
