@@ -6,6 +6,28 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ## [Unreleased]
 
+### Fixed
+
+- **One sidebar per user session — no more.** The UI now takes a single-instance mutex and a second
+  launch in the same session exits silently. Several paths now aim at the same UI (the HKLM Run key
+  at logon, the new session task, the post-update relaunch, the Start-menu shortcut), and two UIs in
+  one session fight: two AppBars each reserving desktop space, two agents (the second dies — same
+  map, one writer), two tray icons, two writers to `ui.json`. The mutex lives in the **`Local\`**
+  namespace, which is *per session*, so the guard is per session too: every Windows user still gets
+  their own sidebar and the guard can never deny a legitimate user their instance.
+
+### Added
+
+- **Updating no longer pulls the sidebar out from under other logged-in users silently.** This is a
+  per-machine install, so one machine runs one version (the single machine-wide helper owns the
+  machine-unique kernel ETW session; two versions would mean a contract mismatch, i.e. no sensors for
+  somebody). Updating therefore closes every other logged-in user's sidebar. Now: the confirm dialog
+  **names them** ("Other users are logged in: …"), silent auto-install **stands down** whenever
+  someone else is logged in (it is a convenience for a machine you have to yourself), and a new
+  unelevated **"SidebarMonitor UI" task** (session connect/unlock triggers) hands their sidebar back
+  the moment they return to their session, instead of making them log out and in. See
+  `docs/multi-user.md`.
+
 ## [1.4.6] — 2026-07-14
 
 ### Fixed

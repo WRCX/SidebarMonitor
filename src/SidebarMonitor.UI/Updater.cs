@@ -26,6 +26,67 @@ internal static class Updater
 
     public sealed record Release(Version Version, string Notes, string HtmlUrl, string? AssetUrl);
 
+    // ── Other logged-in users ────────────────────────────────────────────────────────────────────
+    //
+    // This is a PER-MACHINE install, and one machine can only run one version (a single elevated
+    // helper owns the machine-unique kernel ETW session, and every session's UI reads its map — two
+    // versions would mean a contract mismatch, i.e. no sensors for somebody). So an update is a
+    // machine-wide act: it stops the sidebar of every other logged-in user too. That is not something
+    // to do to people silently — name them, and let whoever is updating decide.
+
+    [System.Runtime.InteropServices.DllImport("wtsapi32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern bool WTSEnumerateSessionsW(nint server, int reserved, int version, out nint sessions, out int count);
+
+    [System.Runtime.InteropServices.DllImport("wtsapi32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern bool WTSQuerySessionInformationW(nint server, int sessionId, int infoClass, out nint buffer, out int bytes);
+
+    [System.Runtime.InteropServices.DllImport("wtsapi32.dll")]
+    private static extern void WTSFreeMemory(nint memory);
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct WtsSessionInfo
+    {
+        public int SessionId;
+        public nint WinStationName;
+        public int State;   // 0 = WTSActive, 1 = WTSConnected, 4 = WTSDisconnected
+    }
+
+    /// <summary>
+    /// User names of OTHER Windows users with a live session (active or merely disconnected — fast
+    /// user switching leaves the session, and its UI, running). Empty when we're alone, and empty on
+    /// any failure: a best-effort courtesy must never block an update.
+    /// </summary>
+    public static IReadOnlyList<string> OtherLoggedInUsers()
+    {
+        const int WtsUserName = 5, WtsActive = 0, WtsDisconnected = 4;
+        var users = new List<string>();
+        try
+        {
+            if (!WTSEnumerateSessionsW(nint.Zero, 0, 1, out nint list, out int count)) return users;
+            try
+            {
+                int size = System.Runtime.InteropServices.Marshal.SizeOf<WtsSessionInfo>();
+                int mine = System.Diagnostics.Process.GetCurrentProcess().SessionId;
+                for (int i = 0; i < count; i++)
+                {
+                    var s = System.Runtime.InteropServices.Marshal.PtrToStructure<WtsSessionInfo>(list + i * size);
+                    if (s.SessionId == mine || s.SessionId == 0) continue;          // us, and services
+                    if (s.State != WtsActive && s.State != WtsDisconnected) continue; // no logged-in user
+                    if (!WTSQuerySessionInformationW(nint.Zero, s.SessionId, WtsUserName, out nint buf, out _)) continue;
+                    try
+                    {
+                        string? name = System.Runtime.InteropServices.Marshal.PtrToStringUni(buf);
+                        if (!string.IsNullOrWhiteSpace(name)) users.Add(name);
+                    }
+                    finally { WTSFreeMemory(buf); }
+                }
+            }
+            finally { WTSFreeMemory(list); }
+        }
+        catch { /* best effort */ }
+        return users;
+    }
+
     /// <summary>Reads HKLM\Software\SidebarMonitor (written by the MSI). Absent → not MSI-installed.</summary>
     public static Install CurrentInstall()
     {

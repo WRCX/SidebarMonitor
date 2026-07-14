@@ -110,6 +110,46 @@ $taskXml = Join-Path $stage 'helper-task.xml'
 </Task>
 "@ | Set-Content -Path $taskXml -Encoding Unicode
 
+# UI task: the HKLM Run key only fires at LOGON. An upgrade has to kill the UI of every OTHER user
+# with an open session (their binaries hold the files), and without this they would sit with no
+# sidebar until they log off and back on. These session triggers hand it back the moment they return
+# to their session. Unelevated (it's the user's own UI), group Users so it covers everybody.
+# Safe to coexist with the Run key: the UI holds a PER-SESSION single-instance mutex (Local\), so a
+# redundant trigger just exits.
+$uiTaskXml = Join-Path $stage 'ui-task.xml'
+@"
+<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>Restores the SidebarMonitor sidebar in a user's session (reconnect, unlock).</Description>
+  </RegistrationInfo>
+  <Triggers>
+    <SessionStateChangeTrigger><Enabled>true</Enabled><StateChange>ConsoleConnect</StateChange></SessionStateChangeTrigger>
+    <SessionStateChangeTrigger><Enabled>true</Enabled><StateChange>RemoteConnect</StateChange></SessionStateChangeTrigger>
+    <SessionStateChangeTrigger><Enabled>true</Enabled><StateChange>SessionUnlock</StateChange></SessionStateChangeTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <GroupId>S-1-5-32-545</GroupId>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Enabled>true</Enabled>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>$installDir\SidebarMonitor.UI.exe</Command>
+    </Exec>
+  </Actions>
+</Task>
+"@ | Set-Content -Path $uiTaskXml -Encoding Unicode
+
 # License shown by the MSI UI (the app's own MIT license; the AMD SDK EULA is accepted in-app on
 # first run). Minimal RTF wrapper around the plain-text LICENSE.
 $licRtf = Join-Path $stage 'license.rtf'

@@ -39,7 +39,13 @@ internal sealed partial class MainWindow
         // Zero-friction path: if the user opted into automatic install and this is an MSI install with a
         // matching asset, download + install it silently right now — no prompt, no progress window, no
         // browser. (Truly hands-off only where elevation is silent; elsewhere msiexec still elevates.)
-        if (_cfg.AutoInstallUpdates && _install.FromMsi && rel.AssetUrl is not null && !_updateBusy)
+        //
+        // Except when someone ELSE is logged in: this per-machine update would close their sidebar
+        // mid-session, and "silent" must never mean "silent for the person it happens to". Fall back
+        // to the normal prompt, which names them and asks. Auto-update is a convenience for a machine
+        // you have to yourself.
+        if (_cfg.AutoInstallUpdates && _install.FromMsi && rel.AssetUrl is not null && !_updateBusy
+            && Updater.OtherLoggedInUsers().Count == 0)
         {
             _updateBusy = true;
             Report(Loc.T("Instalando {0} automáticamente…", ver));
@@ -74,9 +80,17 @@ internal sealed partial class MainWindow
 
             // Default flow: always confirm first, and reassure that nothing is lost. Config, layout and
             // logs live in %LOCALAPPDATA% and are never touched by the MSI (it only replaces Program Files).
-            var ok = MessageBox.Show(
-                Loc.T("Se descargará e instalará {0}.\n\nSe conserva toda tu configuración (panel, ajustes, colocación, historial) — no se pierde nada. El panel se cerrará y se volverá a abrir solo, ya en la versión nueva.\n\n¿Actualizar ahora?", ver),
-                "SidebarMonitor", MessageBoxButton.OKCancel, MessageBoxImage.Question);
+            string msg = Loc.T("Se descargará e instalará {0}.\n\nSe conserva toda tu configuración (panel, ajustes, colocación, historial) — no se pierde nada. El panel se cerrará y se volverá a abrir solo, ya en la versión nueva.\n\n¿Actualizar ahora?", ver);
+
+            // This is a per-machine install: updating updates it for EVERYONE on this PC, and the
+            // installer has to close the sidebar of any other user who is logged in (their running
+            // copy holds the files open). Say so, by name — that is someone else's screen.
+            var others = Updater.OtherLoggedInUsers();
+            if (others.Count > 0)
+                msg = Loc.T("Hay otros usuarios con la sesión iniciada en este PC: {0}.\n\nSidebarMonitor se instala por equipo, así que la actualización afecta a todos: su barra se cerrará y volverá al reconectar o desbloquear su sesión (o al iniciar sesión de nuevo).\n\n", string.Join(", ", others)) + msg;
+
+            var ok = MessageBox.Show(msg, "SidebarMonitor", MessageBoxButton.OKCancel,
+                others.Count > 0 ? MessageBoxImage.Warning : MessageBoxImage.Question);
             if (ok != MessageBoxResult.OK) return;
 
             // Visual feedback through every phase: Downloading %… → Installing… (msiexec shows its own

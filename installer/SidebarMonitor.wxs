@@ -106,6 +106,19 @@
                   Directory="INSTALLFOLDER"
                   ExeCommand="schtasks.exe /Create /TN &quot;SidebarMonitor Helper&quot; /XML &quot;C:\Program Files\SidebarMonitor\helper-task.xml&quot; /F"
                   Execute="deferred" Impersonate="no" Return="ignore" />
+
+    <!-- The UI task: hands the sidebar back to every OTHER user whose UI this upgrade had to kill,
+         the moment they return to their session (the Run key only fires at logon). Redundant firings
+         are free — the UI is single-instance per session. -->
+    <CustomAction Id="CreateUiTask"
+                  Directory="INSTALLFOLDER"
+                  ExeCommand="schtasks.exe /Create /TN &quot;SidebarMonitor UI&quot; /XML &quot;C:\Program Files\SidebarMonitor\ui-task.xml&quot; /F"
+                  Execute="deferred" Impersonate="no" Return="ignore" />
+
+    <CustomAction Id="DeleteUiTask"
+                  Directory="INSTALLFOLDER"
+                  ExeCommand="schtasks.exe /Delete /TN &quot;SidebarMonitor UI&quot; /F"
+                  Execute="deferred" Impersonate="no" Return="ignore" />
     <CustomAction Id="RunHelperNow"
                   Directory="INSTALLFOLDER"
                   ExeCommand="schtasks.exe /Run /TN &quot;SidebarMonitor Helper&quot;"
@@ -133,8 +146,10 @@
       <Custom Action="ForceStopStack" Before="InstallFiles" />
       <Custom Action="PurgeLegacyPerUserInstall" Before="InstallFiles" Condition="NOT REMOVE" />
       <Custom Action="CreateHelperTask" After="InstallFiles" Condition="NOT REMOVE" />
-      <Custom Action="RunHelperNow" After="CreateHelperTask" Condition="NOT REMOVE" />
+      <Custom Action="CreateUiTask" After="CreateHelperTask" Condition="NOT REMOVE" />
+      <Custom Action="RunHelperNow" After="CreateUiTask" Condition="NOT REMOVE" />
       <Custom Action="DeleteHelperTask" Before="RemoveFiles" Condition="REMOVE" />
+      <Custom Action="DeleteUiTask" Before="RemoveFiles" Condition="REMOVE" />
     </InstallExecuteSequence>
 
     <!-- Minimal UI with the MIT license (the AMD SDK EULA is accepted in-app on first run). -->

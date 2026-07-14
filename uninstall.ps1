@@ -25,12 +25,14 @@ $base = Join-Path $env:LOCALAPPDATA 'SidebarMonitor'   # config por usuario (ui.
 $app  = Join-Path $env:ProgramFiles 'SidebarMonitor'   # binarios por maquina
 $oldApp = Join-Path $base 'app'                        # instalacion per-user antigua, si quedara
 $machineData = Join-Path $env:ProgramData 'SidebarMonitor'   # consentimientos por maquina
-$taskName = 'SidebarMonitor Helper'
-$runName  = 'SidebarMonitor'
+$taskName   = 'SidebarMonitor Helper'
+$uiTaskName = 'SidebarMonitor UI'
+$runName    = 'SidebarMonitor'
 
 Write-Host "== Desinstalando SidebarMonitor ==" -ForegroundColor Cyan
 
 Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+Unregister-ScheduledTask -TaskName $uiTaskName -Confirm:$false -ErrorAction SilentlyContinue
 Remove-ItemProperty 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run' -Name $runName -ErrorAction SilentlyContinue
 Remove-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name $runName -ErrorAction SilentlyContinue
 

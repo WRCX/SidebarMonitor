@@ -44,8 +44,9 @@ $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 # (%LOCALAPPDATA%\SidebarMonitor\app) is cleaned up below if present.
 $app  = Join-Path $env:ProgramFiles 'SidebarMonitor'
 $oldApp = Join-Path $env:LOCALAPPDATA 'SidebarMonitor\app'
-$taskName = 'SidebarMonitor Helper'
-$runName  = 'SidebarMonitor'
+$taskName   = 'SidebarMonitor Helper'
+$uiTaskName = 'SidebarMonitor UI'
+$runName    = 'SidebarMonitor'
 
 # vswhere (para la publicacion AOT del agente) no siempre esta en el PATH.
 $vsInstaller = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer'
@@ -78,8 +79,9 @@ if (-not (Test-Path (Join-Path $root 'native\RyzenSdk\Platform.dll'))) {
 
 # 3. Parar lo que este corriendo y soltar la tarea, para no chocar con los ficheros al publicar.
 Write-Host "[3/6] Parando el stack anterior (si lo hay)..." -ForegroundColor Cyan
-# La tarea primero: sus triggers de sesion podrian relanzar el helper a media publicacion.
+# Las tareas primero: sus triggers de sesion podrian relanzar helper o UI a media publicacion.
 Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+Unregister-ScheduledTask -TaskName $uiTaskName -Confirm:$false -ErrorAction SilentlyContinue
 
 # Parada cooperativa del helper: sondea este fichero cada ventana y cierra su sesion ETW de kernel
 # limpiamente, en vez de morir a hachazos a media escritura.
@@ -185,6 +187,46 @@ Set-ItemProperty 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run' `
     -Name $runName -Value "`"$app\SidebarMonitor.UI.exe`""
 Remove-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' `
     -Name $runName -ErrorAction SilentlyContinue
+
+# Tarea de la UI: la clave Run solo dispara en el LOGON. Una actualizacion mata la UI de los demas
+# usuarios con sesion abierta (sus binarios bloquean los ficheros), y sin esto se quedarian sin barra
+# hasta cerrar y reabrir sesion. Con los triggers de conexion/desbloqueo la recuperan al volver a su
+# sesion. Sin elevar (es la UI del usuario) y para el grupo Users, asi cubre a todos.
+# Es seguro que coexista con la clave Run: la UI tiene guarda de instancia unica POR SESION (mutex
+# Local\), asi que un disparo de mas simplemente sale sin hacer nada.
+$uiTaskXml = @"
+<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>Restores the SidebarMonitor sidebar in a user's session (logon, reconnect, unlock).</Description>
+  </RegistrationInfo>
+  <Triggers>
+    <SessionStateChangeTrigger><Enabled>true</Enabled><StateChange>ConsoleConnect</StateChange></SessionStateChangeTrigger>
+    <SessionStateChangeTrigger><Enabled>true</Enabled><StateChange>RemoteConnect</StateChange></SessionStateChangeTrigger>
+    <SessionStateChangeTrigger><Enabled>true</Enabled><StateChange>SessionUnlock</StateChange></SessionStateChangeTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <GroupId>S-1-5-32-545</GroupId>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Enabled>true</Enabled>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>$app\SidebarMonitor.UI.exe</Command>
+    </Exec>
+  </Actions>
+</Task>
+"@
+Register-ScheduledTask -TaskName $uiTaskName -Xml $uiTaskXml -Force | Out-Null
 
 # Migracion: borrar los binarios de la instalacion per-user anterior (los markers de consentimiento
 # los migra el propio helper a ProgramData en su primer arranque).

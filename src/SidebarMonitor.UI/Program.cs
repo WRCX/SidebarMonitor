@@ -56,6 +56,34 @@ internal static class Program
         string? framesDir = args.FirstOrDefault(a => a.StartsWith("--frames="))?["--frames=".Length..];
         int frameMs = ArgParse.Int(args, "--frame-ms=", 400);
 
+        // One sidebar per user session — no more. Several autostart paths now aim at the same UI (the
+        // HKLM Run key at logon, the session-reconnect task, an MSI relaunch, the user clicking the
+        // Start-menu shortcut), and two UIs in one session fight: two AppBars each reserving desktop
+        // space, two agents (each a writer for the same Local\ map, so the second one dies), two tray
+        // icons, two writers to ui.json. Losing this race is not an error: the sidebar the user wanted
+        // is already on screen, so we just leave.
+        //
+        // The mutex lives in the Local\ namespace ON PURPOSE: that namespace is per-session, so this
+        // guard is per-session too. Another Windows user logging in gets their OWN sidebar — the guard
+        // must never reach across sessions and deny a legitimate user their instance.
+        //
+        // Ephemeral/timed runs (QA, screenshots, --seconds) skip the guard: those are throwaway
+        // instances that must be able to run alongside the real one.
+        Mutex? single = null;
+        if (seconds == 0 && !cfg.Ephemeral && framesDir is null && shot is null)
+        {
+            single = new Mutex(false, @"Local\SidebarMonitor.UI.singleton");
+            bool mine;
+            try { mine = single.WaitOne(0); }
+            catch (AbandonedMutexException) { mine = true; }   // previous UI crashed; the session is ours
+            if (!mine)
+            {
+                single.Dispose();
+                return 0;   // already running in this session
+            }
+        }
+        using var _single = single;
+
         var monitors = Native.EnumerateMonitors();
         if (cfg.Monitor >= monitors.Count) cfg.Monitor = monitors.Count - 1;
 

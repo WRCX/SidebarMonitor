@@ -45,6 +45,8 @@ internal static class LocStrings
         ["sin helper (lanza SidebarMonitor.Etw)"] = "no helper (launch SidebarMonitor.Etw)",
         [" (mejor núcleo)"] = " (best core)",
         [" (límite SMU)"] = " (SMU limit)",
+        ["Hay otros usuarios con la sesión iniciada en este PC: {0}.\n\nSidebarMonitor se instala por equipo, así que la actualización afecta a todos: su barra se cerrará y volverá al reconectar o desbloquear su sesión (o al iniciar sesión de nuevo).\n\n"]
+            = "Other users are logged in on this PC: {0}.\n\nSidebarMonitor is installed per machine, so updating affects everyone: their sidebar will close and come back when they reconnect or unlock their session (or log in again).\n\n",
         ["⚠ throttle térmico"] = "⚠ thermal throttle",
         ["térm {0:F0}%"] = "therm {0:F0}%",
         ["sin interfaz activa"] = "no active interface",
