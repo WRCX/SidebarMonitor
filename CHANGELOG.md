@@ -6,6 +6,24 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ## [Unreleased]
 
+## [1.4.6] — 2026-07-14
+
+### Fixed
+
+- **The MSI no longer fights the running app to install itself** (the "it tried to close things 3-4
+  times before it could install" report). Two of our own features were sabotaging Windows Installer:
+  the UI **resurrects a missing agent** (crashed-agent recovery, ~2 s backoff), so when the Restart
+  Manager killed the agent the UI revived it and the file was in use again — a retry loop; and the
+  elevated, windowless helper cannot be closed politely by RM at all, only force-killed mid-write,
+  taking its kernel ETW session down dirty. The MSI now stops the stack **itself**, before Windows
+  even looks for locked files: it ends the helper's task (so its session triggers can't relaunch it
+  mid-install), asks the helper to **shut down cooperatively** (a new stop-request file it polls each
+  window — the only way an unelevated installer phase can close an elevated process), then kills the
+  UI *before* the agent so nothing can resurrect it. A SYSTEM backstop force-kills any survivor —
+  including **other logged-in users'** UI/agent, which also hold the binaries open on a multi-user
+  machine. The Restart Manager is switched off: there is nothing left for it to find.
+  `install.ps1` uses the same ordered, cooperative stop.
+
 ## [1.4.5] — 2026-07-14
 
 Install/startup fixes on top of 1.4.4's multi-user rework, plus the first desktop PM_Table map.
@@ -347,7 +365,8 @@ First public release.
 
 > Not code-signed yet, so Windows SmartScreen may warn on first run — choose **More info → Run anyway**.
 
-[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.4.5...HEAD
+[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.4.6...HEAD
+[1.4.6]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.4.6
 [1.4.5]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.4.5
 [1.4.4]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.4.4
 [1.4.3]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.4.3

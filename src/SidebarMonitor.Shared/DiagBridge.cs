@@ -45,4 +45,41 @@ public static class DiagBridge
         try { return File.Exists(DumpPath) ? File.ReadAllText(DumpPath) : null; }
         catch { return null; }
     }
+
+    // ── Cooperative shutdown ─────────────────────────────────────────────────────────────────────
+    //
+    // The helper is elevated and windowless, so nothing unelevated can close it: an installer can't
+    // TerminateProcess a high-integrity process, and the Restart Manager can't ask a console app
+    // with no message loop to quit — it can only force-kill it, mid-write, taking the kernel ETW
+    // session down dirty. So the helper polls for this file each window and exits the same clean way
+    // Ctrl+C does. The directory is machine-wide with a Users-modify ACL, so ANY user's installer or
+    // script can request the stop without elevation. Absence = keep running; the file is consumed by
+    // whoever honours it.
+
+    private static string StopPath => Path.Combine(ConsentMarker.Dir, "helper-stop");
+
+    /// <summary>Installer/scripts: ask the elevated helper to shut down cleanly. Returns immediately;
+    /// the helper notices within one publish window (~1 s).</summary>
+    public static void RequestStop()
+    {
+        try
+        {
+            Directory.CreateDirectory(ConsentMarker.Dir);
+            File.WriteAllText(StopPath, "shutdown requested (installer/uninstaller).\n");
+        }
+        catch { /* non-fatal: the caller falls back to force-killing */ }
+    }
+
+    /// <summary>Helper: a shutdown was requested. Consumes the request so a stale file can't kill
+    /// the next helper the scheduled task starts.</summary>
+    public static bool StopRequested()
+    {
+        try
+        {
+            if (!File.Exists(StopPath)) return false;
+            File.Delete(StopPath);
+            return true;
+        }
+        catch { return false; }
+    }
 }

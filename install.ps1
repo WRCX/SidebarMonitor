@@ -78,15 +78,30 @@ if (-not (Test-Path (Join-Path $root 'native\RyzenSdk\Platform.dll'))) {
 
 # 3. Parar lo que este corriendo y soltar la tarea, para no chocar con los ficheros al publicar.
 Write-Host "[3/6] Parando el stack anterior (si lo hay)..." -ForegroundColor Cyan
+# La tarea primero: sus triggers de sesion podrian relanzar el helper a media publicacion.
 Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
-# Cerrar la UI CON GRACIA primero: es un AppBar (reserva espacio en pantalla). Un kill duro no corre
-# su OnClosing/RemoveAppBar, y DWM deja la franja/superficie vieja pintada hasta que repinta la UI
-# nueva (el "rectangulo azul" transitorio). CloseMainWindow envia WM_CLOSE -> cierre limpio. El MSI ya
-# lo hace via el Restart Manager de Windows; esto iguala la ruta manual.
+
+# Parada cooperativa del helper: sondea este fichero cada ventana y cierra su sesion ETW de kernel
+# limpiamente, en vez de morir a hachazos a media escritura.
+$stopFile = Join-Path $env:ProgramData 'SidebarMonitor\helper-stop'
+New-Item -ItemType Directory -Force (Split-Path $stopFile) | Out-Null
+Set-Content -Path $stopFile -Value "shutdown requested (install.ps1).`n"
+
+# Cerrar la UI CON GRACIA y ANTES que el agente. Dos razones:
+#  - Es un AppBar (reserva espacio en pantalla): un kill duro no corre su OnClosing/RemoveAppBar y
+#    DWM deja la franja vieja pintada hasta que repinta la UI nueva.
+#  - La UI RESUCITA al agente si lo ve muerto (recuperacion de agente caido, backoff ~2 s). Matar el
+#    agente con la UI viva lo revive justo cuando estamos borrando su exe -> "fichero en uso".
 Get-Process SidebarMonitor.UI -ErrorAction SilentlyContinue | ForEach-Object { $_.CloseMainWindow() | Out-Null }
-Start-Sleep -Milliseconds 400
-Get-Process SidebarMonitor.UI, SidebarMonitor.Agent, SidebarMonitor.Etw -ErrorAction SilentlyContinue |
-    Stop-Process -Force
+Start-Sleep -Milliseconds 600
+Get-Process SidebarMonitor.UI -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Milliseconds 300
+Get-Process SidebarMonitor.Agent -ErrorAction SilentlyContinue | Stop-Process -Force
+
+# Dar al helper una ventana para irse solo; si sigue ahi (colgado), forzarlo.
+Start-Sleep -Seconds 2
+Get-Process SidebarMonitor.Etw -ErrorAction SilentlyContinue | Stop-Process -Force
+Remove-Item $stopFile -Force -ErrorAction SilentlyContinue   # que no mate al helper que arrancaremos
 Get-CimInstance Win32_Process -Filter "Name='wscript.exe'" -ErrorAction SilentlyContinue |
     Where-Object { $_.CommandLine -like '*run-helper-hidden.vbs*' } |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }

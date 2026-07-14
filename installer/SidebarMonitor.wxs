@@ -28,6 +28,14 @@
     <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
     <Property Id="ARPHELPLINK" Value="https://github.com/WRCX/SidebarMonitor" />
 
+    <!-- We stop the stack ourselves (StopStack below), deterministically and as SYSTEM, so the
+         Restart Manager must not race us: left on, it detects our locked files at InstallValidate,
+         shows the "close these applications" dialog and force-kills processes in an arbitrary order
+         — which the UI defeats, because it RELAUNCHES a missing agent within ~2 s (the crashed-agent
+         recovery). RM kills the agent, the UI revives it, the file is in use again: that is the
+         3-4-retry loop users saw. Off + our own ordered stop = one clean pass, no prompts. -->
+    <Property Id="MSIRESTARTMANAGERCONTROL" Value="Disable" />
+
     <!-- Fixed install location: no directory picker, so the launcher/task paths stay valid. -->
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="SidebarMonitor" />
@@ -71,6 +79,29 @@
     <!-- The elevated helper runs from a logon scheduled task (Highest run level = no UAC prompt),
          created/removed with schtasks against the staged XML. Deferred + non-impersonated so it runs
          with the privileges to register a Highest-runlevel task. Paths are the fixed install dir. -->
+    <!-- Stop the whole stack BEFORE InstallValidate, or Windows Installer finds our binaries locked
+         and starts its own close-and-retry dance. This has to be an IMMEDIATE action (deferred ones
+         cannot run this early), i.e. unelevated — which is exactly why the helper honours a
+         cooperative stop file: nothing unelevated can terminate an elevated, windowless process.
+         Order is not incidental:
+           1. /End the helper task first, so its logon/session triggers cannot relaunch it mid-install.
+           2. Ask the helper to quit (it consumes the file within ~1 s and stops its ETW session cleanly).
+           3. Kill the UI BEFORE the agent — the reverse lets the UI resurrect the agent (crashed-agent
+              recovery, ~2 s backoff) right as we delete its exe. THAT was the 3-4-retry loop.
+           4. Then the agent. Pings are a console-safe sleep (`timeout` needs a console). -->
+    <CustomAction Id="StopStack"
+                  Directory="INSTALLFOLDER"
+                  ExeCommand="cmd.exe /c schtasks.exe /End /TN &quot;SidebarMonitor Helper&quot; &amp; mkdir &quot;%ProgramData%\SidebarMonitor&quot; 2>nul &amp; echo stop > &quot;%ProgramData%\SidebarMonitor\helper-stop&quot; &amp; taskkill /F /IM SidebarMonitor.UI.exe &amp; ping -n 3 127.0.0.1 >nul &amp; taskkill /F /IM SidebarMonitor.Agent.exe &amp; ping -n 4 127.0.0.1 >nul"
+                  Execute="immediate" Impersonate="yes" Return="ignore" />
+
+    <!-- Backstop, as SYSTEM: whatever survived the cooperative stop (a helper wedged mid-window, or
+         another logged-in user's UI/agent — `taskkill /IM` as SYSTEM reaches every session, which an
+         impersonated action cannot) is force-killed before a single file is touched. -->
+    <CustomAction Id="ForceStopStack"
+                  Directory="INSTALLFOLDER"
+                  ExeCommand="cmd.exe /c taskkill /F /IM SidebarMonitor.UI.exe &amp; taskkill /F /IM SidebarMonitor.Agent.exe &amp; taskkill /F /IM SidebarMonitor.Etw.exe &amp; ping -n 2 127.0.0.1 >nul"
+                  Execute="deferred" Impersonate="no" Return="ignore" />
+
     <CustomAction Id="CreateHelperTask"
                   Directory="INSTALLFOLDER"
                   ExeCommand="schtasks.exe /Create /TN &quot;SidebarMonitor Helper&quot; /XML &quot;C:\Program Files\SidebarMonitor\helper-task.xml&quot; /F"
@@ -97,6 +128,9 @@
                   Execute="immediate" Impersonate="yes" Return="ignore" />
 
     <InstallExecuteSequence>
+      <!-- On BOTH install and uninstall: nothing may hold a binary when files move. -->
+      <Custom Action="StopStack" Before="InstallValidate" />
+      <Custom Action="ForceStopStack" Before="InstallFiles" />
       <Custom Action="PurgeLegacyPerUserInstall" Before="InstallFiles" Condition="NOT REMOVE" />
       <Custom Action="CreateHelperTask" After="InstallFiles" Condition="NOT REMOVE" />
       <Custom Action="RunHelperNow" After="CreateHelperTask" Condition="NOT REMOVE" />

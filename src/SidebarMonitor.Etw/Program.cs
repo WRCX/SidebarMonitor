@@ -347,6 +347,17 @@ internal static class Program
                     pawnIoTried = false;   // allow one fresh attempt if the user opts back in
                 }
             }
+            // Cooperative shutdown: an installer (which cannot kill an elevated, windowless process
+            // from its unelevated phase) drops a request file. Exit the same clean way Ctrl+C does —
+            // the kernel ETW session is stopped properly instead of being force-killed mid-write.
+            if (DiagBridge.StopRequested())
+            {
+                Console.WriteLine("Parada solicitada (instalador); cerrando la sesion ETW.");
+                quit = true;
+                try { current?.Source.StopProcessing(); } catch { }
+                return;
+            }
+
             // On-demand PM_Table dump for the "support my CPU" GitHub-issue flow: the UI drops a
             // request file, we answer next to it. Served even (especially) on unmapped versions.
             if (DiagBridge.DumpRequested)
