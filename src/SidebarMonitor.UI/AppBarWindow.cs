@@ -56,25 +56,21 @@ internal abstract class AppBarWindow : Window
         ex |= Native.WS_EX_TOOLWINDOW | Native.WS_EX_NOACTIVATE;
         Native.SetWindowLongPtr(_hwnd, Native.GWL_EXSTYLE, new IntPtr(ex));
 
-        // WS_THICKFRAME lets Windows run its NC resize loop when we return HT* codes; WM_NCCALCSIZE
-        // (below) then keeps the client area = whole window, so it stays borderless.
-        long style = (long)Native.GetWindowLongPtr(_hwnd, Native.GWL_STYLE);
-        style |= Native.WS_THICKFRAME;
-        Native.SetWindowLongPtr(_hwnd, Native.GWL_STYLE, new IntPtr(style));
-
-        // Commit that style change so Windows re-queries WM_NCCALCSIZE now (our handler returns 0 =>
-        // client area = whole window, borderless). Win32 requires SWP_FRAMECHANGED after any frame
-        // style change; without it the recalc is deferred and, after rapid relaunch/re-placement
-        // sequences, the thick sizing border can stay painted (a visible edge strip) AND the client
-        // area stays inset by the frame — which offsets every hit-test, so right-clicks land on the
-        // wrong element and the context menu never opens. Forcing the recalc here fixes both.
-        Native.SetWindowPos(_hwnd, IntPtr.Zero, 0, 0, 0, 0,
-            Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOZORDER | Native.SWP_NOACTIVATE | Native.SWP_FRAMECHANGED);
-
-        // WS_THICKFRAME also buys us DWM's window border, which lights up WHITE whenever the panel
-        // looks active (a right-click, a hover on the strip). It is painted by the compositor outside
-        // our client area, so WM_NCCALCSIZE can't hide it — this is the only thing that removes it.
-        Native.RemoveDwmBorder(_hwnd);
+        // NO WS_THICKFRAME. It used to be here so Windows would run its own modal sizing loop for us
+        // when WM_NCHITTEST returned HTLEFT/HTRIGHT — and it cost us both of the panel's worst bugs:
+        //
+        //  • That modal loop takes the mouse capture and SWALLOWS the WM_LBUTTONUP that ends the drag.
+        //    WPF never sees the button come back up, so its input stack stays wedged: the next
+        //    right-click opened the context menu and it vanished again ~0.2 s later. Mouse.Synchronize()
+        //    did not fix it — the only real fix is never to enter that loop.
+        //  • WS_THICKFRAME also makes DWM paint its own window border, which turns WHITE whenever the
+        //    panel looks active. The compositor draws it OUTSIDE our client area, so no WM_NCCALCSIZE
+        //    trick could hide it: hence the pale strip along the edge in the user's recording.
+        //
+        // We resize the panel ourselves instead (OnPreviewMouseLeftButtonDown & co. below): ordinary
+        // WPF capture, no modal loop, no frame, no DWM border. The window keeps WindowStyle=None, so
+        // there is no non-client area left to fight over.
+        Native.RemoveDwmBorder(_hwnd);   // belt and braces; nothing should be drawing one now
 
         _callbackMsg = Native.RegisterWindowMessage("SidebarMonitor_AppBar");
     }
@@ -238,101 +234,116 @@ internal abstract class AppBarWindow : Window
         get { Native.GetWindowRect(_hwnd, out Rect r); return r; }
     }
 
+    // ── Edge resize, done by us (no Win32 modal loop) ────────────────────────────────────────────
+    //
+    // Plain WPF mouse capture, exactly like the floating-window drag above it. Everything Win32's
+    // sizing loop used to do — and break — we now do here, in a state we control: no swallowed
+    // button-up (so the context menu keeps working), no WS_THICKFRAME (so DWM paints no border), and
+    // the geometry is ours (so the panel can never end up taller than the strip the shell reserved).
+
+    private bool _resizing;
+    private int _grip;             // which edge is being dragged (HT* code), 0 = none
+    private Rect _resizeStart;     // window rect when the drag began
+
+    /// <summary>The resize edge under the cursor right now, or 0. Docked, only the INNER edge
+    /// resizes (the outer one is pinned to the monitor); floating, the sides and bottom do.
+    /// Collapsed, nothing does: the strip's width is a constant.</summary>
+    private int GripUnderCursor()
+    {
+        if (Minimized || !Native.GetCursorPos(out var p)) return 0;
+        Native.GetWindowRect(_hwnd, out Rect wr);
+        if (p.X < wr.Left || p.X > wr.Right || p.Y < wr.Top || p.Y > wr.Bottom) return 0;
+
+        bool left = p.X <= wr.Left + ResizeGrip, right = p.X >= wr.Right - ResizeGrip;
+        bool bottom = p.Y >= wr.Bottom - ResizeGrip;
+
+        if (Docked)
+            return EdgeLeft && right ? Native.HTRIGHT : !EdgeLeft && left ? Native.HTLEFT : 0;
+
+        if (bottom && left) return Native.HTBOTTOMLEFT;
+        if (bottom && right) return Native.HTBOTTOMRIGHT;
+        if (left) return Native.HTLEFT;
+        if (right) return Native.HTRIGHT;
+        if (bottom) return Native.HTBOTTOM;
+        return 0;
+    }
+
+    protected override void OnPreviewMouseLeftButtonDown(System.Windows.Input.MouseButtonEventArgs e)
+    {
+        int grip = GripUnderCursor();
+        if (grip != 0)
+        {
+            _grip = grip;
+            _resizing = true;
+            _resizeStart = WindowRect;
+            CaptureMouse();
+            e.Handled = true;   // don't let the click through to the panel underneath
+            return;
+        }
+        base.OnPreviewMouseLeftButtonDown(e);
+    }
+
+    protected override void OnPreviewMouseMove(System.Windows.Input.MouseEventArgs e)
+    {
+        if (_resizing) { ResizeToCursor(); e.Handled = true; return; }
+
+        // Hover feedback, so the grip is discoverable at all.
+        Cursor = GripUnderCursor() switch
+        {
+            Native.HTLEFT or Native.HTRIGHT => System.Windows.Input.Cursors.SizeWE,
+            Native.HTBOTTOM => System.Windows.Input.Cursors.SizeNS,
+            Native.HTBOTTOMLEFT => System.Windows.Input.Cursors.SizeNESW,
+            Native.HTBOTTOMRIGHT => System.Windows.Input.Cursors.SizeNWSE,
+            _ => null,
+        };
+        base.OnPreviewMouseMove(e);
+    }
+
+    protected override void OnPreviewMouseLeftButtonUp(System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (_resizing)
+        {
+            _resizing = false;
+            _grip = 0;
+            ReleaseMouseCapture();
+            Resized?.Invoke();   // persists the new size and re-snaps the AppBar
+            e.Handled = true;
+            return;
+        }
+        base.OnPreviewMouseLeftButtonUp(e);
+    }
+
+    /// <summary>Live-resize to the cursor, with the same constraints the old WM_SIZING applied.</summary>
+    private void ResizeToCursor()
+    {
+        if (!Native.GetCursorPos(out var p)) return;
+        var r = _resizeStart;
+
+        if (Docked)
+        {
+            // The outer edge stays pinned to the monitor; only the width follows the cursor. The
+            // height is whatever we already have — which docked is the rect the shell granted the
+            // AppBar (taskbar excluded), NOT the full monitor.
+            var mon = MonitorRect();
+            int width = Math.Max(MinPanelWidth, EdgeLeft ? p.X - mon.Left : mon.Right - p.X);
+            int x = EdgeLeft ? mon.Left : mon.Right - width;
+            Native.SetWindowPos(_hwnd, IntPtr.Zero, x, r.Top, width, r.Bottom - r.Top,
+                Native.SWP_NOZORDER | Native.SWP_NOACTIVATE);
+            return;
+        }
+
+        int left = r.Left, top = r.Top, right = r.Right, bottom = r.Bottom;
+        if (_grip is Native.HTLEFT or Native.HTBOTTOMLEFT) left = Math.Min(p.X, right - MinPanelWidth);
+        if (_grip is Native.HTRIGHT or Native.HTBOTTOMRIGHT) right = Math.Max(p.X, left + MinPanelWidth);
+        if (_grip is Native.HTBOTTOM or Native.HTBOTTOMLEFT or Native.HTBOTTOMRIGHT)
+            bottom = Math.Max(p.Y, top + MinPanelHeight);
+
+        Native.SetWindowPos(_hwnd, IntPtr.Zero, left, top, right - left, bottom - top,
+            Native.SWP_NOZORDER | Native.SWP_NOACTIVATE);
+    }
+
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
-        // Keep the client area = the whole window despite WS_THICKFRAME, so it stays borderless.
-        if (msg == Native.WM_NCCALCSIZE && wParam != IntPtr.Zero)
-        {
-            handled = true;
-            return IntPtr.Zero;
-        }
-
-        // Which edge (if any) is a resize handle. Docked: only the inner edge changes the width and
-        // the panel stays full-height. Floating: sides + bottom + bottom corners (not the top — that
-        // is the drag bar).
-        if (msg == Native.WM_NCHITTEST)
-        {
-            handled = true;
-
-            // Collapsed, there is nothing to resize: the strip's width is a constant. Offering a grip
-            // here was actively harmful — a mere click (no drag) on the edge started Win32's modal
-            // sizing loop, WM_SIZING below instantly clamped the 18 px strip up to MinPanelWidth, and
-            // the panel ballooned to 240 px for as long as the button was held. Worse, the drag's end
-            // persisted that phantom 240 as the user's configured width, clobbering their real one.
-            if (Minimized) return new IntPtr(Native.HTCLIENT);
-
-            long lp = lParam.ToInt64();
-            int sx = unchecked((short)(lp & 0xFFFF)), sy = unchecked((short)((lp >> 16) & 0xFFFF));
-            Native.GetWindowRect(_hwnd, out Rect wr);
-            bool left = sx <= wr.Left + ResizeGrip, right = sx >= wr.Right - ResizeGrip;
-            bool bottom = sy >= wr.Bottom - ResizeGrip;
-
-            if (Docked)
-                return new IntPtr(!EdgeLeft && left ? Native.HTLEFT : EdgeLeft && right ? Native.HTRIGHT : Native.HTCLIENT);
-
-            if (bottom && left) return new IntPtr(Native.HTBOTTOMLEFT);
-            if (bottom && right) return new IntPtr(Native.HTBOTTOMRIGHT);
-            if (left) return new IntPtr(Native.HTLEFT);
-            if (right) return new IntPtr(Native.HTRIGHT);
-            if (bottom) return new IntPtr(Native.HTBOTTOM);
-            return new IntPtr(Native.HTCLIENT);
-        }
-
-        // Constrain the drag: minimum width; docked stays full-height with the outer edge pinned.
-        if (msg == Native.WM_SIZING)
-        {
-            var rc = Marshal.PtrToStructure<Rect>(lParam);
-            int edge = wParam.ToInt32();
-            if (Docked)
-            {
-                // Keep the height we ALREADY have, not the monitor's. Docked, our height is whatever
-                // the shell granted the AppBar (ABM_QUERYPOS/SETPOS), which excludes the taskbar —
-                // forcing the full monitor rect here made every drag end 48 px taller than the strip
-                // the shell has reserved for us, leaving the panel overhanging the taskbar and the
-                // reservation stale until something re-placed it (the "borders" artefact).
-                Native.GetWindowRect(_hwnd, out Rect cur);
-                var mon = MonitorRect();
-                rc.Top = cur.Top; rc.Bottom = cur.Bottom;
-                if (EdgeLeft) rc.Left = mon.Left; else rc.Right = mon.Right;
-                if (rc.Width < MinPanelWidth) { if (EdgeLeft) rc.Right = rc.Left + MinPanelWidth; else rc.Left = rc.Right - MinPanelWidth; }
-            }
-            else
-            {
-                if (rc.Width < MinPanelWidth)
-                {
-                    if (edge is Native.WMSZ_LEFT or Native.WMSZ_TOPLEFT or Native.WMSZ_BOTTOMLEFT) rc.Left = rc.Right - MinPanelWidth;
-                    else rc.Right = rc.Left + MinPanelWidth;
-                }
-                if (rc.Height < MinPanelHeight)
-                {
-                    if (edge is Native.WMSZ_TOP or Native.WMSZ_TOPLEFT or Native.WMSZ_TOPRIGHT) rc.Top = rc.Bottom - MinPanelHeight;
-                    else rc.Bottom = rc.Top + MinPanelHeight;
-                }
-            }
-            Marshal.StructureToPtr(rc, lParam, false);
-            handled = true;
-            return new IntPtr(1);
-        }
-
-        if (msg == Native.WM_EXITSIZEMOVE)
-        {
-            // Right after a drag-resize, re-assert the borderless client area so the sizing frame can
-            // never linger (which would break right-click hit-testing and paint an edge strip). This
-            // is the exact path a user hits by widening the panel; belt-and-suspenders with the
-            // FRAMECHANGED now on every re-placement below.
-            Native.SetWindowPos(_hwnd, IntPtr.Zero, 0, 0, 0, 0,
-                Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOZORDER | Native.SWP_NOACTIVATE | Native.SWP_FRAMECHANGED);
-
-            // Win32's modal sizing loop takes the mouse capture and swallows the WM_LBUTTONUP that
-            // ends the drag: WPF never sees the button come back up, so its input stack still believes
-            // the left button is down and refuses to open the context menu — right-click looked dead
-            // until you clicked somewhere else (which resynced it). Drop any capture and force WPF to
-            // re-read the real device state.
-            System.Windows.Input.Mouse.Capture(null);
-            System.Windows.Input.Mouse.Synchronize();
-
-            Resized?.Invoke();
-        }
 
         if (msg == Native.WM_MOUSEACTIVATE)
         {
