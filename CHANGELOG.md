@@ -6,6 +6,38 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ## [Unreleased]
 
+## [1.4.4] — 2026-07-14
+
+Multi-user rework: one machine-wide helper serving every Windows session, plus install/startup
+hardening. See `docs/multi-user.md` for the full design.
+
+### Fixed
+
+- **Multiple Windows users at once no longer break the stack.** The elevated helper's shared map
+  moved `Local\` → **`Global\`** (with an explicit Users-read DACL), so ONE helper serves every
+  session — before, each user's UI could only see a helper started in its own session ("sin
+  helper" for the second user), and a second helper would silently hijack the first one's
+  NT Kernel Logger session (Windows allows exactly one machine-wide). The helper task now
+  triggers on any user's logon **and** on session connect/unlock, so when the user who started it
+  logs off, it respawns in whichever session becomes active; `IgnoreNew` keeps it single.
+- **Helper no longer dies silently when launched by its scheduled task.** Two independent causes:
+  the task now launches the helper via `conhost --headless` instead of `wscript`+VBS (script hosts
+  spawned by the Task Scheduler trip some AV heuristics), and `install.ps1` now installs
+  per-machine into **Program Files** — an unsigned exe in a user-writable folder, started elevated
+  by a scheduled task, matches a malware-persistence pattern that Bitdefender kills on sight
+  (verified live). On startup the helper also retries its map for up to 30 s instead of exiting
+  instantly when a reader still holds a dead predecessor's map (the silent `LastTaskResult=1`).
+- Consent markers (AMD EULA, PawnIO opt-ins, FPS) moved to **ProgramData** (machine-wide, matching
+  the single machine-wide helper), with a Users-modify ACL and automatic migration from the old
+  per-user location on the helper's first elevated run.
+
+### Added
+
+- **Contract plumbing for the SMU's live frequency limit and effective clocks** (PawnIO PM_Table):
+  `EtwSnapshot` v15 adds `CpuLimitMhz` + a clocks bit; the UI shows the real SMU boost ceiling as
+  the boost line's denominator (`límite SMU`) when it flows. Inert until a PM_Table version maps
+  the offsets — the Raphael (desktop Zen 4) map lands with the ongoing capture work.
+
 ## [1.4.3] — 2026-07-14
 
 ### Added
@@ -282,7 +314,8 @@ First public release.
 
 > Not code-signed yet, so Windows SmartScreen may warn on first run — choose **More info → Run anyway**.
 
-[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.4.3...HEAD
+[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.4.4...HEAD
+[1.4.4]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.4.4
 [1.4.3]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.4.3
 [1.3.0]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.3.0
 [1.2.4]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.2.4
