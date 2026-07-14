@@ -6,7 +6,25 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ## [Unreleased]
 
+## [1.4.7] — 2026-07-14
+
+Panel interaction fixes: resizing the sidebar no longer breaks the right-click menu or paints
+artefacts along its edge. Plus the multi-user safeguards from the 1.4.6 line.
+
 ### Fixed
+
+- **Resizing the panel is no longer done by Windows' modal sizing loop — and that fixes both of the
+  panel's visual bugs at once.** They shared one root cause: `WS_THICKFRAME`, which we carried *only*
+  so Windows would run that loop for us when the hit-test reported an edge. It cost us two things.
+  The loop **takes the mouse capture and swallows the `WM_LBUTTONUP`** that ends the drag, so WPF's
+  input stack stayed wedged believing the button was still down: after any resize, right-clicking
+  opened the context menu and it **vanished again ~0.2 s later** (`Mouse.Synchronize()` was not
+  enough — the only cure is never entering the loop). And `WS_THICKFRAME` makes **DWM paint its own
+  window border**, which lightens whenever the panel looks active; the compositor draws it *outside*
+  our client area, so no `WM_NCCALCSIZE` trick could ever hide it — hence the pale strip along the
+  edge. The panel now resizes itself with ordinary WPF mouse capture (the same technique the floating
+  drag already used, because this window never activates), keeping every constraint the old handler
+  applied and adding a proper resize cursor. No frame, no modal loop, no border.
 
 - **Clicking the collapsed sidebar's edge made it balloon — and silently destroyed your saved
   width.** Measured on a live panel: a mere mouse-down (no drag) on the 18 px strip's edge started
@@ -404,7 +422,8 @@ First public release.
 
 > Not code-signed yet, so Windows SmartScreen may warn on first run — choose **More info → Run anyway**.
 
-[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.4.6...HEAD
+[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.4.7...HEAD
+[1.4.7]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.4.7
 [1.4.6]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.4.6
 [1.4.5]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.4.5
 [1.4.4]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.4.4
