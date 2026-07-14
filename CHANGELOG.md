@@ -8,6 +8,23 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ### Fixed
 
+- **Clicking the collapsed sidebar's edge made it balloon — and silently destroyed your saved
+  width.** Measured on a live panel: a mere mouse-down (no drag) on the 18 px strip's edge started
+  Win32's modal sizing loop, `WM_SIZING` instantly clamped the width up to `MinPanelWidth`, and the
+  strip jumped to **240×1440** for as long as the button was held. Releasing it then ran
+  `OnPanelResized`, which persisted that phantom width — **636 → 240 in `ui.json`**, without the user
+  ever dragging anything. A collapsed strip has a constant width, so it now offers **no resize grip
+  at all** (hit-test returns `HTCLIENT`), and the resize handler refuses to persist a width measured
+  while collapsed.
+- **Resizing the docked panel left an edge artefact and a dead right-click.** Two independent causes,
+  both measured: `WM_SIZING` forced the **full monitor** height (1440) while the panel is actually
+  placed in the rect the shell grants the AppBar (**1392**, taskbar excluded), so every drag ended
+  48 px taller than its own reservation — overhanging the taskbar with a stale reservation until
+  something re-placed it. It now keeps the height it already has. And Win32's modal sizing loop
+  swallows the `WM_LBUTTONUP` that ends the drag, so WPF still believed the left button was down and
+  suppressed the context menu — right-click looked dead until you clicked elsewhere, which resynced
+  it. The panel now drops the capture and resynchronises the mouse when the loop exits.
+
 - **One sidebar per user session — no more.** The UI now takes a single-instance mutex and a second
   launch in the same session exits silently. Several paths now aim at the same UI (the HKLM Run key
   at logon, the new session task, the post-update relaunch, the Start-menu shortcut), and two UIs in

@@ -48,6 +48,12 @@ internal sealed partial class MainWindow
     /// 240); height only floating. Docked re-snaps the AppBar to the new width.</summary>
     private void OnPanelResized()
     {
+        // Never persist a width measured while collapsed. The strip is MinimizedWidth wide, so this
+        // would store max(MinPanelWidth, 18) = 240 and silently destroy the user's real width. The
+        // grip is disabled when minimized now, so no resize should even reach here — but the config
+        // is the user's, and no phantom drag gets to overwrite it.
+        if (Minimized) return;
+
         var r = WindowRect;
         _cfg.Width = Math.Max(MinPanelWidth, r.Width);
         if (_cfg.Docked)

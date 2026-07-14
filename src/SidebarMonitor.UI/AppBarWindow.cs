@@ -248,6 +248,14 @@ internal abstract class AppBarWindow : Window
         if (msg == Native.WM_NCHITTEST)
         {
             handled = true;
+
+            // Collapsed, there is nothing to resize: the strip's width is a constant. Offering a grip
+            // here was actively harmful — a mere click (no drag) on the edge started Win32's modal
+            // sizing loop, WM_SIZING below instantly clamped the 18 px strip up to MinPanelWidth, and
+            // the panel ballooned to 240 px for as long as the button was held. Worse, the drag's end
+            // persisted that phantom 240 as the user's configured width, clobbering their real one.
+            if (Minimized) return new IntPtr(Native.HTCLIENT);
+
             long lp = lParam.ToInt64();
             int sx = unchecked((short)(lp & 0xFFFF)), sy = unchecked((short)((lp >> 16) & 0xFFFF));
             Native.GetWindowRect(_hwnd, out Rect wr);
@@ -272,8 +280,14 @@ internal abstract class AppBarWindow : Window
             int edge = wParam.ToInt32();
             if (Docked)
             {
+                // Keep the height we ALREADY have, not the monitor's. Docked, our height is whatever
+                // the shell granted the AppBar (ABM_QUERYPOS/SETPOS), which excludes the taskbar —
+                // forcing the full monitor rect here made every drag end 48 px taller than the strip
+                // the shell has reserved for us, leaving the panel overhanging the taskbar and the
+                // reservation stale until something re-placed it (the "borders" artefact).
+                Native.GetWindowRect(_hwnd, out Rect cur);
                 var mon = MonitorRect();
-                rc.Top = mon.Top; rc.Bottom = mon.Bottom;
+                rc.Top = cur.Top; rc.Bottom = cur.Bottom;
                 if (EdgeLeft) rc.Left = mon.Left; else rc.Right = mon.Right;
                 if (rc.Width < MinPanelWidth) { if (EdgeLeft) rc.Right = rc.Left + MinPanelWidth; else rc.Left = rc.Right - MinPanelWidth; }
             }
@@ -303,6 +317,15 @@ internal abstract class AppBarWindow : Window
             // FRAMECHANGED now on every re-placement below.
             Native.SetWindowPos(_hwnd, IntPtr.Zero, 0, 0, 0, 0,
                 Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOZORDER | Native.SWP_NOACTIVATE | Native.SWP_FRAMECHANGED);
+
+            // Win32's modal sizing loop takes the mouse capture and swallows the WM_LBUTTONUP that
+            // ends the drag: WPF never sees the button come back up, so its input stack still believes
+            // the left button is down and refuses to open the context menu — right-click looked dead
+            // until you clicked somewhere else (which resynced it). Drop any capture and force WPF to
+            // re-read the real device state.
+            System.Windows.Input.Mouse.Capture(null);
+            System.Windows.Input.Mouse.Synchronize();
+
             Resized?.Invoke();
         }
 
