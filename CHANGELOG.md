@@ -6,6 +6,10 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ## [Unreleased]
 
+## [1.4.5] — 2026-07-14
+
+Install/startup fixes on top of 1.4.4's multi-user rework, plus the first desktop PM_Table map.
+
 ### Fixed
 
 - **"You must install or update .NET" after installing the MSI on a machine without the .NET 10
@@ -35,6 +39,7 @@ All notable changes to SidebarMonitor are documented here. The format is based o
   versions stay unguessed — the community dump flow covers them.
 
 ## [1.4.4] — 2026-07-14
+
 
 Multi-user rework: one machine-wide helper serving every Windows session, plus install/startup
 hardening. See `docs/multi-user.md` for the full design.
@@ -342,7 +347,8 @@ First public release.
 
 > Not code-signed yet, so Windows SmartScreen may warn on first run — choose **More info → Run anyway**.
 
-[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.4.4...HEAD
+[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.4.5...HEAD
+[1.4.5]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.4.5
 [1.4.4]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.4.4
 [1.4.3]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.4.3
 [1.3.0]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.3.0
