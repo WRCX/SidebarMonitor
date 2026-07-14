@@ -42,6 +42,12 @@ internal static class Program
         // Processes are the dominant cost (NtQuerySystemInformation, ~6-16 ms) and the least
         // time-sensitive number on screen, so they sample every Nth tick by default.
         int procEvery = ArgParse.Int(args, "--proc-every=", 3);
+        // GPU vendor sensors (NVML/ADLX) are the OTHER big cost: on an Optimus laptop each nvml.Fill()
+        // wakes the idle dGPU to read temp/power/clocks — ~12-18 ms/tick with occasional 300 ms+ spikes.
+        // Sampling them every Nth tick guts that cost (and stops nudging the dGPU awake every second).
+        // The cheap PDH GPU-Engine attribution (load/top-proc, no driver poll) still runs every tick,
+        // so the load graph never goes choppy. 1 = every tick (old behaviour).
+        int gpuEvery = Math.Max(1, ArgParse.Int(args, "--gpu-every=", 1));
         bool verbose = args.Contains("--verbose");
         bool groupProcs = !args.Contains("--no-group");
 
@@ -133,7 +139,9 @@ internal static class Program
 
                 FillCpu(ref snapshot.Cpu, pdh);
                 FillMem(ref snapshot.Mem, pdh);
-                FillGpus(ref snapshot, nvml, adlx, gpuAdapters, pdh, procs);
+                // Read the vendor sensors (the dGPU-waking part) only every gpuEvery-th tick; the engine
+                // attribution inside always runs. Tick 0 is a vendor tick, so fields never start empty.
+                FillGpus(ref snapshot, nvml, adlx, gpuAdapters, pdh, procs, ticks % gpuEvery == 0);
                 FillDisks(ref snapshot, pdh, inventory, diskTemps, etwDiskTemps);
 
                 // Adapters come and go (VPN up, dock unplugged); rescanning every tick is wasteful.
@@ -387,16 +395,27 @@ internal static class Program
     /// iGPU), attaching NVML's rich telemetry to the NVIDIA one and deriving the rest from the GPU
     /// Engine counter. Falls back to NVML-only, single GPU, if adapter enumeration came up empty.
     /// </summary>
-    private static void FillGpus(ref Snapshot s, Nvml? nvml, Adlx? adlx, List<GpuAdapters.Adapter> adapters, PdhQuery pdh, Processes procs)
+    /// <summary>
+    /// Builds the GPU list. When <paramref name="readVendor"/> is false (a throttled tick, see
+    /// --gpu-every) the expensive vendor SDK reads (NVML/ADLX, which wake an idle dGPU) are skipped and
+    /// the previous window's temp/power/clocks/VRAM are kept; only the cheap PDH engine attribution is
+    /// refreshed. The engine accumulators must still be zeroed every tick or FillEngines would sum onto
+    /// stale values, so a skipped tick clears just those and leaves the vendor fields intact.
+    /// </summary>
+    private static void FillGpus(ref Snapshot s, Nvml? nvml, Adlx? adlx, List<GpuAdapters.Adapter> adapters, PdhQuery pdh, Processes procs, bool readVendor)
     {
         if (adapters.Count == 0)
         {
             s.GpuCount = nvml?.Count ?? 0;
             for (int i = 0; i < s.GpuCount; i++)
             {
-                s.Gpus[i] = default;
-                nvml!.Fill(i, ref s.Gpus[i]);
-                s.Gpus[i].HasDetail = 1;
+                if (readVendor)
+                {
+                    s.Gpus[i] = default;
+                    nvml!.Fill(i, ref s.Gpus[i]);
+                    s.Gpus[i].HasDetail = 1;
+                }
+                else ZeroEngines(ref s.Gpus[i]);
             }
             FillEngines(ref s, pdh, procs, adapters);
             return;
@@ -408,8 +427,12 @@ internal static class Program
         for (int i = 0; i < adapters.Count; i++)
         {
             ref var g = ref s.Gpus[i];
-            g = default;
             var a = adapters[i];
+
+            // Throttled tick: keep the last vendor reading, just reset the engine accumulators.
+            if (!readVendor) { ZeroEngines(ref g); continue; }
+
+            g = default;
 
             bool isNvidia = a.Name.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase);
             bool isAmd = a.Name.Contains("AMD", StringComparison.OrdinalIgnoreCase)
@@ -437,6 +460,14 @@ internal static class Program
         }
 
         FillEngines(ref s, pdh, procs, adapters);
+    }
+
+    /// <summary>Zero just the per-engine accumulators (and derived load) so FillEngines refreshes them
+    /// cleanly on a throttled tick without touching the retained vendor sensor fields.</summary>
+    private static void ZeroEngines(ref GpuInfo g)
+    {
+        for (int e = 0; e < GpuEngines.Count; e++) g.Engines[e] = 0;
+        g.TopProcPct = 0;
     }
 
     /// <summary>

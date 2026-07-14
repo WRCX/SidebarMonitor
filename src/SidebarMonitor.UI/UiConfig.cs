@@ -8,6 +8,15 @@ namespace SidebarMonitor.UI;
 public sealed class UiConfig
 {
     public int RefreshMs { get; set; } = 1000;
+
+    /// <summary>How often the agent reads the GPU vendor sensors (temp/power/clocks/VRAM via NVML/ADLX),
+    /// in ms. On an Optimus laptop each read wakes the idle dGPU, so doing it every second is the bulk of
+    /// the agent's CPU (and a needless battery drain). Passed to the agent as --gpu-every (rounded to a
+    /// whole number of <see cref="RefreshMs"/> ticks). The GPU load graph is unaffected — it comes from a
+    /// cheap OS counter that always samples at the global rate. Default 2 s; set to match RefreshMs for
+    /// live per-second sensors while gaming.</summary>
+    public int GpuRefreshMs { get; set; } = 2000;
+
     public bool Topmost { get; set; } = true;
 
     /// <summary>UI language: "auto" follows the OS culture (Spanish on es-*, else English), "es" and

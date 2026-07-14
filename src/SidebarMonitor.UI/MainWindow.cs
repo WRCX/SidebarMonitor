@@ -710,9 +710,12 @@ internal sealed partial class MainWindow : AppBarWindow
 
         try
         {
+            // GPU vendor sensors sample every Nth tick, where N = GpuRefreshMs / RefreshMs (≥1). This
+            // is the knob that keeps an idle dGPU from being woken every second (see UiConfig.GpuRefreshMs).
+            int gpuEvery = Math.Max(1, (int)Math.Round(_cfg.GpuRefreshMs / (double)Math.Max(1, _cfg.RefreshMs)));
             _ownedAgent = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path)
             {
-                Arguments = $"--interval={_cfg.RefreshMs}",
+                Arguments = $"--interval={_cfg.RefreshMs} --gpu-every={gpuEvery}",
                 UseShellExecute = false,
                 CreateNoWindow = true,
             });

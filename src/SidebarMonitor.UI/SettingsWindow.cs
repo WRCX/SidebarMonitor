@@ -238,6 +238,13 @@ internal sealed class SettingsWindow : Window
         p.Children.Add(Choice(Loc.T("Global"), Loc.T("Ritmo de muestreo por defecto. Reinicia el agente para muestrear al nuevo ritmo."),
             rates.Select(r => (r.L, r.V)).ToArray(), () => _cfg.RefreshMs, v => _host.SetGlobalRefresh(v)));
 
+        // GPU vendor sensors run at their own (slower) cadence: reading them wakes an idle dGPU on
+        // Optimus laptops, so 1 s is the bulk of the agent's CPU. The load graph is unaffected.
+        (string L, int V)[] gpuRates = [(Loc.T("1 s (máx)"), 1000), (Loc.T("2 s"), 2000), (Loc.T("3 s"), 3000), (Loc.T("5 s"), 5000)];
+        p.Children.Add(Choice(Loc.T("Sensores de GPU"),
+            Loc.T("Cada cuánto se leen temperatura, vatios y frecuencias de la GPU. En portátiles con GPU NVIDIA, leerlos despierta la GPU dedicada, y hacerlo cada segundo es el grueso del consumo del agente (y gasta batería). La carga de GPU no se ve afectada. No puede ir más rápido que el global. Reinicia el agente."),
+            gpuRates.Select(r => (r.L, r.V)).ToArray(), () => _cfg.GpuRefreshMs, v => _host.SetGpuRefresh(v)));
+
         p.Children.Add(SubHeader(Loc.T("Por sección (sobreescribe el global)")));
         p.Children.Add(Note(Loc.T("«Global» = seguir el ritmo de arriba. Útil para tener la CPU rápida y los discos lentos.")));
         (string L, int V)[] perOpts = [(Loc.T("Global"), -1), .. rates];

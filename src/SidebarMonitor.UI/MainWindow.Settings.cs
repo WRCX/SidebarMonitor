@@ -141,6 +141,21 @@ internal sealed partial class MainWindow
         _cfg.Save();
     }
 
+    /// <summary>How often the agent reads the GPU vendor sensors (temp/power/clocks). Restarts the
+    /// owned agent so it picks up the new --gpu-every. Only affects the sensor numbers; the GPU load
+    /// graph keeps sampling at the global rate.</summary>
+    internal void SetGpuRefresh(int ms)
+    {
+        _cfg.GpuRefreshMs = ms;
+        if (_ownedAgent is { HasExited: false })
+        {
+            try { _ownedAgent.Kill(); _ownedAgent.WaitForExit(2000); } catch { }
+            _ownedAgent = null; _reader?.Dispose(); _reader = null;
+            TryLaunchAgent();
+        }
+        _cfg.Save();
+    }
+
     /// <summary>Per-section refresh override; ms &lt; 0 clears it (follow the global rate).</summary>
     internal void SetSectionRefresh(string key, int ms)
     {

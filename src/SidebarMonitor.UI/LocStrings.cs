@@ -136,6 +136,11 @@ internal static class LocStrings
         ["5 s"] = "5 s",
         ["Ritmo de muestreo por defecto. Reinicia el agente para muestrear al nuevo ritmo."]
             = "Default sampling rate. Restart the agent to sample at the new rate.",
+        ["3 s"] = "3 s",
+        ["Sensores de GPU"] = "GPU sensors",
+        ["1 s (máx)"] = "1 s (max)",
+        ["Cada cuánto se leen temperatura, vatios y frecuencias de la GPU. En portátiles con GPU NVIDIA, leerlos despierta la GPU dedicada, y hacerlo cada segundo es el grueso del consumo del agente (y gasta batería). La carga de GPU no se ve afectada. No puede ir más rápido que el global. Reinicia el agente."]
+            = "How often the GPU temperature, watts and clocks are read. On laptops with an NVIDIA GPU, reading them wakes the discrete GPU, and doing it every second is the bulk of the agent's CPU (and drains battery). The GPU load graph is unaffected. Cannot go faster than the global rate. Restarts the agent.",
         ["Por sección (sobreescribe el global)"] = "Per section (overrides the global)",
         ["«Global» = seguir el ritmo de arriba. Útil para tener la CPU rápida y los discos lentos."]
             = "«Global» = follow the rate above. Useful for a fast CPU and slow disks.",
