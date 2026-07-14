@@ -40,12 +40,23 @@ public sealed unsafe class SeqLockWriter<T> : IDisposable where T : unmanaged
     /// mutex is what actually rejects a second live writer (and is released when its process dies,
     /// abandoned or not, so a crashed writer never blocks the next one).
     ///
-    /// Local\ because creating a Global\ kernel object needs SeCreateGlobalPrivilege, which an
-    /// unelevated process does not hold.
+    /// The agent/UI map stays Local\ (a Global\ file mapping needs SeCreateGlobalPrivilege, which
+    /// an unelevated process does not hold — and per-session is what a per-user agent+UI pair
+    /// wants). The elevated helper's map IS Global\ with <paramref name="worldReadable"/> so every
+    /// user's session can read the one machine-wide helper.
     /// </summary>
-    public SeqLockWriter(string mapName, uint signature, uint version)
+    public SeqLockWriter(string mapName, uint signature, uint version, bool worldReadable = false)
     {
-        _singleton = new Mutex(false, mapName + ".writer");
+        try
+        {
+            _singleton = new Mutex(false, mapName + ".writer");
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // The mutex exists but was created by ANOTHER user (its default DACL doesn't include
+            // us): a live writer in someone else's session. Same meaning as losing the WaitOne.
+            throw new IOException("Ya hay un escritor para " + mapName + " (de otro usuario)");
+        }
         bool owned;
         try { owned = _singleton.WaitOne(0); }
         catch (AbandonedMutexException) { owned = true; }   // previous writer crashed; we take over
@@ -56,6 +67,11 @@ public sealed unsafe class SeqLockWriter<T> : IDisposable where T : unmanaged
         }
 
         _mmf = MemoryMappedFile.CreateOrOpen(mapName, TotalSize);
+        // A Global\ map created by an elevated writer gets the creator's default DACL, which locks
+        // OTHER users' (unelevated) readers out. Explicitly grant BUILTIN\Users read — that is the
+        // whole point of publishing machine-wide. Admins/SYSTEM/owner keep full control, so a
+        // successor writer (also elevated) can still CreateOrOpen the lingering map.
+        if (worldReadable) KernelObjectAcl.GrantUsersRead(_mmf.SafeMemoryMappedFileHandle);
         _view = _mmf.CreateViewAccessor(0, TotalSize, MemoryMappedFileAccess.ReadWrite);
 
         byte* p = null;
@@ -93,6 +109,35 @@ public sealed unsafe class SeqLockWriter<T> : IDisposable where T : unmanaged
         _mmf.Dispose();
         try { _singleton.ReleaseMutex(); } catch { }
         _singleton.Dispose();
+    }
+
+}
+
+/// <summary>Kernel-object DACL helper: BUILTIN\Users read, SYSTEM/Administrators/owner full.
+/// Lives outside <see cref="SeqLockWriter{T}"/> because DllImport can't sit in a generic type.</summary>
+internal static class KernelObjectAcl
+{
+    [System.Runtime.InteropServices.DllImport("advapi32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+    private static extern bool ConvertStringSecurityDescriptorToSecurityDescriptorW(
+        string sddl, uint revision, out nint descriptor, out uint size);
+
+    [System.Runtime.InteropServices.DllImport("advapi32.dll", SetLastError = true)]
+    private static extern bool SetKernelObjectSecurity(
+        Microsoft.Win32.SafeHandles.SafeMemoryMappedFileHandle handle, uint securityInformation, nint descriptor);
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    private static extern nint LocalFree(nint mem);
+
+    public static void GrantUsersRead(Microsoft.Win32.SafeHandles.SafeMemoryMappedFileHandle handle)
+    {
+        const uint SddlRevision1 = 1, DaclSecurityInformation = 4;
+        // GR (generic read) maps to SECTION_MAP_READ|query for section objects — exactly what
+        // SeqLockReader's OpenExisting(Read) needs, from any user's session.
+        if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                "D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;OW)(A;;GR;;;BU)", SddlRevision1, out nint sd, out _))
+            return;   // best-effort: same-user setups never needed the grant
+        try { SetKernelObjectSecurity(handle, DaclSecurityInformation, sd); }
+        finally { LocalFree(sd); }
     }
 }
 

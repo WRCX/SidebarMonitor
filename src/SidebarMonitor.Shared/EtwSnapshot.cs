@@ -7,8 +7,14 @@ public static class EtwLayout
 {
     /// <summary>'SBME' little-endian.</summary>
     public const uint Signature = 0x454D4253;
-    public const uint Version = 14;
-    public const string MapName = @"Local\SidebarMonitor.Etw";
+    public const uint Version = 15;
+    /// <summary>Global\ on purpose: there is exactly ONE elevated helper per machine (the NT Kernel
+    /// Logger session it owns is single-instance machine-wide), and every user's session must see
+    /// it. Creating a Global\ map needs SeCreateGlobalPrivilege — the helper is elevated, so it has
+    /// it; unelevated readers in any session can open it fine. Local\ made the helper invisible to
+    /// every session but its own: with fast user switching the second user's UI said "sin helper"
+    /// while a helper was running, or a second helper hijacked the first one's kernel session.</summary>
+    public const string MapName = @"Global\SidebarMonitor.Etw";
 
     /// <summary>Segments drawn per core bar. Beyond this, the rest folds into "otros".</summary>
     public const int TopPerCore = 3;
@@ -109,14 +115,21 @@ public struct EtwSnapshot
     /// <summary>Bitmask of what PawnIO provided this window. Bit 0: CpuTempC holds Tctl (the hotspot
     /// HWiNFO shows) instead of the SDK's die-average. Bit 1: the power fields (CpuPackageW,
     /// CpuPptPct, CpuTdcPct, CpuTjMaxC) came from the SMU's PM_Table — only set when the SDK isn't
-    /// providing them. Independent of CpuSdkOk on purpose: the Ryzen Master SDK doesn't read mobile
-    /// APUs, so on laptops PawnIO is the only source for both.</summary>
+    /// providing them. Bit 2: the clock fields — CpuLimitMhz holds the SMU's dynamic global boost
+    /// ceiling and CpuBestFreqMhz was raised to the highest per-core EFFECTIVE clock from the table
+    /// (the number HWiNFO calls "Core Effective Clock"). Independent of CpuSdkOk on purpose: the
+    /// Ryzen Master SDK doesn't read mobile APUs, so on laptops PawnIO is the only source.</summary>
     public byte CpuPawnIoOk;
 
     /// <summary>PM_Table version the SMU reported (0 = PawnIO closed or table unresolved). Nonzero
     /// with CpuPawnIoOk bit 1 clear = "we can read this CPU's table but don't know its layout yet" —
     /// what the diagnostics dump + GitHub issue flow exists to fix.</summary>
     public ulong CpuPmTableVersion;
+
+    /// <summary>The SMU's live global frequency limit (MHz) — the dynamic boost ceiling that sags
+    /// under all-core load (HWiNFO's "Frequency Limit - Global"). From the PM_Table on versions
+    /// whose layout maps it (CpuPawnIoOk bit 2). 0 = unknown. Fills Snapshot.Cpu.LimitMhz.</summary>
+    public float CpuLimitMhz;
 
     // ---- From PawnIO's signed IntelMSR module, when installed + opted in (Intel CPUs only) ----
 
@@ -155,7 +168,7 @@ public struct EtwSnapshot
 public static class EtwChannel
 {
     public static SeqLockWriter<EtwSnapshot> CreateWriter() =>
-        new(EtwLayout.MapName, EtwLayout.Signature, EtwLayout.Version);
+        new(EtwLayout.MapName, EtwLayout.Signature, EtwLayout.Version, worldReadable: true);
 
     public static SeqLockReader<EtwSnapshot>? TryOpenReader(out string? error) =>
         SeqLockReader<EtwSnapshot>.TryOpen(EtwLayout.MapName, EtwLayout.Signature, EtwLayout.Version, out error);

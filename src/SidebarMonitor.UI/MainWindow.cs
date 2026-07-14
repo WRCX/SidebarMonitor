@@ -386,12 +386,16 @@ internal sealed partial class MainWindow : AppBarWindow
             if (_cfg.ShowBoost && !float.IsNaN(c.FreqBestMhz) && c.FreqBestMhz > 0)
             {
                 _bestFreqPeakMhz = Math.Max(_bestFreqPeakMhz, c.FreqBestMhz);
-                double cur = c.FreqBestMhz / 1000.0, peak = _bestFreqPeakMhz / 1000.0;
+                // The SMU's live global limit (PawnIO PM_Table) is the real ceiling the peak was
+                // approximating — when it's flowing, it takes over as the denominator.
+                double cur = c.FreqBestMhz / 1000.0;
+                double peak = c.LimitMhz > 0 ? c.LimitMhz / 1000.0 : _bestFreqPeakMhz / 1000.0;
                 // "(mejor núcleo)" is an AMD-only label: the SDK gives a specific favored core's clock,
                 // and CPPC preferred cores are real on every modern Ryzen. On Intel we show the real
                 // boost value (fastest core via APERF/MPERF) but drop the label — a favored core is a
                 // Turbo-Boost-Max-3.0 concept that doesn't apply to most/older Intel parts.
-                string bestLabel = s.CpuFromAmd ? Loc.T(" (mejor núcleo)") : "";
+                string bestLabel = c.LimitMhz > 0 ? Loc.T(" (límite SMU)")
+                                 : s.CpuFromAmd ? Loc.T(" (mejor núcleo)") : "";
                 _cpuBoost.Text = string.Create(ci, $"boost {cur:F2} / {peak:F2} GHz{bestLabel}");
                 _cpuBoost.Visibility = Visibility.Visible;
             }

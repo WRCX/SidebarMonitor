@@ -32,6 +32,12 @@ internal sealed class PawnIoCpu : IDisposable
         public float PptPct;     // fast PPT usage as % of its limit
         public float TdcPct;     // VDD TDC usage as % of its limit
         public float TjMaxC;     // THM limit (100 °C on Phoenix) — the real throttle temperature
+
+        /// <summary>The clock fields below are live: this version's layout maps the global boost
+        /// ceiling and/or the per-core effective clocks.</summary>
+        public bool HasClocks;
+        public float LimitMhz;    // SMU's dynamic global frequency limit; 0 = not in this layout
+        public float BestEffMhz;  // highest per-core effective clock; 0 = not in this layout
     }
 
     // PawnIOLib.dll lives in PawnIO's install dir (not on PATH); a resolver maps the import to the
@@ -62,8 +68,10 @@ internal sealed class PawnIoCpu : IDisposable
     private readonly Mutex _pciMutex = new(false, @"Global\Access_PCI");
     private readonly ulong[] _in = new ulong[1];
     private readonly ulong[] _out = new ulong[1];
-    private readonly ulong[] _pmQwords = new ulong[PmFloats / 2];
-    private readonly float[] _pmFloats = new float[PmFloats];
+    // Sized in TryOpen once the version is known: desktop layouts keep their clock fields hundreds
+    // of floats past the power header, so the per-window read spans exactly what the map needs.
+    private ulong[] _pmQwords = new ulong[PmFloats / 2];
+    private float[] _pmFloats = new float[PmFloats];
     private ulong _pmVersion;    // resolved PM_Table version, 0 = unresolved (no PM_Table access)
     private bool _pmEnabled;     // we have an offset map for _pmVersion → power fields flow
 
@@ -112,6 +120,14 @@ internal sealed class PawnIoCpu : IDisposable
                 {
                     p._pmVersion = out2[0];
                     p._pmEnabled = KnownPmTableVersion(out2[0]);
+                    // Size the per-window read to this layout's furthest mapped offset (desktop
+                    // tables keep clocks well past the power header).
+                    if (TryGetMap(out2[0], out var map))
+                    {
+                        int floats = Math.Max(PmFloats, map.FloatsNeeded);
+                        p._pmQwords = new ulong[(floats + 1) / 2];
+                        p._pmFloats = new float[p._pmQwords.Length * 2];
+                    }
                     // Warm-up refresh: the first SMU transfer after resolve can bounce (busy/prereq);
                     // absorbing it here means TryRead's per-window refresh starts clean.
                     pawnio_execute(p._handle, "ioctl_update_pm_table", [], 0, [], 0, out _);
@@ -178,16 +194,24 @@ internal sealed class PawnIoCpu : IDisposable
     /// the fast PPT value equalled the socket-power field in every capture. Guards keep a garbled
     /// read (zero limits, absurd watts) from publishing.
     /// </summary>
-    public static bool TryMapPmTable(ulong version, ReadOnlySpan<float> t, ref Data d)
+    /// <summary>Per-version offset map. Power offsets follow the APU header convention (PPT pair at
+    /// [2]/[3]); -1 = the layout has no (trustworthy) slot for that field. Clock offsets are -1
+    /// until a version's dump identifies them (values in GHz in every layout seen so far).</summary>
+    internal readonly record struct PmMap(int TdcL, int TdcV, int ThmL, int FreqLim = -1, int EffFirst = -1, int EffCount = 0)
     {
-        int tdcL, tdcV, thmL;
+        /// <summary>Floats the per-window read must span to cover every mapped offset.</summary>
+        public int FloatsNeeded => Math.Max(Math.Max(PmFloats, FreqLim + 1), EffFirst >= 0 ? EffFirst + EffCount : 0);
+    }
+
+    internal static bool TryGetMap(ulong version, out PmMap map)
+    {
         switch (version)
         {
             // Raven Ridge / Picasso / Dali (Zen1 APUs). Their table has no trustworthy THM-limit
             // slot (that offset holds a per-core temperature), so TjMaxC stays 0 and the UI keeps
             // its generic thresholds.
             case 0x1E0001 or 0x1E0002 or 0x1E0003 or 0x1E0004 or 0x1E0005 or 0x1E000A or 0x1E0101:
-                tdcL = 6; tdcV = 7; thmL = -1; break;
+                map = new PmMap(6, 7, -1); return true;
 
             // The classic APU header: Renoir/Lucienne (0x37xxxx), Cezanne (0x40xxxx),
             // Rembrandt (0x45xxxx), Phoenix/Hawk Point (0x4C0006-9; 0x4C0007 verified live).
@@ -195,14 +219,19 @@ internal sealed class PawnIoCpu : IDisposable
             case >= 0x400001 and <= 0x400005:
             case 0x450004 or 0x450005:
             case >= 0x4C0006 and <= 0x4C0009:
-                tdcL = 8; tdcV = 9; thmL = 16; break;
+                map = new PmMap(8, 9, 16); return true;
 
             // Strix Point / Krackan Point: the TDC block moved down.
             case 0x5D0008 or 0x5D0009 or 0x5D000B or 0x650005:
-                tdcL = 12; tdcV = 13; thmL = 16; break;
+                map = new PmMap(12, 13, 16); return true;
 
-            default: return false;   // unknown layout: never guess offsets
+            default: map = default; return false;   // unknown layout: never guess offsets
         }
+    }
+
+    public static bool TryMapPmTable(ulong version, ReadOnlySpan<float> t, ref Data d)
+    {
+        if (!TryGetMap(version, out var m)) return false;
 
         if (t.Length < PmFloats) return false;
         float pptLimit = t[2], pptValue = t[3];
@@ -210,8 +239,32 @@ internal sealed class PawnIoCpu : IDisposable
         d.HasPower = true;
         d.PackageW = pptValue;
         d.PptPct = Math.Clamp(100f * pptValue / pptLimit, 0f, 200f);
-        d.TdcPct = t[tdcL] > 0 ? Math.Clamp(100f * t[tdcV] / t[tdcL], 0f, 200f) : 0f;
-        d.TjMaxC = thmL >= 0 && t[thmL] is > 0 and < 150 ? t[thmL] : 0f;
+        d.TdcPct = m.TdcL >= 0 && t[m.TdcL] > 0 ? Math.Clamp(100f * t[m.TdcV] / t[m.TdcL], 0f, 200f) : 0f;
+        d.TjMaxC = m.ThmL >= 0 && t[m.ThmL] is > 0 and < 150 ? t[m.ThmL] : 0f;
+
+        // Clocks, where this layout maps them. Tables carry GHz; plausibility-gate each field so a
+        // garbled read (or a parked-cores idle where every effective clock is ~0) never publishes
+        // nonsense. BestEffMhz==0 with HasClocks set just means "nothing boosting this window".
+        if (m.FreqLim >= 0 && m.FreqLim < t.Length)
+        {
+            float lim = t[m.FreqLim];
+            if (lim is > 0.4f and < 7f)   // GHz
+            {
+                d.HasClocks = true;
+                d.LimitMhz = lim * 1000f;
+            }
+        }
+        if (m.EffFirst >= 0 && m.EffFirst + m.EffCount <= t.Length)
+        {
+            float best = 0;
+            for (int i = m.EffFirst; i < m.EffFirst + m.EffCount; i++)
+                if (t[i] is > 0.2f and < 7f && t[i] > best) best = t[i];   // GHz; parked cores ~0
+            if (best > 0)
+            {
+                d.HasClocks = true;
+                d.BestEffMhz = best * 1000f;
+            }
+        }
         return true;
     }
 

@@ -145,4 +145,27 @@ public class PawnIoCpuTests
         Assert.Equal(0f, d.TjMaxC);
         Assert.Equal(43.373f, d.PackageW);
     }
+
+    // ── Clock fields (LimitMhz / BestEffMhz) ─────────────────────────────────────────────────────
+
+    [Fact]
+    public void MapPmTable_ApuLayouts_HaveNoClockFields()
+    {
+        // No APU version maps clock offsets yet: HasClocks must stay false so the helper never
+        // sets CpuPawnIoOk bit 2 from these layouts.
+        var d = default(PawnIoCpu.Data);
+        Assert.True(PawnIoCpu.TryMapPmTable(0x4C0007, PhoenixTable(), ref d));
+        Assert.False(d.HasClocks);
+        Assert.Equal(0f, d.LimitMhz);
+        Assert.Equal(0f, d.BestEffMhz);
+    }
+
+    [Fact]
+    public void PmMap_FloatsNeeded_CoversFurthestMappedOffset()
+    {
+        // Header-only maps read the 24-float minimum; clock offsets extend the per-window read.
+        Assert.Equal(24, new PawnIoCpu.PmMap(8, 9, 16).FloatsNeeded);
+        Assert.Equal(301, new PawnIoCpu.PmMap(8, 9, 16, FreqLim: 300).FloatsNeeded);
+        Assert.Equal(216, new PawnIoCpu.PmMap(8, 9, 16, FreqLim: 20, EffFirst: 200, EffCount: 16).FloatsNeeded);
+    }
 }

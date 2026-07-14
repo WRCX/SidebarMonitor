@@ -66,8 +66,10 @@ $vbs = Join-Path $stage 'run-helper-hidden.vbs'
     ('sh.Run """{0}""", 0, False' -f $exe)
 ) | Set-Content -Path $vbs -Encoding ASCII
 
-# Scheduled task: at logon, elevated (Highest, no UAC prompt), in the interactive session so the
-# Local\ shared-memory namespace matches the UI and agent. Runs the launcher via wscript, hidden.
+# Scheduled task: at any user's logon/reconnect, elevated (HighestAvailable, no UAC prompt), in the
+# active interactive session. ONE instance per machine (IgnoreNew): the helper publishes to the
+# Global\ map every session reads, and owns the machine-unique NT Kernel Logger session. Launched
+# via conhost --headless (native hidden console; wscript from a scheduled task trips some AVs).
 $taskXml = Join-Path $stage 'helper-task.xml'
 @"
 <?xml version="1.0" encoding="UTF-16"?>
@@ -78,6 +80,11 @@ $taskXml = Join-Path $stage 'helper-task.xml'
   </RegistrationInfo>
   <Triggers>
     <LogonTrigger><Enabled>true</Enabled></LogonTrigger>
+    <!-- Fast user switching: the helper dies with the session that started it (interactive token);
+         these bring it back in whichever session becomes active. IgnoreNew keeps it single. -->
+    <SessionStateChangeTrigger><Enabled>true</Enabled><StateChange>ConsoleConnect</StateChange></SessionStateChangeTrigger>
+    <SessionStateChangeTrigger><Enabled>true</Enabled><StateChange>RemoteConnect</StateChange></SessionStateChangeTrigger>
+    <SessionStateChangeTrigger><Enabled>true</Enabled><StateChange>SessionUnlock</StateChange></SessionStateChangeTrigger>
   </Triggers>
   <Principals>
     <Principal id="Author">
@@ -96,8 +103,8 @@ $taskXml = Join-Path $stage 'helper-task.xml'
   </Settings>
   <Actions Context="Author">
     <Exec>
-      <Command>wscript.exe</Command>
-      <Arguments>//B //Nologo "$installDir\run-helper-hidden.vbs"</Arguments>
+      <Command>C:\Windows\System32\conhost.exe</Command>
+      <Arguments>--headless "$installDir\SidebarMonitor.Etw.exe"</Arguments>
     </Exec>
   </Actions>
 </Task>

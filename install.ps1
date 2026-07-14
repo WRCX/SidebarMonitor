@@ -33,7 +33,12 @@ if (-not $isAdmin) {
 }
 
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
-$app  = Join-Path $env:LOCALAPPDATA 'SidebarMonitor\app'
+# Per-MACHINE install (Program Files), like the MSI: one copy for every Windows user, the helper
+# task fires for whichever user logs in, and AVs trust the location (LOCALAPPDATA + scheduled-task
+# elevation is a malware-persistence pattern some AVs kill on sight). The old per-user location
+# (%LOCALAPPDATA%\SidebarMonitor\app) is cleaned up below if present.
+$app  = Join-Path $env:ProgramFiles 'SidebarMonitor'
+$oldApp = Join-Path $env:LOCALAPPDATA 'SidebarMonitor\app'
 $taskName = 'SidebarMonitor Helper'
 $runName  = 'SidebarMonitor'
 
@@ -107,31 +112,62 @@ if ($LASTEXITCODE) { throw "Fallo la publicacion del helper." }
     -c Release -r win-x64 --self-contained $sc -o $app --nologo -v q
 if ($LASTEXITCODE) { throw "Fallo la publicacion de la UI." }
 
-# Lanzador oculto: WScript.Run con estilo 0 crea la consola del helper ya oculta (sin parpadeo).
-# En VBScript, "" dentro de una cadena es una comilla literal, asi que """ruta""" -> "ruta" (con
-# comillas, por si la ruta tiene espacios).
-$exe = Join-Path $app 'SidebarMonitor.Etw.exe'
-$vbs = Join-Path $app 'run-helper-hidden.vbs'
-@(
-    'Set sh = CreateObject("WScript.Shell")'
-    ('sh.Run """{0}""", 0, False' -f $exe)
-) | Set-Content -Path $vbs -Encoding ASCII
-
 # 5. Autostart.
 Write-Host "[5/6] Registrando arranque automatico..." -ForegroundColor Cyan
-# Helper: tarea al inicio de sesion, elevada (RunLevel Highest no dispara UAC), en la sesion
-# interactiva (el espacio de nombres Local\ debe coincidir con el de la UI y el agente).
-$action    = New-ScheduledTaskAction -Execute 'wscript.exe' -Argument ('//B //Nologo "{0}"' -f $vbs)
-$trigger   = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
-$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -RunLevel Highest -LogonType Interactive
-$settings  = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
-                -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
-Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger `
-    -Principal $principal -Settings $settings -Force | Out-Null
+# Helper: UNA instancia por maquina para el grupo Users (el kernel logger ETW es unico por maquina
+# y el mapa es Global\), elevada sin UAC (HighestAvailable). Dispara en el logon de CUALQUIER
+# usuario y ademas al conectar/desbloquear sesion: si el usuario que lo arranco cierra sesion (el
+# helper muere con ella), renace en la sesion del siguiente usuario activo. IgnoreNew garantiza la
+# instancia unica. Accion via conhost --headless: consola oculta nativa, sin VBS ni wscript (que
+# algunos AV matan al venir del programador de tareas).
+$exe = Join-Path $app 'SidebarMonitor.Etw.exe'
+$taskXml = @"
+<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>Starts the elevated SidebarMonitor helper (ETW + CPU sensors) for whichever user session is active.</Description>
+  </RegistrationInfo>
+  <Triggers>
+    <LogonTrigger><Enabled>true</Enabled></LogonTrigger>
+    <SessionStateChangeTrigger><Enabled>true</Enabled><StateChange>ConsoleConnect</StateChange></SessionStateChangeTrigger>
+    <SessionStateChangeTrigger><Enabled>true</Enabled><StateChange>RemoteConnect</StateChange></SessionStateChangeTrigger>
+    <SessionStateChangeTrigger><Enabled>true</Enabled><StateChange>SessionUnlock</StateChange></SessionStateChangeTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <GroupId>S-1-5-32-545</GroupId>
+      <RunLevel>HighestAvailable</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Enabled>true</Enabled>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>$env:SystemRoot\System32\conhost.exe</Command>
+      <Arguments>--headless "$exe"</Arguments>
+    </Exec>
+  </Actions>
+</Task>
+"@
+Register-ScheduledTask -TaskName $taskName -Xml $taskXml -Force | Out-Null
 
-# UI: clave Run del usuario (sin elevar). La UI lanza el agente por su cuenta.
-Set-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' `
+# UI: clave Run por maquina (HKLM) — cada usuario que inicie sesion arranca SU UI, y la UI lanza
+# su agente (ambos por sesion via el mapa Local\). Limpiar la clave HKCU de la instalacion
+# per-user anterior para no arrancar la UI dos veces.
+Set-ItemProperty 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run' `
     -Name $runName -Value "`"$app\SidebarMonitor.UI.exe`""
+Remove-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' `
+    -Name $runName -ErrorAction SilentlyContinue
+
+# Migracion: borrar los binarios de la instalacion per-user anterior (los markers de consentimiento
+# los migra el propio helper a ProgramData en su primer arranque).
+if (Test-Path $oldApp) { Remove-Item $oldApp -Recurse -Force -ErrorAction SilentlyContinue }
 
 # 6. Arrancar ya. El helper por la tarea (elevado); la UI de-elevada via el shell (explorer).
 Write-Host "[6/6] Arrancando..." -ForegroundColor Cyan
@@ -139,8 +175,8 @@ Start-ScheduledTask -TaskName $taskName
 Start-Sleep -Milliseconds 400
 Start-Process explorer.exe -ArgumentList "`"$app\SidebarMonitor.UI.exe`""
 
-Write-Host "`n== Instalado ==" -ForegroundColor Green
+Write-Host "`n== Instalado (por maquina) ==" -ForegroundColor Green
 Write-Host "  App:    $app"
-Write-Host "  Helper: tarea '$taskName' (elevada, al inicio de sesion, sin consola)"
-Write-Host "  UI:     clave Run de HKCU (arranca el agente)"
+Write-Host "  Helper: tarea '$taskName' (elevada, UNA por maquina, logon/conexion de cualquier usuario)"
+Write-Host "  UI:     clave Run de HKLM (una UI+agente por usuario que inicie sesion)"
 Write-Host "  Se reinicia solo en cada inicio de sesion. Desinstalar: .\uninstall.ps1`n"

@@ -39,20 +39,37 @@ internal static class Program
             }
         }
 
+        // One helper serves every user's session: make the machine-wide consent dir (ProgramData)
+        // writable by all users' UIs and migrate this user's pre-multi-user markers into it.
+        ConsentMarker.EnsureMachineDir();
+
         int windowMs = ArgParse.Int(args, "--window=", 1000);
         int stallSec = ArgParse.Int(args, "--stall=", 20);   // seconds of "NIC busy, ETW silent" before restart
         bool verbose = args.Contains("--verbose");
         int cores = Environment.ProcessorCount;
 
-        SeqLockWriter<EtwSnapshot> writer;
-        try
+        // A dead helper's map lingers while any reader still holds it (the agent drops its reader
+        // ~5 s after the timestamp goes stale). Dying instantly here turned a restart race into a
+        // silent LastTaskResult=1 on the scheduled task — retry briefly before concluding another
+        // helper is genuinely alive.
+        SeqLockWriter<EtwSnapshot>? writer = null;
+        for (int attempt = 0; writer is null; attempt++)
         {
-            writer = EtwChannel.CreateWriter();
-        }
-        catch (IOException)
-        {
-            Console.Error.WriteLine("Ya hay un helper ETW corriendo.");
-            return 1;
+            try
+            {
+                writer = EtwChannel.CreateWriter();
+            }
+            catch (IOException)
+            {
+                if (attempt >= 15)
+                {
+                    Console.Error.WriteLine("Ya hay un helper ETW corriendo (el mapa sigue ocupado tras 30 s).");
+                    return 1;
+                }
+                if (attempt == 0)
+                    Console.WriteLine("Mapa ETW ocupado (¿helper anterior aun soltandose?); reintentando hasta 30 s…");
+                Thread.Sleep(2000);
+            }
         }
 
         // CPU temp/power from AMD's SDK (needs admin, which we have). Gated three ways: only on an
@@ -339,6 +356,7 @@ internal static class Program
 
             snapshot.CpuPmTableVersion = pawnIo?.PmTableVersion ?? 0;
             snapshot.CpuPawnIoOk = 0;
+            snapshot.CpuLimitMhz = 0;
             if (pawnIo is not null && pawnIo.TryRead(out var pawnData))
             {
                 snapshot.CpuPawnIoOk = 1;
@@ -352,6 +370,15 @@ internal static class Program
                     snapshot.CpuPptPct = pawnData.PptPct;
                     snapshot.CpuTdcPct = pawnData.TdcPct;
                     snapshot.CpuTjMaxC = pawnData.TjMaxC;
+                }
+                // Clocks are PawnIO's regardless of the SDK: the SDK has no global-limit field at
+                // all, and the table's effective clock only ever RAISES the best-core figure.
+                if (pawnData.HasClocks)
+                {
+                    snapshot.CpuPawnIoOk |= 4;
+                    snapshot.CpuLimitMhz = pawnData.LimitMhz;
+                    if (pawnData.BestEffMhz > snapshot.CpuBestFreqMhz)
+                        snapshot.CpuBestFreqMhz = pawnData.BestEffMhz;
                 }
             }
 

@@ -44,6 +44,7 @@ internal static class LocStrings
         ["agente parado ({0:F0} s)"] = "agent stopped ({0:F0} s)",
         ["sin helper (lanza SidebarMonitor.Etw)"] = "no helper (launch SidebarMonitor.Etw)",
         [" (mejor núcleo)"] = " (best core)",
+        [" (límite SMU)"] = " (SMU limit)",
         ["⚠ throttle térmico"] = "⚠ thermal throttle",
         ["térm {0:F0}%"] = "therm {0:F0}%",
         ["sin interfaz activa"] = "no active interface",

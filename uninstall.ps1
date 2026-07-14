@@ -21,14 +21,17 @@ if (-not $isAdmin) {
     return
 }
 
-$base = Join-Path $env:LOCALAPPDATA 'SidebarMonitor'
-$app  = Join-Path $base 'app'
+$base = Join-Path $env:LOCALAPPDATA 'SidebarMonitor'   # config por usuario (ui.json, logs)
+$app  = Join-Path $env:ProgramFiles 'SidebarMonitor'   # binarios por maquina
+$oldApp = Join-Path $base 'app'                        # instalacion per-user antigua, si quedara
+$machineData = Join-Path $env:ProgramData 'SidebarMonitor'   # consentimientos por maquina
 $taskName = 'SidebarMonitor Helper'
 $runName  = 'SidebarMonitor'
 
 Write-Host "== Desinstalando SidebarMonitor ==" -ForegroundColor Cyan
 
 Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+Remove-ItemProperty 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run' -Name $runName -ErrorAction SilentlyContinue
 Remove-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name $runName -ErrorAction SilentlyContinue
 
 Get-Process SidebarMonitor.UI, SidebarMonitor.Agent, SidebarMonitor.Etw -ErrorAction SilentlyContinue |
@@ -39,9 +42,11 @@ Get-CimInstance Win32_Process -Filter "Name='wscript.exe'" -ErrorAction Silently
 Start-Sleep -Milliseconds 600
 
 if (Test-Path $app) { Remove-Item $app -Recurse -Force -ErrorAction SilentlyContinue }
-if ($Purge -and (Test-Path $base)) {
-    Remove-Item $base -Recurse -Force -ErrorAction SilentlyContinue
-    Write-Host "  Configuracion borrada." -ForegroundColor DarkGray
+if (Test-Path $oldApp) { Remove-Item $oldApp -Recurse -Force -ErrorAction SilentlyContinue }
+if ($Purge) {
+    if (Test-Path $base) { Remove-Item $base -Recurse -Force -ErrorAction SilentlyContinue }
+    if (Test-Path $machineData) { Remove-Item $machineData -Recurse -Force -ErrorAction SilentlyContinue }
+    Write-Host "  Configuracion y consentimientos borrados." -ForegroundColor DarkGray
 }
 
 Write-Host "== Desinstalado ==" -ForegroundColor Green

@@ -267,6 +267,13 @@ internal static class Program
             s.Cpu.TdcPct = e.CpuTdcPct;
             s.Cpu.TjMaxC = e.CpuTjMaxC;
         }
+        if ((e.CpuPawnIoOk & 4) != 0)
+        {
+            // The SMU's dynamic boost ceiling; the UI uses it as the boost line's denominator
+            // instead of the achieved session peak. Effective clock only ever raises "GHz máx".
+            if (e.CpuLimitMhz > 0) s.Cpu.LimitMhz = e.CpuLimitMhz;
+            if (e.CpuBestFreqMhz > 0) s.Cpu.FreqBestMhz = Math.Max(s.Cpu.FreqBestMhz, e.CpuBestFreqMhz);
+        }
 
         // Intel MSR path (no SDK block runs on Intel): temp + Tjmax + per-LOGICAL-core temps (bit 0),
         // RAPL package power (bit 1). The temps map 1:1 to the logical rows — no physical→logical
