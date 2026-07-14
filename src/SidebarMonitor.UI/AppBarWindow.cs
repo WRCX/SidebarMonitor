@@ -71,6 +71,11 @@ internal abstract class AppBarWindow : Window
         Native.SetWindowPos(_hwnd, IntPtr.Zero, 0, 0, 0, 0,
             Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOZORDER | Native.SWP_NOACTIVATE | Native.SWP_FRAMECHANGED);
 
+        // WS_THICKFRAME also buys us DWM's window border, which lights up WHITE whenever the panel
+        // looks active (a right-click, a hover on the strip). It is painted by the compositor outside
+        // our client area, so WM_NCCALCSIZE can't hide it — this is the only thing that removes it.
+        Native.RemoveDwmBorder(_hwnd);
+
         _callbackMsg = Native.RegisterWindowMessage("SidebarMonitor_AppBar");
     }
 

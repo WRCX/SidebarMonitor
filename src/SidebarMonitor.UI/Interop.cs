@@ -38,6 +38,28 @@ internal static class Native
     public const int GWL_EXSTYLE = -20;
     public const long WS_THICKFRAME = 0x00040000;   // resizable border (invisible with our NCCALCSIZE)
 
+    // ── DWM: kill the Windows 11 window border ───────────────────────────────────────────────────
+    //
+    // WS_THICKFRAME (which we need, so Windows runs its resize loop for us) makes DWM draw its own
+    // 1 px window border — and it turns WHITE the moment the window looks active (right-click, hover
+    // over the strip). Our WM_NCCALCSIZE keeps the CLIENT area borderless, but this border is painted
+    // by the compositor OUTSIDE our client area, so no amount of frame recalculation touches it: a
+    // white line ran down the panel's edge. DWMWA_BORDER_COLOR = DWMWA_COLOR_NONE removes it
+    // (Windows 11 21H2+; older builds just ignore the call, which is why the HRESULT is discarded).
+    public const int DWMWA_BORDER_COLOR = 34;
+    public const uint DWMWA_COLOR_NONE = 0xFFFFFFFE;
+
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref uint value, int size);
+
+    /// <summary>Best-effort: remove DWM's window border. No-op on Windows 10.</summary>
+    public static void RemoveDwmBorder(IntPtr hwnd)
+    {
+        uint none = DWMWA_COLOR_NONE;
+        try { DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, ref none, sizeof(uint)); }
+        catch (DllNotFoundException) { /* ancient Windows: no DWM, no border */ }
+    }
+
     // Resize hit-test + sizing
     public const int WM_NCCALCSIZE = 0x0083;
     public const int WM_NCHITTEST = 0x0084;
