@@ -84,7 +84,20 @@
                   ExeCommand="schtasks.exe /Delete /TN &quot;SidebarMonitor Helper&quot; /F"
                   Execute="deferred" Impersonate="no" Return="ignore" />
 
+    <!-- Purge any pre-1.4.4 PER-USER install (install.ps1 published framework-dependent into
+         %LOCALAPPDATA%\SidebarMonitor\app and pointed HKCU Run at it). The MSI's own UI is
+         self-contained under Program Files, but that stale copy still autostarts and dies with
+         "You must install or update .NET" on a machine without the runtime. Impersonated (NOT
+         deferred/no-impersonate) precisely so HKCU and %LOCALAPPDATA% resolve to the INSTALLING
+         user's profile rather than SYSTEM's. Other users' stale copies are cleaned by the UI's
+         own first run; this covers the common single-installer case. -->
+    <CustomAction Id="PurgeLegacyPerUserInstall"
+                  Directory="INSTALLFOLDER"
+                  ExeCommand="cmd.exe /c reg delete &quot;HKCU\Software\Microsoft\Windows\CurrentVersion\Run&quot; /v SidebarMonitor /f &amp; rmdir /s /q &quot;%LOCALAPPDATA%\SidebarMonitor\app&quot;"
+                  Execute="immediate" Impersonate="yes" Return="ignore" />
+
     <InstallExecuteSequence>
+      <Custom Action="PurgeLegacyPerUserInstall" Before="InstallFiles" Condition="NOT REMOVE" />
       <Custom Action="CreateHelperTask" After="InstallFiles" Condition="NOT REMOVE" />
       <Custom Action="RunHelperNow" After="CreateHelperTask" Condition="NOT REMOVE" />
       <Custom Action="DeleteHelperTask" Before="RemoveFiles" Condition="REMOVE" />

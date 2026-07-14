@@ -8,6 +8,15 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ### Fixed
 
+- **"You must install or update .NET" after installing the MSI on a machine without the .NET 10
+  runtime.** The MSI's own apps are self-contained and were never the problem: a *pre-1.4.4
+  per-user* install (`install.ps1` published framework-dependent into `%LOCALAPPDATA%` and pointed
+  **HKCU** Run at it) kept autostarting alongside the new per-machine one and died on the missing
+  runtime. The MSI now purges that stale copy (HKCU Run value + `%LOCALAPPDATA%\SidebarMonitor\app`)
+  on install, and **`install.ps1` publishes self-contained by default** — a per-machine install must
+  never depend on a runtime being present (`-FrameworkDependent` opts back in for dev iteration).
+  `tools/fix-legacy-peruser-install.ps1` cleans an already-broken machine without reinstalling.
+
 - **A stale `ui.json.bak` can no longer wipe the machine's sensor opt-ins.** `UiConfig.Load` falls
   back to the backup when the main config is briefly unreadable; the UI's startup marker sync then
   saw stale `false` toggles and DELETED the machine-wide consent markers (helper closed PawnIO /

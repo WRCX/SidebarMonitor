@@ -12,12 +12,17 @@
 
   Necesita administrador solo para crear la tarea elevada: se auto-eleva si hace falta.
 
-  Uso:   .\install.ps1                  (o doble clic en install.cmd)
-         .\install.ps1 -SelfContained   incrusta el runtime .NET (no requiere .NET instalado)
+  Uso:   .\install.ps1                      (o doble clic en install.cmd) -- self-contained, como el MSI
+         .\install.ps1 -FrameworkDependent  publicacion ligera para iterar en desarrollo; EXIGE que el
+                                            runtime .NET 10 este instalado en la maquina
 
   ASCII-only a proposito: install.cmd usa Windows PowerShell 5.1, que lee un .ps1 sin BOM como ANSI.
 #>
-param([switch]$SelfContained)
+# Self-contained POR DEFECTO: esto instala por maquina (Program Files) para TODOS los usuarios, igual
+# que el MSI, y una instalacion asi no puede depender de que haya un runtime .NET instalado -- si no
+# lo hay, la UI muere con "You must install or update .NET". El runtime va incrustado; -FrameworkDependent
+# solo para iterar rapido en la maquina de desarrollo (donde el SDK ya esta).
+param([switch]$FrameworkDependent)
 
 $ErrorActionPreference = 'Stop'
 
@@ -92,9 +97,10 @@ Write-Host "[4/6] Publicando (tarda; el agente es AOT)..." -ForegroundColor Cyan
 if (Test-Path $app) { Remove-Item "$app\*" -Recurse -Force -ErrorAction SilentlyContinue }
 New-Item -ItemType Directory -Force $app | Out-Null
 
-$sc = if ($SelfContained) { 'true' } else { 'false' }
+$sc = if ($FrameworkDependent) { 'false' } else { 'true' }
 
-# El agente es AOT (nativo, siempre self-contained); helper y UI, framework-dependent salvo -SelfContained.
+# El agente es AOT (nativo, siempre self-contained); helper y UI llevan el runtime incrustado salvo
+# -FrameworkDependent.
 # El agente publica con NativeAOT, que necesita el toolchain C++ (link.exe). Si no esta, se
 # reintenta sin AOT como self-contained (nativo no, pero funciona igual y sin runtime instalado).
 $agentCsproj = Join-Path $root 'src\SidebarMonitor.Agent\SidebarMonitor.Agent.csproj'
