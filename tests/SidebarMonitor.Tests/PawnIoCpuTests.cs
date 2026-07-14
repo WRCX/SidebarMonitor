@@ -168,4 +168,69 @@ public class PawnIoCpuTests
         Assert.Equal(301, new PawnIoCpu.PmMap(8, 9, 16, FreqLim: 300).FloatsNeeded);
         Assert.Equal(216, new PawnIoCpu.PmMap(8, 9, 16, FreqLim: 20, EffFirst: 200, EffCount: 16).FloatsNeeded);
     }
+
+    // ── PM_Table (Raphael 0x540104) — values captured live on a 7800X3D, all-core load ──────────
+
+    private static float[] RaphaelTable()
+    {
+        var t = new float[325];
+        t[2] = 85f; t[3] = 75.386f;      // PPT limit/value (W)
+        t[8] = 75f; t[9] = 48.720f;      // VDD TDC limit/value (A)
+        t[10] = 89f; t[11] = 85.549f;    // THM limit/value — the X3D's real Tjmax
+        t[272] = 4.625f;                 // global frequency limit (GHz), sagging under all-core
+        // Per-core current clocks (GHz), from the all-core capture.
+        float[] cores = [4.558f, 4.566f, 4.541f, 4.566f, 4.566f, 4.566f, 4.566f, 4.566f];
+        cores.CopyTo(t, 317);
+        return t;
+    }
+
+    [Fact]
+    public void MapPmTable_Raphael_FillsPowerAndClocks()
+    {
+        var d = default(PawnIoCpu.Data);
+        Assert.True(PawnIoCpu.TryMapPmTable(0x540104, RaphaelTable(), ref d));
+        Assert.True(d.HasPower);
+        Assert.Equal(75.386f, d.PackageW);
+        Assert.Equal(100f * 75.386f / 85f, d.PptPct, 3);
+        Assert.Equal(100f * 48.720f / 75f, d.TdcPct, 3);
+        Assert.Equal(89f, d.TjMaxC);
+        Assert.True(d.HasClocks);
+        Assert.Equal(4625f, d.LimitMhz);
+        Assert.Equal(4566f, d.BestEffMhz);   // max of the eight per-core clocks
+    }
+
+    [Fact]
+    public void MapPmTable_Raphael_ParkedCoresAndGarbledClocksStayUnpublished()
+    {
+        // Clocks outside 0.2..7 GHz (garbage or a truncated read) must not publish; a zeroed
+        // clock region leaves HasClocks false while power still flows.
+        var t = RaphaelTable();
+        t[272] = 123f;                              // absurd "limit"
+        Array.Clear(t, 317, 8);                     // all cores parked/zeroed
+        var d = default(PawnIoCpu.Data);
+        Assert.True(PawnIoCpu.TryMapPmTable(0x540104, t, ref d));
+        Assert.True(d.HasPower);
+        Assert.False(d.HasClocks);
+        Assert.Equal(0f, d.LimitMhz);
+        Assert.Equal(0f, d.BestEffMhz);
+    }
+
+    [Fact]
+    public void MapPmTable_Raphael_ShortRead_DropsClocksKeepsPower()
+    {
+        // A table shorter than the clock offsets (defensive: buffer sized wrong) keeps power.
+        var d = default(PawnIoCpu.Data);
+        Assert.True(PawnIoCpu.TryMapPmTable(0x540104, RaphaelTable().AsSpan(0, 24), ref d));
+        Assert.True(d.HasPower);
+        Assert.False(d.HasClocks);
+    }
+
+    [Fact]
+    public void MapPmTable_OtherRaphaelVersions_RefuseToGuess()
+    {
+        // Only the version verified on the 7800X3D is mapped; sibling AGESA versions arrive via
+        // the community dump flow, never by guessing.
+        Assert.False(PawnIoCpu.KnownPmTableVersion(0x540000));
+        Assert.False(PawnIoCpu.KnownPmTableVersion(0x540105));
+    }
 }

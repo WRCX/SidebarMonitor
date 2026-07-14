@@ -37,6 +37,27 @@ power fields **only when the SDK isn't providing them** (`CpuSdkOk == 0`, i.e. l
 PM_Table version → power quietly off, Tctl still works. `EtwSnapshot.CpuPawnIoOk` is the bitmask
 (bit 0 temp, bit 1 power).
 
+## Empirical PM_Table map — Raphael (desktop Zen 4), version 0x540104 (mapped on a 7800X3D, 2026-07-14)
+
+Method: six DiagBridge captures (idle ×2 → 16-thread all-core ×2 → 1-thread ×2) diffed by load
+response. This is the first DESKTOP layout we map — and the first with the **global frequency
+limit** (the part the SDK cannot provide anywhere):
+
+| Float idx | Field | Evidence |
+|---|---|---|
+| [2]/[3] | **PPT** limit/value (W) | 85.0 fixed; value 35.6 idle → 75.4 all-core |
+| [8]/[9] | **VDD TDC** limit/value (A) | 75.0 fixed; 10 → 48.7 A under load (same slot as the APU header) |
+| [10]/[11] | **THM** limit/value (°C) | 89.0 fixed — the X3D's real Tjmax; value 56 → 85.5 under load |
+| [27]-[34] | per-core freq limits (GHz) | 5.100 fixed ×8 |
+| **[272]** | **Frequency Limit — Global** (GHz) | quantised to 25 MHz steps; sits at exactly **5.050** (the SKU fmax) at true idle, sags to 4.625-4.650 under all-core, 4.800 at 1-thread → published as `LimitMhz` |
+| [274] (≡[35]) | current top core clock (GHz) | continuous twin of max([317..324]) |
+| **[317]-[324]** | **per-core current clocks** (GHz) | converge to ~4.57 all-core; one at ~4.75 under 1-thread → max published as the PawnIO best-clock |
+| [365]-[372] | per-core fmax (GHz) | 5.050 fixed ×8 |
+| [373]-[380] | per-core base (GHz) | 4.198 fixed ×8 |
+
+Only 0x540104 is mapped — sibling Raphael/Dragon Range versions (0x540000-0x540105 etc.) go
+through the community dump flow like everyone else.
+
 ### Multi-family coverage (added right after)
 
 The header layout above is not Phoenix-specific. Cross-checking against the per-version tables

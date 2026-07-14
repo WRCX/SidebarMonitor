@@ -225,6 +225,15 @@ internal sealed class PawnIoCpu : IDisposable
             case 0x5D0008 or 0x5D0009 or 0x5D000B or 0x650005:
                 map = new PmMap(12, 13, 16); return true;
 
+            // Raphael (desktop Zen 4, family 19h model 61h) — mapped empirically on a 7800X3D
+            // (idle / all-core / 1-thread diffing, 2026-07-14; docs/amd-advanced-pawnio.md):
+            // PPT pair [2]/[3] (W), VDD TDC [8]/[9] (A, same slot as the classic APU header),
+            // THM [10]/[11] (89 °C = the X3D's real Tjmax). [272] is the SMU's dynamic global
+            // frequency limit (25 MHz steps; sits at the SKU fmax 5.050 at idle, sags under
+            // all-core load). [317..324] are the eight per-core current clocks (GHz).
+            case 0x540104:
+                map = new PmMap(8, 9, 10, FreqLim: 272, EffFirst: 317, EffCount: 8); return true;
+
             default: map = default; return false;   // unknown layout: never guess offsets
         }
     }

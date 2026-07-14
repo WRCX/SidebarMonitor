@@ -31,13 +31,17 @@ internal static class FirstRunDialog
             cfg.Save();
         }
 
-        // Every launch: the marker the helper reads must reflect the stored consent (covers a
-        // deleted marker, a config copied between machines, or a future settings toggle).
-        ConsentMarker.SetAmdSdk(cfg.AmdEulaAccepted);
-        ConsentMarker.SetFps(cfg.ShowFps);   // gates the helper spawning PresentMon
-        ConsentMarker.SetAmdAdvanced(cfg.AmdAdvanced);   // gates the helper loading PawnIO (Tctl)
-        ConsentMarker.SetIntelSensors(cfg.IntelSensors); // gates the helper loading PawnIO (Intel MSR)
-        ConsentMarker.SetFanPawnIo(cfg.FanPawnIo);       // gates the helper loading PawnIO (EC fan)
+        // Every launch: re-create any marker the stored consent says should exist (covers a deleted
+        // marker or a config copied between machines). CREATE-ONLY on purpose: UiConfig.Load falls
+        // back to ui.json.bak when the main file is briefly unreadable, and a stale backup (or any
+        // degraded load) must never REVOKE a consent the user already gave — with markers now
+        // machine-wide, a destructive sync here wiped every user's opt-ins on one bad read. The
+        // explicit Settings toggles remain the only path that disables a marker.
+        if (cfg.AmdEulaAccepted) ConsentMarker.SetAmdSdk(true);
+        if (cfg.ShowFps) ConsentMarker.SetFps(true);            // gates the helper spawning PresentMon
+        if (cfg.AmdAdvanced) ConsentMarker.SetAmdAdvanced(true);     // gates PawnIO (Tctl/PM_Table)
+        if (cfg.IntelSensors) ConsentMarker.SetIntelSensors(true);   // gates PawnIO (Intel MSR)
+        if (cfg.FanPawnIo) ConsentMarker.SetFanPawnIo(true);         // gates PawnIO (EC fan)
     }
 
     private static void ShowFor(UiConfig cfg)

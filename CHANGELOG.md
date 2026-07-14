@@ -6,6 +6,25 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ## [Unreleased]
 
+### Fixed
+
+- **A stale `ui.json.bak` can no longer wipe the machine's sensor opt-ins.** `UiConfig.Load` falls
+  back to the backup when the main config is briefly unreadable; the UI's startup marker sync then
+  saw stale `false` toggles and DELETED the machine-wide consent markers (helper closed PawnIO /
+  SDK on the next window). The startup sync is now create-only — revoking a consent is exclusively
+  the explicit Settings toggle's job.
+
+### Added
+
+- **Live global frequency limit + real per-core clocks on Raphael (desktop Zen 4)** via PawnIO:
+  PM_Table version **0x540104** mapped empirically on a 7800X3D (idle/all-core/1-thread diffing).
+  The boost line now shows the SMU's dynamic ceiling — `boost 4.62 / 4.65 GHz (límite SMU)` under
+  all-core load, `/ 5.05` at idle — instead of approximating it with the session peak, and "GHz
+  máx" can draw from the table's per-core clocks ([317..324]). Power fields (PPT [2]/[3],
+  TDC [8]/[9], THM [10] = the X3D's real 89 °C Tjmax) are mapped too, for SKUs where the Ryzen
+  Master SDK is absent (Dragon Range laptops report the same family). Other Raphael table
+  versions stay unguessed — the community dump flow covers them.
+
 ## [1.4.4] — 2026-07-14
 
 Multi-user rework: one machine-wide helper serving every Windows session, plus install/startup
