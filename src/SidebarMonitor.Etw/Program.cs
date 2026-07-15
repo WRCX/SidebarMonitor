@@ -135,6 +135,11 @@ internal static class Program
         EcFan? ecFan = null;
         string? ecFanErr = null;
         bool ecFanTried = false;
+        // HP gaming laptops (Victus/OMEN) expose fan RPM via the HP WMI BIOS, not an EC register, so
+        // they get their own source, preferred over the EC path when present.
+        WmiFan? wmiFan = null;
+        string? wmiFanErr = null;
+        bool wmiFanTried = false;
         bool noFan = args.Contains("--no-fan");
         bool forceFan = args.Contains("--force-fan");
         string[] fanModels = DmiModels();
@@ -224,6 +229,7 @@ internal static class Program
         var snapshot = default(EtwSnapshot);
         long published = 0;
         float fanPct = float.NaN;   // last good EC fan duty %; kept across a contended window
+        float fanRpm = float.NaN;   // last good HP WMI CPU fan rpm; kept across a contended window
 
         // Running peak clock per physical core, to derive the best/second-best (highest-boosting)
         // cores. Persisted across launches and never reset: the CPPC preferred cores are fixed, so
@@ -449,28 +455,52 @@ internal static class Program
                 }
             }
 
-            // Laptop fan % via the EC (opt-in). Marker polled each window so the toggle works hot.
+            // Laptop fan (opt-in). Two sources, tried once each and polled hot: HP gaming laptops
+            // (Victus/OMEN) report fan RPM through the HP WMI BIOS — their fan speed isn't mirrored to
+            // an EC register, so the NBFC/EcFan path finds nothing there. Everything else uses the
+            // per-model EC register map. Prefer WMI; only fall back to EC when there is no WMI source.
             if (!noFan)
             {
                 bool wantFan = forceFan || ConsentMarker.FanPawnIoEnabled;
-                if (wantFan && ecFan is null && !ecFanTried)
+                if (wantFan)
                 {
-                    ecFanTried = true;
-                    ecFan = EcFan.TryOpen(fanModels, out ecFanErr);
-                    Console.WriteLine($"Ventilador (EC/PawnIO): {(ecFan is not null ? $"abierto (modelo {ecFan.Model})" : $"no disponible - {ecFanErr}")}");
+                    if (wmiFan is null && !wmiFanTried)
+                    {
+                        wmiFanTried = true;
+                        wmiFan = WmiFan.TryOpen(out wmiFanErr);
+                        Console.WriteLine($"Ventilador (HP WMI): {(wmiFan is not null ? "abierto (RPM por BIOS)" : $"no disponible - {wmiFanErr}")}");
+                    }
+                    if (wmiFan is null && ecFan is null && !ecFanTried)
+                    {
+                        ecFanTried = true;
+                        ecFan = EcFan.TryOpen(fanModels, out ecFanErr);
+                        Console.WriteLine($"Ventilador (EC/PawnIO): {(ecFan is not null ? $"abierto (modelo {ecFan.Model})" : $"no disponible - {ecFanErr}")}");
+                    }
                 }
-                else if (!wantFan && ecFan is not null)
+                else if (ecFan is not null || wmiFan is not null)
                 {
-                    ecFan.Dispose(); ecFan = null; ecFanTried = false; fanPct = float.NaN;
-                    Console.WriteLine("Ventilador (EC/PawnIO): cerrado (opt-out).");
+                    ecFan?.Dispose(); ecFan = null; ecFanTried = false; fanPct = float.NaN;
+                    wmiFan?.Dispose(); wmiFan = null; wmiFanTried = false; fanRpm = float.NaN;
+                    Console.WriteLine("Ventilador: cerrado (opt-out).");
                 }
             }
-            if (ecFan is not null)
+            if (wmiFan is not null)
+            {
+                // HP WMI gives raw rpm; the % is that over the fan curve's top speed, so the UI can
+                // show both ("2700 rpm (47%)") and the existing "%vent" tile works with no UI change.
+                if (wmiFan.TryReadRpm(out int cpuRpm, out int _))
+                {
+                    fanRpm = cpuRpm;                    // keep last good if a window was contended
+                    fanPct = wmiFan.ToPct(cpuRpm);
+                }
+            }
+            else if (ecFan is not null)
             {
                 float p = ecFan.TryReadPct();
                 if (!float.IsNaN(p)) fanPct = p;   // keep last good if this window was contended
             }
             snapshot.CpuFanPct = fanPct;
+            snapshot.CpuFanRpm = fanRpm;
 
             diskTemps.Fill(ref snapshot);
 
@@ -546,6 +576,7 @@ internal static class Program
 
         CorePeakStore.Save(corePeak);
         ecFan?.Dispose();
+        wmiFan?.Dispose();
         intelMsr?.Dispose();
         pawnIo?.Dispose();
         ryzen?.Dispose();

@@ -55,6 +55,9 @@ internal sealed partial class MainWindow : AppBarWindow
     private readonly TextBlock _cpuWatts = Stat();
     private readonly TextBlock _cpuTemp = Stat();
     private readonly TextBlock _cpuFan = Stat();
+    // The fan tile's caption is dynamic: "%vent" for EC-duty models, or "· NNNN rpm" on HP WMI models
+    // where the value carries the % ("47% · 2700 rpm").
+    private readonly TextBlock _cpuFanCap = Theme.Text("%vent", 9, Theme.InkMuted);
     private readonly TextBlock _cpuPct;
     private readonly Sparkline _cpuSpark = new(Theme.SeriesCpu) { FixedMax = 100 };
     private readonly CoreSparkline _cpuCoreSpark = new(height: 48);
@@ -359,8 +362,19 @@ internal sealed partial class MainWindow : AppBarWindow
             _cpuFreq.Text = float.IsNaN(freq) ? "—" : string.Create(ci, $"{freq / 1000:F2}");
             _cpuWatts.Text = float.IsNaN(c.PackagePowerW) ? "—" : string.Create(ci, $"{c.PackagePowerW:F1}");
             _cpuTemp.Text = float.IsNaN(c.TempC) ? "—" : string.Create(ci, $"{c.TempC:F1}");
-            // Fan %, fixed for everyone: EC duty where the model is mapped + opt-in on, "—" otherwise.
-            _cpuFan.Text = float.IsNaN(c.FanPct) ? "—" : string.Create(ci, $"{c.FanPct:F0}");
+            // Fan tile. HP WMI models (Victus/OMEN) carry real rpm, shown as "47% · 2700 rpm" (% is
+            // the readable-at-a-glance value, rpm the detail). EC-duty models show just "%" under the
+            // "%vent" caption. "—" when there's no source.
+            if (!float.IsNaN(c.FanRpm))
+            {
+                _cpuFan.Text = float.IsNaN(c.FanPct) ? string.Create(ci, $"{c.FanRpm:F0}") : string.Create(ci, $"{c.FanPct:F0}%");
+                _cpuFanCap.Text = string.Create(ci, $"· {c.FanRpm:F0} rpm");
+            }
+            else
+            {
+                _cpuFan.Text = float.IsNaN(c.FanPct) ? "—" : string.Create(ci, $"{c.FanPct:F0}");
+                _cpuFanCap.Text = "%vent";
+            }
             // Colour the temperature by how close it is to the SDK's throttle limit (Tjmax/cHTC),
             // and pulse red once it's within a few degrees — you can't miss it about to throttle.
             int tlvl = TempLevel(c.TempC, c.TjMaxC);

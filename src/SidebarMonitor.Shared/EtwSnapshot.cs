@@ -7,7 +7,7 @@ public static class EtwLayout
 {
     /// <summary>'SBME' little-endian.</summary>
     public const uint Signature = 0x454D4253;
-    public const uint Version = 15;
+    public const uint Version = 16;
     /// <summary>Global\ on purpose: there is exactly ONE elevated helper per machine (the NT Kernel
     /// Logger session it owns is single-instance machine-wide), and every user's session must see
     /// it. Creating a Global\ map needs SeCreateGlobalPrivilege — the helper is elevated, so it has
@@ -145,9 +145,15 @@ public struct EtwSnapshot
     /// PPT/TDC/EDC percentages there).</summary>
     public byte CpuThrottleFlags;
 
-    /// <summary>Fan duty % (0..100) from the elevated helper's embedded-controller read (PawnIO +
-    /// the per-model NBFC register map), NaN when unsupported/off. Fills Snapshot.Cpu.FanPct.</summary>
+    /// <summary>Fan duty % (0..100). On HP gaming laptops it's CpuFanRpm over the fan curve's top
+    /// speed; elsewhere it's the elevated helper's embedded-controller read (PawnIO + the per-model
+    /// NBFC register map). NaN when unsupported/off. Fills Snapshot.Cpu.FanPct.</summary>
     public float CpuFanPct;
+
+    /// <summary>CPU fan RPM from the HP WMI BIOS interface (Victus/OMEN gaming laptops, whose fan
+    /// speed is not exposed via an EC register). NaN when the machine has no HP WMI fan source or the
+    /// fan opt-in is off. Preferred over CpuFanPct on HP laptops. Fills Snapshot.Cpu.FanRpm.</summary>
+    public float CpuFanRpm;
 
     /// <summary>Drive temperatures (°C) by physical disk number, from the storage stack (admin).
     /// NaN = unknown. Covers the SATA disks the agent's unelevated NVMe path can't reach, closing

@@ -215,6 +215,7 @@ internal static class Program
         s.NetProcs = e.NetProcs;
         s.Frame = e.Frame;   // game frame-timing (PresentMon), or empty when off/idle
         s.Cpu.FanPct = e.CpuFanPct;   // EC fan duty % (helper); NaN → UI shows "—"
+        s.Cpu.FanRpm = e.CpuFanRpm;   // HP WMI fan RPM (Victus/OMEN); NaN when no HP WMI source
         s.EtwAvailable = true;
 
         // CPU temp and package power come solely from the AMD SDK (via the helper): it works with
@@ -343,7 +344,8 @@ internal static class Program
         cpu.BestCore = cpu.SecondCore = -1;
         cpu.PhysicalCores = 0;
         cpu.ThrottleFlags = 0;
-        cpu.FanPct = float.NaN;   // filled by the helper (EC via PawnIO); "—" until then
+        cpu.FanPct = float.NaN;   // filled by the helper (EC via PawnIO, or HP WMI); "—" until then
+        cpu.FanRpm = float.NaN;   // filled by the helper (HP WMI); NaN → no rpm source
 
         int n = 0;
         foreach (var s in pdh.CpuPerCore())

@@ -10,7 +10,7 @@ public static class SnapshotLayout
     public const uint Signature = 0x4E4D4253;
 
     /// <summary>Bump on any layout change. The reader refuses anything it does not know.</summary>
-    public const uint Version = 25;
+    public const uint Version = 26;
 
     /// <summary>
     /// Local\, not Global\. Creating a Global\ kernel object requires SeCreateGlobalPrivilege,
@@ -98,12 +98,19 @@ public struct CpuInfo
     /// stays 0 and the limiter is derived from the PPT/TDC/EDC percentages instead.</summary>
     public byte ThrottleFlags;
 
-    /// <summary>Fan duty as a percentage (0..100), read from the laptop's embedded controller via
-    /// PawnIO using a per-model register map ported from NoteBook FanControl's config database. NaN
-    /// when the model isn't in the map, the opt-in is off, or PawnIO isn't installed. The UI always
-    /// shows a fan tile, rendering "—" when this is NaN. Community-sourced and best-effort: on an
+    /// <summary>Fan duty as a percentage (0..100). Two sources: on HP gaming laptops (Victus/OMEN)
+    /// it's the WMI-BIOS fan RPM over the fan curve's top speed (see FanRpm); elsewhere it's the
+    /// laptop's embedded controller read via PawnIO using a per-model register map ported from
+    /// NoteBook FanControl's config database. NaN when there is no source (model not in the EC map and
+    /// no HP WMI), the opt-in is off, or PawnIO isn't installed. The UI always shows a fan tile,
+    /// rendering "—" when this is NaN. The EC path is community-sourced and best-effort: on an
     /// unverified model it may read a wrong register — surfaced to the user as such.</summary>
     public float FanPct;
+
+    /// <summary>CPU fan RPM from the HP WMI BIOS (Victus/OMEN gaming laptops). NaN when there is no HP
+    /// WMI fan source or the opt-in is off. On HP laptops this is the real fan reading (the EC/NBFC
+    /// FanPct path finds nothing there); the UI prefers RPM over the FanPct duty when present.</summary>
+    public float FanRpm;
 
     public CoreUsageArray CoreUsagePct;
 }
