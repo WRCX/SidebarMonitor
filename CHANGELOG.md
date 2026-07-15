@@ -6,6 +6,25 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ## [Unreleased]
 
+## [1.4.8] — 2026-07-15
+
+### Added
+
+- **Laptop fan reading on HP gaming laptops (Victus/OMEN) via the HP WMI BIOS.** On these machines the
+  fan speed isn't mirrored to an EC register, so the NBFC/`EcFan` map found nothing and the fan tile
+  stayed on "—". A new read-only WMI reader (`WmiFan`) reads the live rpm (query `0x2D`) and the fan
+  curve's top speed (query `0x2F`) for a duty %, so the CPU fan tile shows **"47% · 2700 rpm"** on HP
+  gaming laptops (the % also feeds the existing "%vent" tile). No fan SET query is ever issued, so fan
+  state is never changed; degrades to the EC path on non-HP machines. Verified on a Victus 16-s0xxx
+  (board 8BD4). Contracts bumped: `Snapshot` v26, `EtwSnapshot` v16 (`CpuFanRpm`).
+
+### Changed
+
+- **Configurable GPU sensor sampling (`--gpu-every`)** so the agent no longer wakes a sleeping dGPU
+  every tick. NVML/ADLX `Fill` (temp/power/clocks/VRAM) wakes an Optimus dGPU (~12-18 ms/tick, spikes
+  to ~366 ms); it now samples every Nth tick (Settings → Refresh → "GPU sensors", default 2 s), while
+  the cheap PDH GPU-Engine load attribution keeps running every tick so the load graph stays smooth.
+
 ## [1.4.7] — 2026-07-14
 
 Panel interaction fixes: resizing the sidebar no longer breaks the right-click menu or paints
