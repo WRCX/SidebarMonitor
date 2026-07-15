@@ -17,6 +17,14 @@ All notable changes to SidebarMonitor are documented here. The format is based o
   gaming laptops (the % also feeds the existing "%vent" tile). No fan SET query is ever issued, so fan
   state is never changed; degrades to the EC path on non-HP machines. Verified on a Victus 16-s0xxx
   (board 8BD4). Contracts bumped: `Snapshot` v26, `EtwSnapshot` v16 (`CpuFanRpm`).
+- **Per-core CPU temperatures on Ryzen mobile APUs (Phoenix)** via the SMU PM_Table. Per-core temps
+  come from the AMD Ryzen Master SDK, which can't read mobile APUs — so laptops showed no per-core
+  temperature. The Phoenix `0x4C0007` PM_Table exposes them at floats `[529..536]` (found empirically
+  on a 7840HS: eight consecutive °C values that rise with load and converge with the package Tctl; not
+  mapped by any public tool — `ryzen_monitor_ng`/`RyzenAdj` lack `0x4C0007`). The helper now fills the
+  per-core temperature rows from there when the SDK isn't present. Kept to the verified `0x4C0007`
+  only — its siblings stay unmapped rather than guessed. Enable via Settings → CPU graph → "Show
+  temperature". No contract change (reuses `CpuCoreTempsC`).
 
 ### Changed
 

@@ -277,7 +277,7 @@ internal sealed class SettingsWindow : Window
 
         p.Children.Add(SubHeader(Loc.T("Filas por núcleo")));
         p.Children.Add(Toggle(Loc.T("Mostrar frecuencia"), null, () => _cfg.ShowCoreFreq, v => { _cfg.ShowCoreFreq = v; _host.ApplyLive("cpugraph"); }));
-        p.Children.Add(Toggle(Loc.T("Mostrar temperatura"), Loc.T("Del SDK de AMD; colorea hacia rojo cerca del Tjmax."), () => _cfg.ShowCoreTemp, v => { _cfg.ShowCoreTemp = v; _host.ApplyLive("cpugraph"); }));
+        p.Children.Add(Toggle(Loc.T("Mostrar temperatura"), Loc.T("Del SDK de AMD, o del PM_Table del SMU (PawnIO) en APUs móviles; colorea hacia rojo cerca del Tjmax."), () => _cfg.ShowCoreTemp, v => { _cfg.ShowCoreTemp = v; _host.ApplyLive("cpugraph"); }));
         p.Children.Add(Choice(Loc.T("Posición de la métrica"), Loc.T("Dónde va la frecuencia/temperatura en la fila."),
             [(Loc.T("Dentro"), 0), (Loc.T("Al final"), 1), (Loc.T("Fuera"), 2)], () => _cfg.CoreMetricPos,
             v => { _cfg.CoreMetricPos = v; _host.ApplyLive("cpugraph"); }));

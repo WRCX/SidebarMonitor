@@ -169,8 +169,8 @@ internal static class LocStrings
         ["Filas por núcleo"] = "Per-core rows",
         ["Mostrar frecuencia"] = "Show frequency",
         ["Mostrar temperatura"] = "Show temperature",
-        ["Del SDK de AMD; colorea hacia rojo cerca del Tjmax."]
-            = "From the AMD SDK; shades toward red near Tjmax.",
+        ["Del SDK de AMD, o del PM_Table del SMU (PawnIO) en APUs móviles; colorea hacia rojo cerca del Tjmax."]
+            = "From the AMD SDK, or the SMU PM_Table (PawnIO) on mobile APUs; shades toward red near Tjmax.",
         ["Posición de la métrica"] = "Metric position",
         ["Dónde va la frecuencia/temperatura en la fila."]
             = "Where the frequency/temperature goes in the row.",

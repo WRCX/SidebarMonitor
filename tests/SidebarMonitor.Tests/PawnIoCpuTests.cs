@@ -74,6 +74,35 @@ public class PawnIoCpuTests
     }
 
     [Fact]
+    public void GetMap_Phoenix0x4C0007_MapsPerCoreTempsAt529()
+    {
+        // Empirically verified on a 7840HS: per-core temps are 8 consecutive floats at [529..536].
+        Assert.True(PawnIoCpu.TryGetMap(0x4C0007, out var m));
+        Assert.Equal(529, m.CoreTempFirst);
+        Assert.Equal(8, m.CoreTempCount);
+    }
+
+    [Fact]
+    public void GetMap_PhoenixSibling_HasNoPerCoreTempOffset()
+    {
+        // The [529..536] offset is verified ONLY on 0x4C0007; siblings must not inherit it.
+        Assert.True(PawnIoCpu.TryGetMap(0x4C0008, out var m));
+        Assert.Equal(-1, m.CoreTempFirst);
+    }
+
+    [Fact]
+    public void MapPmTable_Phoenix_FillsPerCoreTemps()
+    {
+        var t = new float[537];
+        t[2] = 45f; t[3] = 20f;   // minimal valid power header so mapping proceeds
+        float[] cores = [61f, 63f, 62f, 64f, 60f, 65f, 62f, 63f];
+        for (int i = 0; i < 8; i++) t[529 + i] = cores[i];
+        var d = default(PawnIoCpu.Data);
+        Assert.True(PawnIoCpu.TryMapPmTable(0x4C0007, t, ref d));
+        Assert.Equal(cores, d.CoreTempsC);
+    }
+
+    [Fact]
     public void MapPmTable_UnknownVersion_RefusesToGuess()
     {
         // 0x4C0005 exists in the wild (early Phoenix AGESA) but RyzenAdj has no offsets for it.

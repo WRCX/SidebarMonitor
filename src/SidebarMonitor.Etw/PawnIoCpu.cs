@@ -38,6 +38,12 @@ internal sealed class PawnIoCpu : IDisposable
         public bool HasClocks;
         public float LimitMhz;    // SMU's dynamic global frequency limit; 0 = not in this layout
         public float BestEffMhz;  // highest per-core effective clock; 0 = not in this layout
+
+        /// <summary>Per-physical-core temperatures (°C) from the PM_Table, when this version maps
+        /// them (parked/failed reads are NaN); null otherwise. On mobile APUs — which the Ryzen
+        /// Master SDK can't read — this is the ONLY per-core temperature source. Verified empirically
+        /// on Phoenix 0x4C0007 (floats [529..536] on a 7840HS).</summary>
+        public float[]? CoreTempsC;
     }
 
     // PawnIOLib.dll lives in PawnIO's install dir (not on PATH); a resolver maps the import to the
@@ -197,10 +203,12 @@ internal sealed class PawnIoCpu : IDisposable
     /// <summary>Per-version offset map. Power offsets follow the APU header convention (PPT pair at
     /// [2]/[3]); -1 = the layout has no (trustworthy) slot for that field. Clock offsets are -1
     /// until a version's dump identifies them (values in GHz in every layout seen so far).</summary>
-    internal readonly record struct PmMap(int TdcL, int TdcV, int ThmL, int FreqLim = -1, int EffFirst = -1, int EffCount = 0)
+    internal readonly record struct PmMap(int TdcL, int TdcV, int ThmL, int FreqLim = -1, int EffFirst = -1, int EffCount = 0, int CoreTempFirst = -1, int CoreTempCount = 0)
     {
         /// <summary>Floats the per-window read must span to cover every mapped offset.</summary>
-        public int FloatsNeeded => Math.Max(Math.Max(PmFloats, FreqLim + 1), EffFirst >= 0 ? EffFirst + EffCount : 0);
+        public int FloatsNeeded => Math.Max(
+            Math.Max(Math.Max(PmFloats, FreqLim + 1), EffFirst >= 0 ? EffFirst + EffCount : 0),
+            CoreTempFirst >= 0 ? CoreTempFirst + CoreTempCount : 0);
     }
 
     internal static bool TryGetMap(ulong version, out PmMap map)
@@ -213,12 +221,21 @@ internal sealed class PawnIoCpu : IDisposable
             case 0x1E0001 or 0x1E0002 or 0x1E0003 or 0x1E0004 or 0x1E0005 or 0x1E000A or 0x1E0101:
                 map = new PmMap(6, 7, -1); return true;
 
+            // Phoenix 0x4C0007: same classic-APU power header as its siblings, PLUS per-core
+            // temperatures verified empirically on a 7840HS at floats [529..536] — eight consecutive
+            // °C values that rise with load and converge with the package Tctl (idle/load diffing,
+            // 2026-07-15). Not mapped by any public tool (ryzen_monitor_ng/RyzenAdj lack 0x4C0007);
+            // the offset is kept to THIS verified version only, never guessed onto its siblings.
+            case 0x4C0007:
+                map = new PmMap(8, 9, 16, CoreTempFirst: 529, CoreTempCount: 8); return true;
+
             // The classic APU header: Renoir/Lucienne (0x37xxxx), Cezanne (0x40xxxx),
-            // Rembrandt (0x45xxxx), Phoenix/Hawk Point (0x4C0006-9; 0x4C0007 verified live).
+            // Rembrandt (0x45xxxx), other Phoenix / Hawk Point (0x4C0006/8/9). Per-core temp offset
+            // unverified on these, so it stays unmapped.
             case >= 0x370000 and <= 0x370005:
             case >= 0x400001 and <= 0x400005:
             case 0x450004 or 0x450005:
-            case >= 0x4C0006 and <= 0x4C0009:
+            case 0x4C0006 or 0x4C0008 or 0x4C0009:
                 map = new PmMap(8, 9, 16); return true;
 
             // Strix Point / Krackan Point: the TDC block moved down.
@@ -273,6 +290,21 @@ internal sealed class PawnIoCpu : IDisposable
                 d.HasClocks = true;
                 d.BestEffMhz = best * 1000f;
             }
+        }
+
+        // Per-core temperatures, where this layout maps them (mobile APUs the SDK can't read).
+        // Plausibility-gate each core (°C) so a garbled read never publishes; a parked idle core
+        // reads low but valid. NaN marks a core whose slot didn't read as a temperature this window.
+        if (m.CoreTempFirst >= 0 && m.CoreTempFirst + m.CoreTempCount <= t.Length)
+        {
+            var temps = new float[m.CoreTempCount];
+            int ok = 0;
+            for (int i = 0; i < m.CoreTempCount; i++)
+            {
+                float v = t[m.CoreTempFirst + i];
+                if (v is > 5f and < 115f) { temps[i] = v; ok++; } else temps[i] = float.NaN;
+            }
+            if (ok > 0) d.CoreTempsC = temps;
         }
         return true;
     }

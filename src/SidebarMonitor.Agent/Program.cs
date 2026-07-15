@@ -283,6 +283,19 @@ internal static class Program
             if (e.CpuLimitMhz > 0) s.Cpu.LimitMhz = e.CpuLimitMhz;
             if (e.CpuBestFreqMhz > 0) s.Cpu.FreqBestMhz = Math.Max(s.Cpu.FreqBestMhz, e.CpuBestFreqMhz);
         }
+        // Per-core temps from PawnIO's PM_Table (mobile APUs, no SDK). Expand physical→logical like
+        // the SDK path so both SMT siblings share their physical core's temperature.
+        if ((e.CpuPawnIoOk & 8) != 0)
+        {
+            s.Cpu.PhysicalCores = e.CpuPhysicalCores;
+            int phys = e.CpuPhysicalCores;
+            int tpc = phys > 0 ? Math.Max(1, s.Cpu.CoreCount / phys) : 1;
+            for (int i = 0; i < s.Cpu.CoreCount && i < SnapshotLayout.MaxCores; i++)
+            {
+                int p = Math.Min(15, phys > 0 ? Math.Min(phys - 1, i / tpc) : i);
+                s.Cpu.CoreTempC[i] = e.CpuCoreTempsC[p];
+            }
+        }
 
         // Intel MSR path (no SDK block runs on Intel): temp + Tjmax + per-LOGICAL-core temps (bit 0),
         // RAPL package power (bit 1). The temps map 1:1 to the logical rows — no physical→logical

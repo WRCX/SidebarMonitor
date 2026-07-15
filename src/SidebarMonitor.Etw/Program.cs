@@ -397,6 +397,16 @@ internal static class Program
                     if (pawnData.BestEffMhz > snapshot.CpuBestFreqMhz)
                         snapshot.CpuBestFreqMhz = pawnData.BestEffMhz;
                 }
+                // Per-core temps from the PM_Table, only where the SDK isn't (mobile APUs). Fills the
+                // 16-wide CpuCoreTempsC + CpuPhysicalCores so the agent's physical→logical expansion
+                // (same as the SDK path) lights up the per-core temperature rows on laptops too.
+                if (pawnData.CoreTempsC is { Length: > 0 } cts && snapshot.CpuSdkOk == 0)
+                {
+                    snapshot.CpuPawnIoOk |= 8;
+                    int n = Math.Min(cts.Length, 16);
+                    for (int i = 0; i < n; i++) snapshot.CpuCoreTempsC[i] = cts[i];
+                    snapshot.CpuPhysicalCores = n;
+                }
             }
 
             // Intel CPU sensors (opt-in): per-core temp + RAPL package power. The marker is polled
