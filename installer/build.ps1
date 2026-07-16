@@ -25,6 +25,14 @@ $root  = Split-Path -Parent $here
 $stage = Join-Path $here 'stage'
 $out   = Join-Path $here 'out'
 
+# The signed PawnIO module blobs that MUST ride in the MSI. They are gitignored + fetched
+# (native/PawnIO/fetch.ps1) and copied to the helper output only under Condition="Exists" in
+# SidebarMonitor.Etw.csproj, so a partial fetch silently drops one and the MSI ships without it (a
+# missing LpcACPIEC.bin = no laptop fan %). These stay in BOTH the full and -Lite variants (they are
+# not AMD's redistributables). Asserted below: present at the source before publish, and in the stage
+# that WiX harvests.
+$pawnModules = 'RyzenSMU.bin', 'IntelMSR.bin', 'LpcACPIEC.bin'
+
 # The install path is fixed (the MSI does not expose a directory picker), so the launcher and the
 # scheduled task can hardcode it.
 $installDir = Join-Path ${env:ProgramFiles} 'SidebarMonitor'
@@ -36,6 +44,15 @@ $env:PATH = "$env:USERPROFILE\.dotnet\tools;$env:PATH"   # wix CLI
 
 if (-not $SkipPublish) {
     Write-Host '== Publishing the three apps (self-contained) into stage ==' -ForegroundColor Cyan
+
+    # Fail early if fetch.ps1 didn't land every PawnIO module: the csproj Condition="Exists" would
+    # skip the missing one WITHOUT error and the MSI would silently ship without it.
+    $srcDir = Join-Path $root 'native\PawnIO'
+    $missingSrc = $pawnModules | Where-Object { -not (Test-Path (Join-Path $srcDir $_)) }
+    if ($missingSrc) {
+        throw "PawnIO module(s) missing from native\PawnIO: $($missingSrc -join ', '). Run native\PawnIO\fetch.ps1 first."
+    }
+
     if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
     New-Item -ItemType Directory -Force $stage | Out-Null
 
@@ -165,6 +182,13 @@ if ($Lite) {
     foreach ($f in 'Platform.dll','Device.dll','AMDRyzenMasterDriver.sys','AMDRyzenMasterDriver.inf','AMDRyzenMasterDriver.cat') {
         Remove-Item (Join-Path $stage $f) -Force -ErrorAction SilentlyContinue
     }
+}
+
+# Last line of defence: whatever WiX is about to harvest from $stage MUST carry every PawnIO module.
+# Catches a silently-dropped blob even on a -SkipPublish run over a stale stage.
+$missingStage = $pawnModules | Where-Object { -not (Test-Path (Join-Path $stage $_)) }
+if ($missingStage) {
+    throw "PawnIO module(s) missing from the stage folder: $($missingStage -join ', '). The MSI would ship without them; aborting."
 }
 
 Write-Host '== Building MSI with WiX ==' -ForegroundColor Cyan
