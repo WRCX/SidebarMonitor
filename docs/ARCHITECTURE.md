@@ -372,8 +372,11 @@ de HWiNFO**. Verificado con HWiNFO muerto: 43 W / 77 °C / 4.84 GHz, cambiando e
 **HWiNFO se ha eliminado por completo.** No queda ni fallback: `HwiSensors` y el proyecto
 `HwiProbe` están borrados. CPU temp/potencia del SDK de AMD, temp NVMe del agente, temp SATA del
 helper — todo propio. Con el helper elevado corriendo (que el instalador arranca solo), la app es
-100 % standalone. Cuando el helper no corre, la barra de estado dice **«sin helper (lanza
-SidebarMonitor.Etw)»** y CPU temp/potencia salen como `—`; el resto lo cubre el agente sin elevar.
+100 % standalone. Cuando el helper no corre, la barra de estado dice **«sin helper (reintentando…)»**
+y CPU temp/potencia salen como `—`; el resto lo cubre el agente sin elevar. No hay que lanzarlo a
+mano: la tarea programada reintenta cada minuto (`IgnoreNew` la hace gratis si ya corre), que es la
+única vía sin UAC — la tarea la registra SYSTEM y una UI sin elevar recibe «acceso denegado» si
+intenta `schtasks /Run`.
 El antiguo problema del límite de 12 h y el overhead de tener HWiNFO midiendo todo desaparecieron
 con él.
 

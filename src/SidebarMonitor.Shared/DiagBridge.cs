@@ -70,8 +70,29 @@ public static class DiagBridge
         catch { /* non-fatal: the caller falls back to force-killing */ }
     }
 
+    /// <summary>
+    /// Helper: throw away a stop request left over from before we existed. Call this ONCE at startup,
+    /// and only after winning the single-writer mutex — at that point we are provably the only helper,
+    /// so anything still here is orphaned and there is no other instance whose request we could be
+    /// stealing.
+    /// </summary>
+    /// <remarks>
+    /// The installer writes the marker unconditionally: it cannot know whether a helper is live. When
+    /// none is (a clean install, or an upgrade where `schtasks /End` already killed it), nobody
+    /// consumes the request — and then RunHelperNow starts the new helper, which read its own
+    /// installer's stop request and exited within a second. That is why the helper used to appear only
+    /// at the next logon. Discarding once at startup draws the line by *identity* rather than by
+    /// timestamp: a request that predates the only running helper cannot have been meant for it.
+    /// </remarks>
+    public static void DiscardStopRequest()
+    {
+        try { File.Delete(StopPath); }   // Delete on a missing file is a no-op
+        catch { /* best effort: a leftover only costs us one restart */ }
+    }
+
     /// <summary>Helper: a shutdown was requested. Consumes the request so a stale file can't kill
-    /// the next helper the scheduled task starts.</summary>
+    /// the next helper the scheduled task starts. Pairs with <see cref="DiscardStopRequest"/>, which
+    /// clears anything predating us — so by here, a marker can only be a request meant for us.</summary>
     public static bool StopRequested()
     {
         try

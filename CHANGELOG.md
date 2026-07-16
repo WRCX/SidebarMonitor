@@ -6,6 +6,40 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ## [Unreleased]
 
+### Fixed
+
+- **The in-app update never installed anything — it just opened the browser.** The updater looked for a
+  release asset named exactly `SidebarMonitor.msi` (what CI produces), but every release cut by hand
+  since 1.4.4 shipped as `SidebarMonitor-<version>.msi`. No asset matched, so `AssetUrl` stayed null and
+  the apply path fell through to its "not an MSI install" fallback: the GitHub page opened and the user
+  downloaded and ran the MSI themselves. Asset matching now accepts an optional `-<version>` suffix
+  (`Updater.IsFlavorAsset`), while still refusing to feed a lite install the full MSI or vice versa. A
+  `Category=Integration` test now asks the real latest release whether an asset matches, which is the
+  only thing that could have caught this — the unit tests were pinning names we made up.
+- **The ETW helper died seconds after the MSI installed it, and only came back at the next logon.** The
+  installer writes a `helper-stop` marker to ask a running helper to quit cleanly, but nothing consumes
+  it when no helper is live (a clean install, or an upgrade where `schtasks /End` already killed it).
+  `RunHelperNow` then started the new helper, which read its own installer's stop request and exited.
+  The helper now discards any leftover request once at startup, right after it wins the single-writer
+  mutex — the point at which it is provably the only helper, so anything still there cannot have been
+  meant for it (and no other instance's request can be stolen).
+- **A helper that died in the session you were already in stayed dead.** Its triggers only covered
+  *arriving* at a session (logon, unlock, reconnect), and nothing could revive it in place: the task is
+  registered by SYSTEM, so an unelevated UI asking for `schtasks /Run` gets "access denied". The task now
+  also repeats every minute, which `MultipleInstancesPolicy=IgnoreNew` makes free while the helper is
+  healthy. The status line says "sin helper (reintentando…)" instead of telling you to launch it by hand.
+
+### Changed
+
+- **Pressing "Update" now runs the whole way through** — download, install, relaunch — instead of opening
+  a confirmation box first. One UAC prompt from msiexec remains: a per-machine MSI cannot install without
+  it. The warning naming other logged-in users is kept, since the update closes *their* sidebar too.
+- **The automatic update check now actually repeats daily**, as the setting has always claimed. It only
+  ever ran once, at window load, so a sidebar left running for weeks never checked again.
+- **The installer's finish page offers to start SidebarMonitor and to see what's new**, both ticked by
+  default. A silent install (`/qn`, the automatic updater's path) skips the whole UI sequence and so
+  shows neither.
+
 ## [1.4.8] — 2026-07-15
 
 ### Added

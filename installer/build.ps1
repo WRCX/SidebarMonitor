@@ -17,6 +17,10 @@ param(
     [switch]$SkipPublish
 )
 $ErrorActionPreference = 'Stop'
+# The release this build corresponds to, for the finish page's "see what's new". Uses the version
+# exactly as passed, which is the tag ("1.4.8" from v1.4.8) — read it before the 4-part padding
+# below rewrites it into something no tag matches.
+$releaseUrl = "https://github.com/WRCX/SidebarMonitor/releases/tag/v$Version"
 # Normalise to a 4-part MSI ProductVersion (x.y.z.w). A tag like "1.3.0" becomes "1.3.0.0".
 while (($Version -split '\.').Count -lt 4) { $Version += '.0' }
 
@@ -102,6 +106,23 @@ $taskXml = Join-Path $stage 'helper-task.xml'
     <SessionStateChangeTrigger><Enabled>true</Enabled><StateChange>ConsoleConnect</StateChange></SessionStateChangeTrigger>
     <SessionStateChangeTrigger><Enabled>true</Enabled><StateChange>RemoteConnect</StateChange></SessionStateChangeTrigger>
     <SessionStateChangeTrigger><Enabled>true</Enabled><StateChange>SessionUnlock</StateChange></SessionStateChangeTrigger>
+    <!-- Watchdog. The events above only cover ARRIVING at a session, so a helper that died in a
+         session you never left (it crashed, or you killed it) stayed dead until the next logon —
+         and nothing else could revive it: the task is registered by SYSTEM, and an unelevated UI
+         asking for `schtasks /Run` gets "access denied", so the app cannot start its own helper
+         without a UAC prompt. A minute of repetition is what the sidebar has instead. This is free
+         when the helper is healthy: IgnoreNew (above) means the scheduler drops the run without
+         launching anything, which is also why the interval can be this short.
+         The start boundary is a fixed date in the past so the first repetition is due immediately
+         (with StartWhenAvailable, right after install) rather than at some future o'clock. -->
+    <TimeTrigger>
+      <Repetition>
+        <Interval>PT1M</Interval>
+        <StopAtDurationEnd>false</StopAtDurationEnd>
+      </Repetition>
+      <StartBoundary>2020-01-01T00:00:00</StartBoundary>
+      <Enabled>true</Enabled>
+    </TimeTrigger>
   </Triggers>
   <Principals>
     <Principal id="Author">
@@ -199,6 +220,7 @@ else       { $msi = Join-Path $out 'SidebarMonitor.msi';      $flavor = 'full' }
 & wix build (Join-Path $here 'SidebarMonitor.wxs') `
     -ext WixToolset.UI.wixext `
     -d "Stage=$stage" -d "ProjectRoot=$root" -d "Version=$Version" -d "Flavor=$flavor" `
+    -d "ReleaseUrl=$releaseUrl" `
     -arch x64 -o $msi
 if ($LASTEXITCODE) { throw 'wix build failed' }
 

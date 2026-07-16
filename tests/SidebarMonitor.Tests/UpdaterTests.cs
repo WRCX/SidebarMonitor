@@ -48,6 +48,29 @@ public class UpdaterTests
     public void IsTrustedGitHubUrl_only_accepts_https_github(string? url, bool expected)
         => Assert.Equal(expected, Updater.IsTrustedGitHubUrl(url));
 
+    // Every release through 1.4.8 shipped its MSI as "SidebarMonitor-<version>.msi", while the updater
+    // only ever looked for the bare "SidebarMonitor.msi" that CI produces. No asset matched, so the
+    // apply path fell through to opening the browser and the in-app update never actually installed
+    // anything. Both spellings have to match — and the flavours must not bleed into each other.
+    [Theory]
+    [InlineData("SidebarMonitor.msi", "full", true)]
+    [InlineData("SidebarMonitor-1.4.8.msi", "full", true)]        // released by hand
+    [InlineData("SidebarMonitor-1.4.8.0.msi", "full", true)]      // 4-part version
+    [InlineData("sidebarmonitor-1.4.8.MSI", "full", true)]        // case-insensitive
+    [InlineData("SidebarMonitor-lite.msi", "full", false)]        // lite MSI must not feed a full install
+    [InlineData("SidebarMonitor-lite-1.4.8.msi", "full", false)]
+    [InlineData("SidebarMonitor-lite.msi", "lite", true)]
+    [InlineData("SidebarMonitor-lite-1.4.8.msi", "lite", true)]
+    [InlineData("SidebarMonitor.msi", "lite", false)]             // full MSI must not feed a lite install
+    [InlineData("SidebarMonitor-1.4.8.msi", "lite", false)]
+    [InlineData("SidebarMonitor.msi.sig", "full", false)]         // not an MSI
+    [InlineData("SidebarMonitor-1.4.8.zip", "full", false)]
+    [InlineData("SomethingElse.msi", "full", false)]
+    [InlineData("SidebarMonitor-nightly.msi", "full", false)]     // "-nightly" is not a version
+    [InlineData(null, "full", false)]
+    public void IsFlavorAsset_matches_both_bare_and_versioned_names(string? name, string flavor, bool expected)
+        => Assert.Equal(expected, Updater.IsFlavorAsset(name, flavor));
+
     [Theory]
     [InlineData(1, 2, 3, "v1.2.3")]
     [InlineData(1, 2, 0, "v1.2.0")]

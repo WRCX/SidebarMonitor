@@ -126,19 +126,39 @@ internal static class Updater
             string notes = root.TryGetProperty("body", out var b) ? b.GetString() ?? "" : "";
             string html = root.TryGetProperty("html_url", out var h) ? h.GetString() ?? "" : "";
 
-            string wanted = flavor == "lite" ? "SidebarMonitor-lite.msi" : "SidebarMonitor.msi";
+            // First match wins: a release can legitimately carry both spellings (CI's "SidebarMonitor.msi"
+            // and a hand-uploaded "SidebarMonitor-1.4.9.msi"), and they are the same bits — but without
+            // stopping, the one we'd use is whichever GitHub happened to list last.
             string? asset = null;
             if (root.TryGetProperty("assets", out var assets))
                 foreach (var a in assets.EnumerateArray())
-                    if (string.Equals(a.GetProperty("name").GetString(), wanted, StringComparison.OrdinalIgnoreCase))
+                    if (IsFlavorAsset(a.GetProperty("name").GetString(), flavor))
                     {
                         string? u = a.GetProperty("browser_download_url").GetString();
-                        if (IsTrustedGitHubUrl(u)) asset = u;   // reject non-HTTPS / non-GitHub hosts
+                        if (IsTrustedGitHubUrl(u)) { asset = u; break; }   // reject non-HTTPS / non-GitHub hosts
                     }
 
             return new Release(ver, notes, html, asset);
         }
         catch { return null; }
+    }
+
+    /// <summary>
+    /// True if a release asset is the MSI for <paramref name="flavor"/>. The name carries an OPTIONAL
+    /// trailing "-&lt;version&gt;": CI names it "SidebarMonitor.msi", while releases cut by hand have
+    /// shipped as "SidebarMonitor-1.4.8.msi". Both must match, or the updater finds no asset and falls
+    /// back to opening the browser — which is what every release up to 1.4.8 actually did. The two
+    /// flavours must never cross-match: a "lite" install may not be handed the full MSI.
+    /// </summary>
+    internal static bool IsFlavorAsset(string? name, string flavor)
+    {
+        if (name is null || !name.EndsWith(".msi", StringComparison.OrdinalIgnoreCase)) return false;
+        string stem = name[..^4];
+        int dash = stem.LastIndexOf('-');
+        // Only a parseable version is stripped, so "-lite" survives and stays part of the flavour.
+        if (dash > 0 && Version.TryParse(stem[(dash + 1)..], out _)) stem = stem[..dash];
+        string wanted = flavor == "lite" ? "SidebarMonitor-lite" : "SidebarMonitor";
+        return string.Equals(stem, wanted, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Compares major.minor.build only (revision is ignored; AssemblyVersion is pinned).</summary>

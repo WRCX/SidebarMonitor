@@ -42,11 +42,11 @@ internal static class LocStrings
         ["GHz máx"] = "GHz max",
         ["agente desfasado"] = "agent outdated",
         ["agente parado ({0:F0} s)"] = "agent stopped ({0:F0} s)",
-        ["sin helper (lanza SidebarMonitor.Etw)"] = "no helper (launch SidebarMonitor.Etw)",
+        ["sin helper (reintentando…)"] = "no helper (retrying…)",
         [" (mejor núcleo)"] = " (best core)",
         [" (límite SMU)"] = " (SMU limit)",
-        ["Hay otros usuarios con la sesión iniciada en este PC: {0}.\n\nSidebarMonitor se instala por equipo, así que la actualización afecta a todos: su barra se cerrará y volverá al reconectar o desbloquear su sesión (o al iniciar sesión de nuevo).\n\n"]
-            = "Other users are logged in on this PC: {0}.\n\nSidebarMonitor is installed per machine, so updating affects everyone: their sidebar will close and come back when they reconnect or unlock their session (or log in again).\n\n",
+        ["Hay otros usuarios con la sesión iniciada en este PC: {0}.\n\nSidebarMonitor se instala por equipo, así que la actualización afecta a todos: su barra se cerrará y volverá al reconectar o desbloquear su sesión (o al iniciar sesión de nuevo).\n\n¿Actualizar a {1} de todas formas?"]
+            = "Other users are logged in on this PC: {0}.\n\nSidebarMonitor is installed per machine, so updating affects everyone: their sidebar will close and come back when they reconnect or unlock their session (or log in again).\n\nUpdate to {1} anyway?",
         ["⚠ throttle térmico"] = "⚠ thermal throttle",
         ["térm {0:F0}%"] = "therm {0:F0}%",
         ["sin interfaz activa"] = "no active interface",
@@ -304,8 +304,6 @@ internal static class LocStrings
         ["Instalando {0} automáticamente…"] = "Installing {0} automatically…",
         ["Actualizando a {0}…"] = "Updating to {0}…",
         ["No se pudo actualizar automáticamente."] = "Automatic update failed.",
-        ["Se descargará e instalará {0}.\n\nSe conserva toda tu configuración (panel, ajustes, colocación, historial) — no se pierde nada. El panel se cerrará y se volverá a abrir solo, ya en la versión nueva.\n\n¿Actualizar ahora?"]
-            = "{0} will be downloaded and installed.\n\nAll your settings are kept (panel, options, placement, history) — nothing is lost. The panel will close and reopen by itself on the new version.\n\nUpdate now?",
         ["Descargando {0}…"] = "Downloading {0}…",
         ["Descargando… {0}%"] = "Downloading… {0}%",
         ["Instalando…"] = "Installing…",

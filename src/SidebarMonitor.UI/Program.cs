@@ -157,7 +157,7 @@ internal static class Program
 
         // Opt-in update check (no-op unless the user enabled it); skip throwaway/timed runs.
         if (seconds == 0 && !cfg.Ephemeral)
-            win.Loaded += (_, _) => win.RunUpdateCheck(false);
+            win.Loaded += (_, _) => win.StartUpdateWatch();
 
         win.Show();
         app.Run();

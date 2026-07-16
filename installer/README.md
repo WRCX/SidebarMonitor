@@ -66,6 +66,28 @@ msiexec /x installer\out\SidebarMonitor.msi        # uninstall
 msiexec /i installer\out\SidebarMonitor.msi /qn /l*v install.log   # silent + verbose log
 ```
 
+## Naming the release asset
+
+The in-app updater finds its download by **name**, so what you attach to the GitHub Release is part of
+the contract, not cosmetic. Accepted (see `Updater.IsFlavorAsset`):
+
+| Flavour | Accepted asset names                                  |
+|---------|-------------------------------------------------------|
+| full    | `SidebarMonitor.msi` or `SidebarMonitor-1.4.8.msi`     |
+| lite    | `SidebarMonitor-lite.msi` or `SidebarMonitor-lite-1.4.8.msi` |
+
+Only a parseable version may follow the name. Anything else (`SidebarMonitor-final.msi`,
+`SidebarMonitor_1.4.8.msi`) matches nothing, and the failure is **silent**: the updater finds no asset
+and quietly opens the release page in the browser instead of installing. That is exactly how every
+release from 1.4.4 to 1.4.8 shipped with a dead auto-update without anyone noticing.
+
+`tests/SidebarMonitor.Tests/UpdaterIntegrationTests.cs` checks the real latest release for a matching
+asset. After publishing, run it:
+
+```powershell
+dotnet test --filter Category=Integration
+```
+
 ## winget
 
 `installer/winget/` holds the manifest (schema 1.6). Before submitting to

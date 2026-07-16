@@ -155,6 +155,19 @@ $taskXml = @"
     <SessionStateChangeTrigger><Enabled>true</Enabled><StateChange>ConsoleConnect</StateChange></SessionStateChangeTrigger>
     <SessionStateChangeTrigger><Enabled>true</Enabled><StateChange>RemoteConnect</StateChange></SessionStateChangeTrigger>
     <SessionStateChangeTrigger><Enabled>true</Enabled><StateChange>SessionUnlock</StateChange></SessionStateChangeTrigger>
+    <!-- Watchdog. The triggers above only cover ARRIVING at a session, so a helper that died in the
+         session you never left (it crashed, or you killed it) stayed dead until the next logon. With
+         IgnoreNew this costs nothing while the helper is alive: the scheduler drops the run without
+         launching anything. Start boundary in the past so the first repetition is due immediately
+         (with StartWhenAvailable) rather than at the next round hour. -->
+    <TimeTrigger>
+      <Repetition>
+        <Interval>PT1M</Interval>
+        <StopAtDurationEnd>false</StopAtDurationEnd>
+      </Repetition>
+      <StartBoundary>2020-01-01T00:00:00</StartBoundary>
+      <Enabled>true</Enabled>
+    </TimeTrigger>
   </Triggers>
   <Principals>
     <Principal id="Author">

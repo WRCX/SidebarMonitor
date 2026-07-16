@@ -72,6 +72,15 @@ internal static class Program
             }
         }
 
+        // We own the writer mutex, so we are the only helper on this machine: any stop request still
+        // sitting there was aimed at a helper that no longer exists (the installer writes one whether
+        // or not anybody is listening, and then starts us). Left in place, we would read our own
+        // installer's request one window from now and exit — which is why a freshly installed helper
+        // used to die instantly and only reappear at the next logon. It matters that this runs AFTER
+        // the retry loop above: while we were still waiting for a previous writer to let go, that
+        // request may well have been meant for it.
+        DiagBridge.DiscardStopRequest();
+
         // CPU temp/power from AMD's SDK (needs admin, which we have). Gated three ways: only on an
         // AMD CPU, only after the user accepted AMD's EULA in the UI (marker file), and skippable via
         // --no-sdk. On anything else it stays closed and the agent keeps using HWiNFO/PDH. Failing

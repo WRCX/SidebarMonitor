@@ -321,7 +321,9 @@ internal sealed partial class MainWindow : AppBarWindow
         // attribution. When it is up we say nothing; when it is down, that is the only thing worth
         // flagging — everything else the unelevated agent covers on its own.
         _status.Text = s.CpuFromAmd ? ""
-                     : !s.EtwAvailable ? Loc.T("sin helper (lanza SidebarMonitor.Etw)")
+                     // The scheduled task retries every minute, so this resolves itself — telling the
+                     // user to launch it by hand would send them to a UAC prompt they don't need.
+                     : !s.EtwAvailable ? Loc.T("sin helper (reintentando…)")
                      : "";
 
         // Diagnostics run regardless of minimised state: CSV keeps recording while tucked away, and
@@ -740,6 +742,7 @@ internal sealed partial class MainWindow : AppBarWindow
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
         _timer.Stop();
+        _updateTimer?.Stop();
         SaveSections();
         _cfg.Save();
         _csv.Dispose();   // flush and close any open CSV

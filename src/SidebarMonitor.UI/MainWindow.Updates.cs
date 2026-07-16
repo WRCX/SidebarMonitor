@@ -13,6 +13,26 @@ internal sealed partial class MainWindow
     /// <summary>Current build version as "vMajor.Minor.Patch", for the Settings page.</summary>
     public string CurrentVersionText => Updater.Format(Updater.CurrentVersion());
 
+    /// <summary>How often the automatic check re-runs. The sidebar is left running for weeks at a
+    /// time, so "on startup" alone can mean never — which made the Settings copy ("on startup, then
+    /// daily") a lie for anyone who does not reboot.</summary>
+    private static readonly TimeSpan UpdateInterval = TimeSpan.FromDays(1);
+
+    /// <summary>Checks now, then once a day for as long as the window lives. Each tick re-reads
+    /// <c>_cfg.CheckUpdates</c> (RunUpdateCheck returns immediately when it is off), so toggling the
+    /// setting takes effect without a restart. The timer is deliberately not stopped once an update is
+    /// found: an ignored notification should come back tomorrow.</summary>
+    public void StartUpdateWatch()
+    {
+        RunUpdateCheck(false);
+        _updateTimer = new System.Windows.Threading.DispatcherTimer { Interval = UpdateInterval };
+        _updateTimer.Tick += (_, _) => RunUpdateCheck(false);
+        _updateTimer.Start();
+    }
+
+    // Held so OnClosing can stop it, like every other timer here.
+    private System.Windows.Threading.DispatcherTimer? _updateTimer;
+
     /// <summary>Checks GitHub for a newer release. Auto (fromUser=false) only runs when the user has
     /// opted in. A newer version surfaces in the tray; <paramref name="onResult"/> reports status text
     /// to the Settings page. Runs off the UI thread, marshals results back.</summary>
@@ -78,20 +98,22 @@ internal sealed partial class MainWindow
                 return;
             }
 
-            // Default flow: always confirm first, and reassure that nothing is lost. Config, layout and
-            // logs live in %LOCALAPPDATA% and are never touched by the MSI (it only replaces Program Files).
-            string msg = Loc.T("Se descargará e instalará {0}.\n\nSe conserva toda tu configuración (panel, ajustes, colocación, historial) — no se pierde nada. El panel se cerrará y se volverá a abrir solo, ya en la versión nueva.\n\n¿Actualizar ahora?", ver);
-
-            // This is a per-machine install: updating updates it for EVERYONE on this PC, and the
-            // installer has to close the sidebar of any other user who is logged in (their running
-            // copy holds the files open). Say so, by name — that is someone else's screen.
+            // Pressing "Update" IS the confirmation — from here it runs straight through to the new
+            // version: download, install, relaunch, no further clicks. (msiexec still raises one UAC
+            // prompt; a per-machine MSI cannot install without it.) Nothing is lost on the way: config,
+            // layout and logs live in %LOCALAPPDATA% and the MSI only replaces Program Files.
+            //
+            // The one thing still worth stopping for is OTHER people. This is a per-machine install, so
+            // updating updates it for EVERYONE on this PC, and the installer has to close the sidebar of
+            // any other logged-in user (their running copy holds the files open). Say so, by name —
+            // that is someone else's screen, and they did not press anything.
             var others = Updater.OtherLoggedInUsers();
             if (others.Count > 0)
-                msg = Loc.T("Hay otros usuarios con la sesión iniciada en este PC: {0}.\n\nSidebarMonitor se instala por equipo, así que la actualización afecta a todos: su barra se cerrará y volverá al reconectar o desbloquear su sesión (o al iniciar sesión de nuevo).\n\n", string.Join(", ", others)) + msg;
-
-            var ok = MessageBox.Show(msg, "SidebarMonitor", MessageBoxButton.OKCancel,
-                others.Count > 0 ? MessageBoxImage.Warning : MessageBoxImage.Question);
-            if (ok != MessageBoxResult.OK) return;
+            {
+                string msg = Loc.T("Hay otros usuarios con la sesión iniciada en este PC: {0}.\n\nSidebarMonitor se instala por equipo, así que la actualización afecta a todos: su barra se cerrará y volverá al reconectar o desbloquear su sesión (o al iniciar sesión de nuevo).\n\n¿Actualizar a {1} de todas formas?", string.Join(", ", others), ver);
+                if (MessageBox.Show(msg, "SidebarMonitor", MessageBoxButton.OKCancel, MessageBoxImage.Warning)
+                    != MessageBoxResult.OK) return;
+            }
 
             // Visual feedback through every phase: Downloading %… → Installing… (msiexec shows its own
             // progress bar too) → the panel closes and relaunches into the new version.
