@@ -218,7 +218,7 @@ New-Item -ItemType Directory -Force $out | Out-Null
 if ($Lite) { $msi = Join-Path $out 'SidebarMonitor-lite.msi'; $flavor = 'lite' }
 else       { $msi = Join-Path $out 'SidebarMonitor.msi';      $flavor = 'full' }
 & wix build (Join-Path $here 'SidebarMonitor.wxs') `
-    -ext WixToolset.UI.wixext `
+    -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext `
     -d "Stage=$stage" -d "ProjectRoot=$root" -d "Version=$Version" -d "Flavor=$flavor" `
     -d "ReleaseUrl=$releaseUrl" `
     -arch x64 -o $msi

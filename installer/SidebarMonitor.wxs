@@ -10,7 +10,8 @@
      fallback tracks whatever is newest, which is right for a build cut outside it. -->
 <?ifndef ReleaseUrl ?><?define ReleaseUrl = "https://github.com/WRCX/SidebarMonitor/releases/latest" ?><?endif?>
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
-     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
 
   <Package Name="SidebarMonitor"
            Manufacturer="WRCX"
@@ -91,36 +92,61 @@
            2. Ask the helper to quit (it consumes the file within ~1 s and stops its ETW session cleanly).
            3. Kill the UI BEFORE the agent — the reverse lets the UI resurrect the agent (crashed-agent
               recovery, ~2 s backoff) right as we delete its exe. THAT was the 3-4-retry loop.
-           4. Then the agent. Pings are a console-safe sleep (`timeout` needs a console). -->
+           4. Then the agent. Pings are a console-safe sleep (`timeout` needs a console).
+
+         Run through WixQuietExec rather than as a plain exe action. An immediate, impersonated action
+         runs in the USER's session, so a plain cmd.exe hands them a console window flashing schtasks
+         and taskkill chatter — in whatever language their Windows speaks, since those messages are
+         Windows', not ours. (The deferred actions below don't need this: they run as SYSTEM in session
+         0, where nothing is visible.) QuietExec runs it windowless and folds stdout/stderr into the MSI
+         log instead, so the detail is still there for `msiexec /i … /l*v install.log`. -->
+    <SetProperty Action="SetStopStackCmd" Id="WixQuietExecCmdLine"
+                 Value="&quot;cmd.exe&quot; /c schtasks.exe /End /TN &quot;SidebarMonitor Helper&quot; &amp; mkdir &quot;%ProgramData%\SidebarMonitor&quot; 2>nul &amp; echo stop > &quot;%ProgramData%\SidebarMonitor\helper-stop&quot; &amp; taskkill /F /IM SidebarMonitor.UI.exe &amp; ping -n 3 127.0.0.1 >nul &amp; taskkill /F /IM SidebarMonitor.Agent.exe &amp; ping -n 4 127.0.0.1 >nul"
+                 Before="StopStack" Sequence="execute" />
     <CustomAction Id="StopStack"
-                  Directory="INSTALLFOLDER"
-                  ExeCommand="cmd.exe /c schtasks.exe /End /TN &quot;SidebarMonitor Helper&quot; &amp; mkdir &quot;%ProgramData%\SidebarMonitor&quot; 2>nul &amp; echo stop > &quot;%ProgramData%\SidebarMonitor\helper-stop&quot; &amp; taskkill /F /IM SidebarMonitor.UI.exe &amp; ping -n 3 127.0.0.1 >nul &amp; taskkill /F /IM SidebarMonitor.Agent.exe &amp; ping -n 4 127.0.0.1 >nul"
+                  DllEntry="WixQuietExec" BinaryRef="Wix4UtilCA_X64"
                   Execute="immediate" Impersonate="yes" Return="ignore" />
+
+    <!-- Every action below is a deferred exe. Windows Installer runs those through a custom action
+         server, and whether that server's child gets a visible console is not something to assume:
+         it was assumed to be invisible (SYSTEM, session 0), and users saw the windows anyway. So they
+         all go through WixQuietExec too — windowless by construction, with stdout/stderr folded into
+         the MSI log, which is strictly better than a console nobody reads. For a DEFERRED action,
+         QuietExec reads its command from CustomActionData, which is why each SetProperty below is
+         named after its action rather than WixQuietExecCmdLine. -->
 
     <!-- Backstop, as SYSTEM: whatever survived the cooperative stop (a helper wedged mid-window, or
          another logged-in user's UI/agent — `taskkill /IM` as SYSTEM reaches every session, which an
          impersonated action cannot) is force-killed before a single file is touched. -->
+    <SetProperty Action="SetForceStopStackCmd" Id="ForceStopStack"
+                 Value="&quot;cmd.exe&quot; /c taskkill /F /IM SidebarMonitor.UI.exe &amp; taskkill /F /IM SidebarMonitor.Agent.exe &amp; taskkill /F /IM SidebarMonitor.Etw.exe &amp; ping -n 2 127.0.0.1 >nul"
+                 Before="ForceStopStack" Sequence="execute" />
     <CustomAction Id="ForceStopStack"
-                  Directory="INSTALLFOLDER"
-                  ExeCommand="cmd.exe /c taskkill /F /IM SidebarMonitor.UI.exe &amp; taskkill /F /IM SidebarMonitor.Agent.exe &amp; taskkill /F /IM SidebarMonitor.Etw.exe &amp; ping -n 2 127.0.0.1 >nul"
+                  DllEntry="WixQuietExec" BinaryRef="Wix4UtilCA_X64"
                   Execute="deferred" Impersonate="no" Return="ignore" />
 
+    <SetProperty Action="SetCreateHelperTaskCmd" Id="CreateHelperTask"
+                 Value="&quot;schtasks.exe&quot; /Create /TN &quot;SidebarMonitor Helper&quot; /XML &quot;C:\Program Files\SidebarMonitor\helper-task.xml&quot; /F"
+                 Before="CreateHelperTask" Sequence="execute" />
     <CustomAction Id="CreateHelperTask"
-                  Directory="INSTALLFOLDER"
-                  ExeCommand="schtasks.exe /Create /TN &quot;SidebarMonitor Helper&quot; /XML &quot;C:\Program Files\SidebarMonitor\helper-task.xml&quot; /F"
+                  DllEntry="WixQuietExec" BinaryRef="Wix4UtilCA_X64"
                   Execute="deferred" Impersonate="no" Return="ignore" />
 
     <!-- The UI task: hands the sidebar back to every OTHER user whose UI this upgrade had to kill,
          the moment they return to their session (the Run key only fires at logon). Redundant firings
          are free — the UI is single-instance per session. -->
+    <SetProperty Action="SetCreateUiTaskCmd" Id="CreateUiTask"
+                 Value="&quot;schtasks.exe&quot; /Create /TN &quot;SidebarMonitor UI&quot; /XML &quot;C:\Program Files\SidebarMonitor\ui-task.xml&quot; /F"
+                 Before="CreateUiTask" Sequence="execute" />
     <CustomAction Id="CreateUiTask"
-                  Directory="INSTALLFOLDER"
-                  ExeCommand="schtasks.exe /Create /TN &quot;SidebarMonitor UI&quot; /XML &quot;C:\Program Files\SidebarMonitor\ui-task.xml&quot; /F"
+                  DllEntry="WixQuietExec" BinaryRef="Wix4UtilCA_X64"
                   Execute="deferred" Impersonate="no" Return="ignore" />
 
+    <SetProperty Action="SetDeleteUiTaskCmd" Id="DeleteUiTask"
+                 Value="&quot;schtasks.exe&quot; /Delete /TN &quot;SidebarMonitor UI&quot; /F"
+                 Before="DeleteUiTask" Sequence="execute" />
     <CustomAction Id="DeleteUiTask"
-                  Directory="INSTALLFOLDER"
-                  ExeCommand="schtasks.exe /Delete /TN &quot;SidebarMonitor UI&quot; /F"
+                  DllEntry="WixQuietExec" BinaryRef="Wix4UtilCA_X64"
                   Execute="deferred" Impersonate="no" Return="ignore" />
     <!-- Best effort, and a race we are happy to lose. This runs inside the install transaction, so the
          helper it starts usually sees Global\_MSIExecute still held and steps aside on purpose (it must:
@@ -129,13 +155,18 @@
          it stays up and the sidebar has sensors instantly. Either way the task's one-minute watchdog
          has it running within a minute of the install finishing — that is the guarantee; this is the
          shortcut. -->
+    <SetProperty Action="SetRunHelperNowCmd" Id="RunHelperNow"
+                 Value="&quot;schtasks.exe&quot; /Run /TN &quot;SidebarMonitor Helper&quot;"
+                 Before="RunHelperNow" Sequence="execute" />
     <CustomAction Id="RunHelperNow"
-                  Directory="INSTALLFOLDER"
-                  ExeCommand="schtasks.exe /Run /TN &quot;SidebarMonitor Helper&quot;"
+                  DllEntry="WixQuietExec" BinaryRef="Wix4UtilCA_X64"
                   Execute="deferred" Impersonate="no" Return="ignore" />
+
+    <SetProperty Action="SetDeleteHelperTaskCmd" Id="DeleteHelperTask"
+                 Value="&quot;schtasks.exe&quot; /Delete /TN &quot;SidebarMonitor Helper&quot; /F"
+                 Before="DeleteHelperTask" Sequence="execute" />
     <CustomAction Id="DeleteHelperTask"
-                  Directory="INSTALLFOLDER"
-                  ExeCommand="schtasks.exe /Delete /TN &quot;SidebarMonitor Helper&quot; /F"
+                  DllEntry="WixQuietExec" BinaryRef="Wix4UtilCA_X64"
                   Execute="deferred" Impersonate="no" Return="ignore" />
 
     <!-- Purge any pre-1.4.4 PER-USER install (install.ps1 published framework-dependent into
@@ -145,9 +176,11 @@
          deferred/no-impersonate) precisely so HKCU and %LOCALAPPDATA% resolve to the INSTALLING
          user's profile rather than SYSTEM's. Other users' stale copies are cleaned by the UI's
          own first run; this covers the common single-installer case. -->
+    <SetProperty Action="SetPurgeLegacyCmd" Id="WixQuietExecCmdLine"
+                 Value="&quot;cmd.exe&quot; /c reg delete &quot;HKCU\Software\Microsoft\Windows\CurrentVersion\Run&quot; /v SidebarMonitor /f &amp; rmdir /s /q &quot;%LOCALAPPDATA%\SidebarMonitor\app&quot;"
+                 Before="PurgeLegacyPerUserInstall" Sequence="execute" />
     <CustomAction Id="PurgeLegacyPerUserInstall"
-                  Directory="INSTALLFOLDER"
-                  ExeCommand="cmd.exe /c reg delete &quot;HKCU\Software\Microsoft\Windows\CurrentVersion\Run&quot; /v SidebarMonitor /f &amp; rmdir /s /q &quot;%LOCALAPPDATA%\SidebarMonitor\app&quot;"
+                  DllEntry="WixQuietExec" BinaryRef="Wix4UtilCA_X64"
                   Execute="immediate" Impersonate="yes" Return="ignore" />
 
     <InstallExecuteSequence>

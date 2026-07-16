@@ -45,6 +45,16 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ### Changed
 
+- **The installer no longer flashes console windows.** Its custom actions ran `schtasks`/`taskkill`
+  through plain exe actions, so installing threw up `cmd.exe` windows full of Windows' own output — in
+  whatever language the machine speaks, since those messages come from `schtasks.exe`, not from us, and
+  cannot be forced to English. All of them now run through `WixQuietExec`: windowless, with stdout and
+  stderr folded into the MSI log instead, where `msiexec /i SidebarMonitor.msi /l*v install.log` can
+  read them. That is strictly more than the windows showed, and none of it in the user's face.
+  Note an upgrade *from* an older version still shows that version's windows: Windows Installer removes
+  the old product using its own cached MSI, whose actions are the old ones. This goes quiet from the
+  next upgrade onwards.
+
 - **Pressing "Update" now runs the whole way through** — download, install, relaunch — instead of opening
   a confirmation box first. One UAC prompt from msiexec remains: a per-machine MSI cannot install without
   it. The warning naming other logged-in users is kept, since the update closes *their* sidebar too.

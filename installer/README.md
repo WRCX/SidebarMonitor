@@ -29,6 +29,7 @@ AMD SDK DLLs fetched (`native/RyzenSdk/fetch.ps1`) and the shims built
 ```powershell
 dotnet tool install --global wix --version 5.*
 wix extension add -g WixToolset.UI.wixext/5.0.2
+wix extension add -g WixToolset.Util.wixext/5.0.2
 ```
 
 > WiX **v5**, not v6/v7: v6+ require accepting the Open Source Maintenance Fee (OSMF) EULA. v5 is the
@@ -65,6 +66,18 @@ msiexec /i installer\out\SidebarMonitor.msi        # install (interactive)
 msiexec /x installer\out\SidebarMonitor.msi        # uninstall
 msiexec /i installer\out\SidebarMonitor.msi /qn /l*v install.log   # silent + verbose log
 ```
+
+The custom actions run through `WixQuietExec`, so they show no console window and their output lands in
+the MSI log instead — `/l*v` is how you read what `schtasks` and `taskkill` actually said:
+
+```powershell
+msiexec /i installer\out\SidebarMonitor.msi /l*v install.log
+Select-String install.log -Pattern 'WixQuietExec'
+```
+
+Upgrading *from* an older build still shows that build's console windows: Windows Installer removes the
+previous product with its own cached MSI, which carries the old, noisy actions. Nothing in a new package
+can change that; it goes quiet once the version being replaced is one that had this fix.
 
 ## Naming the release asset
 

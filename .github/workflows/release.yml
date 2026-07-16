@@ -78,6 +78,9 @@ jobs:
         run: |
           dotnet tool install --global wix --version 5.*
           wix extension add -g WixToolset.UI.wixext/5.0.2
+          # Util supplies WixQuietExec, which runs the stop/purge actions windowless (they are
+          # impersonated, so a plain exe action pops a console in the user's face).
+          wix extension add -g WixToolset.Util.wixext/5.0.2
 
       - name: Fetch AMD SDK (private)
         shell: pwsh
