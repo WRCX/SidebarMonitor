@@ -6,6 +6,8 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ## [Unreleased]
 
+## [1.4.9] — 2026-07-16
+
 ### Fixed
 
 - **The in-app update never installed anything — it just opened the browser.** The updater looked for a
@@ -28,6 +30,11 @@ All notable changes to SidebarMonitor are documented here. The format is based o
   registered by SYSTEM, so an unelevated UI asking for `schtasks /Run` gets "access denied". The task now
   also repeats every minute, which `MultipleInstancesPolicy=IgnoreNew` makes free while the helper is
   healthy. The status line says "sin helper (reintentando…)" instead of telling you to launch it by hand.
+- **Two Settings tooltips showed Spanish to English users** (the per-core bar's "what the bar measures"
+  and the throttle indicator's). Both had had their Spanish text extended without updating the matching
+  key in `LocStrings`, so the lookup silently fell back to the key itself. A new unit test now fails on
+  any translation entry no `Loc.T` call matches — the shape of this bug — and on any translation whose
+  `{0}`-style placeholders differ from its key, which would throw at runtime rather than merely read wrong.
 
 ### Changed
 
@@ -36,9 +43,9 @@ All notable changes to SidebarMonitor are documented here. The format is based o
   it. The warning naming other logged-in users is kept, since the update closes *their* sidebar too.
 - **The automatic update check now actually repeats daily**, as the setting has always claimed. It only
   ever ran once, at window load, so a sidebar left running for weeks never checked again.
-- **The installer's finish page offers to start SidebarMonitor and to see what's new**, both ticked by
-  default. A silent install (`/qn`, the automatic updater's path) skips the whole UI sequence and so
-  shows neither.
+- **The installer's finish page offers to start SidebarMonitor and to see what's new.** Starting is
+  ticked by default; the changelog is not, since it is a detour to a browser. A silent install (`/qn`,
+  the automatic updater's path) skips the whole UI sequence and so shows neither.
 
 ## [1.4.8] — 2026-07-15
 

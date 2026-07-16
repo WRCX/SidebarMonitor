@@ -178,8 +178,8 @@ internal static class LocStrings
         ["Al final"] = "At the end",
         ["Fuera"] = "Outside",
         ["Barra por núcleo"] = "Per-core bar",
-        ["Uso (%Util), residencia C0 (despierto), ambas superpuestas, o uso + marca de C0."]
-            = "Usage (%Util), C0 residency (awake), both overlaid, or usage + C0 tick.",
+        ["Qué mide la barra: Uso (%Util), residencia C0 (despierto), ambas superpuestas, o uso + marca de C0. Funciona igual con cualquier gráfica principal."]
+            = "What the bar measures: usage (%Util), C0 residency (awake), both overlaid, or usage + C0 tick. Works the same with any main graph.",
         ["Uso"] = "Usage",
         ["Combinada"] = "Combined",
         ["Uso+tick"] = "Usage+tick",
@@ -192,8 +192,8 @@ internal static class LocStrings
         ["No"] = "No",
         ["En título"] = "In title",
         ["Indicador de throttle (POT/CORR/TÉRM)"] = "Throttle indicator (PWR/CUR/THRM)",
-        ["Qué tope duro frena el boost ahora. Del SDK de AMD."]
-            = "Which hard cap is limiting boost now. From the AMD SDK.",
+        ["Qué tope duro frena el boost ahora. En AMD, del SDK/PawnIO (PPT/TDC/EDC); en Intel, de los bits de estado del MSR (térmico/potencia/corriente)."]
+            = "Which hard cap is limiting boost now. On AMD, from the SDK/PawnIO (PPT/TDC/EDC); on Intel, from the MSR status bits (thermal/power/current).",
         ["Boost logrado / pico"] = "Boost achieved / peak",
         ["Frecuencia del mejor núcleo vs su pico de sesión."] = "Best core's frequency vs its session peak.",
         ["Mostrar VID (voltaje)"] = "Show VID (voltage)",

@@ -169,8 +169,12 @@
          so an unattended machine never sees a changelog or a dialog — the automatic updater's path.
          The stack still comes up on its own there: RunHelperNow starts the helper, the Run key and
          the UI task start the sidebar. -->
+    <!-- Starting the app is what you almost always want, so it is ticked. The changelog is not: it is
+         a detour to a browser, and most installs just want the sidebar back.
+         SBM_CHANGELOG is deliberately NOT declared here. A checkbox is ticked when its property has
+         any non-empty value, so Value="0" would tick it — "unticked" means the property does not
+         exist. Ticking the box sets it to 1, which is what the Finish condition tests for. -->
     <Property Id="SBM_LAUNCH" Value="1" />
-    <Property Id="SBM_CHANGELOG" Value="1" />
 
     <!-- Both are launched through explorer.exe deliberately. These actions run in the msiexec client
          process, which is elevated whenever the MSI was started from an elevated context — and a
