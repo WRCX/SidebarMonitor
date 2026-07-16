@@ -17,10 +17,6 @@ param(
     [switch]$SkipPublish
 )
 $ErrorActionPreference = 'Stop'
-# The release this build corresponds to, for the finish page's "see what's new". Uses the version
-# exactly as passed, which is the tag ("1.4.8" from v1.4.8) — read it before the 4-part padding
-# below rewrites it into something no tag matches.
-$releaseUrl = "https://github.com/WRCX/SidebarMonitor/releases/tag/v$Version"
 # Normalise to a 4-part MSI ProductVersion (x.y.z.w). A tag like "1.3.0" becomes "1.3.0.0".
 while (($Version -split '\.').Count -lt 4) { $Version += '.0' }
 
@@ -220,7 +216,6 @@ else       { $msi = Join-Path $out 'SidebarMonitor.msi';      $flavor = 'full' }
 & wix build (Join-Path $here 'SidebarMonitor.wxs') `
     -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext `
     -d "Stage=$stage" -d "ProjectRoot=$root" -d "Version=$Version" -d "Flavor=$flavor" `
-    -d "ReleaseUrl=$releaseUrl" `
     -arch x64 -o $msi
 if ($LASTEXITCODE) { throw 'wix build failed' }
 

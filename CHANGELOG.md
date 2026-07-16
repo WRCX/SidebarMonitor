@@ -60,9 +60,8 @@ All notable changes to SidebarMonitor are documented here. The format is based o
   it. The warning naming other logged-in users is kept, since the update closes *their* sidebar too.
 - **The automatic update check now actually repeats daily**, as the setting has always claimed. It only
   ever ran once, at window load, so a sidebar left running for weeks never checked again.
-- **The installer's finish page offers to start SidebarMonitor and to see what's new.** Starting is
-  ticked by default; the changelog is not, since it is a detour to a browser. A silent install (`/qn`,
-  the automatic updater's path) skips the whole UI sequence and so shows neither.
+- **The installer's finish page offers to start SidebarMonitor**, ticked by default. A silent install
+  (`/qn`, the automatic updater's path) skips the UI sequence entirely and so never shows it.
 
 ## [1.4.8] — 2026-07-15
 
