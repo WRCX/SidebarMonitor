@@ -30,6 +30,13 @@ All notable changes to SidebarMonitor are documented here. The format is based o
   registered by SYSTEM, so an unelevated UI asking for `schtasks /Run` gets "access denied". The task now
   also repeats every minute, which `MultipleInstancesPolicy=IgnoreNew` makes free while the helper is
   healthy. The status line says "sin helper (reintentando…)" instead of telling you to launch it by hand.
+  The helper now also refuses to start while a Windows Installer transaction is running (the
+  `Global\_MSIExecute` mutex), which that watchdog makes necessary: it would otherwise start a helper in
+  the middle of our own install, one minute after the installer had just stopped it, and a running
+  helper maps its exe out of the folder being replaced — enough for a "files in use" prompt (naming
+  whichever windows Windows Installer guesses, not the helper) and enough to strand a rollback. The
+  installer cannot prevent this from its side: an unelevated action cannot disable a SYSTEM-registered
+  task, so the helper is what yields.
 - **Two Settings tooltips showed Spanish to English users** (the per-core bar's "what the bar measures"
   and the throttle indicator's). Both had had their Spanish text extended without updating the matching
   key in `LocStrings`, so the lookup silently fell back to the key itself. A new unit test now fails on

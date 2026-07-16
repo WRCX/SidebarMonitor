@@ -39,6 +39,23 @@ internal static class Program
             }
         }
 
+        // Never come up while Windows Installer is mid-transaction. Merely running maps this exe from
+        // the very folder an install is replacing, so InstallValidate reports "files in use" (naming
+        // whichever windows it guesses, not us) and a rollback could not put the old files back.
+        //
+        // The task's one-minute watchdog makes this a routine collision rather than a rare one: the
+        // installer stops us, and a minute later the scheduler starts us again in the middle of its
+        // own install. It cannot prevent that — an unelevated installer cannot disable a task
+        // registered by SYSTEM, which is the same wall that stops the UI launching us.
+        //
+        // So the helper is what has to yield. Exiting is free: the watchdog tries again a minute
+        // later, and by then the transaction is over.
+        if (MsiTransactionRunning())
+        {
+            Console.WriteLine("Hay una instalacion de Windows Installer en curso; dejamos paso (el vigilante reintenta en 1 min).");
+            return 0;
+        }
+
         // One helper serves every user's session: make the machine-wide consent dir (ProgramData)
         // writable by all users' UIs and migrate this user's pre-multi-user markers into it.
         ConsentMarker.EnsureMachineDir();
@@ -699,6 +716,28 @@ internal static class Program
         return total;
     }
 
+    /// <summary>
+    /// True while a Windows Installer transaction is executing anywhere on the machine — ours, or any
+    /// other MSI. <c>Global\_MSIExecute</c> is the mutex Windows Installer itself holds for exactly
+    /// this, from InstallInitialize to InstallFinalize; Microsoft documents checking it as the way to
+    /// ask "is an install running right now?".
+    /// </summary>
+    private static bool MsiTransactionRunning()
+    {
+        try
+        {
+            using var msi = Mutex.OpenExisting(@"Global\_MSIExecute");
+            // The mutex outlives a transaction, so its existence proves nothing — whether anyone HOLDS
+            // it does. Take it for an instant to find out, and hand it straight back: keeping it would
+            // block the next installer.
+            if (!msi.WaitOne(0)) return true;
+            msi.ReleaseMutex();
+            return false;
+        }
+        catch (WaitHandleCannotBeOpenedException) { return false; }   // never created: no installs since boot
+        catch (AbandonedMutexException) { return false; }             // an installer died holding it
+        catch { return false; }   // can't tell — carry on: refusing to start on a bad guess is worse
+    }
 }
 
 /// <summary>

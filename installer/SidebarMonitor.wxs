@@ -122,6 +122,13 @@
                   Directory="INSTALLFOLDER"
                   ExeCommand="schtasks.exe /Delete /TN &quot;SidebarMonitor UI&quot; /F"
                   Execute="deferred" Impersonate="no" Return="ignore" />
+    <!-- Best effort, and a race we are happy to lose. This runs inside the install transaction, so the
+         helper it starts usually sees Global\_MSIExecute still held and steps aside on purpose (it must:
+         a live helper maps its exe out of the folder we are still writing, which is what "files in use"
+         and a failed rollback are made of). If the scheduler happens to start it after InstallFinalize,
+         it stays up and the sidebar has sensors instantly. Either way the task's one-minute watchdog
+         has it running within a minute of the install finishing — that is the guarantee; this is the
+         shortcut. -->
     <CustomAction Id="RunHelperNow"
                   Directory="INSTALLFOLDER"
                   ExeCommand="schtasks.exe /Run /TN &quot;SidebarMonitor Helper&quot;"
