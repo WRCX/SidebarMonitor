@@ -38,15 +38,19 @@ wix extension add -g WixToolset.Util.wixext/5.0.2
 Then:
 
 ```powershell
-./installer/build.ps1                       # full build -> installer/out/SidebarMonitor.msi
-./installer/build.ps1 -Lite -SkipPublish    # lite build -> installer/out/SidebarMonitor-lite.msi
+./installer/build.ps1 -Version 1.4.9                    # full -> installer/out/SidebarMonitor-1.4.9.msi
+./installer/build.ps1 -Version 1.4.9 -Lite -SkipPublish # lite -> installer/out/SidebarMonitor-lite-1.4.9.msi
 ```
+
+The version is baked into the filename (`SidebarMonitor-<version>.msi`) so a downloaded MSI says which
+build it is on its own, and CI and a hand-cut release produce the identical name. `-Version` defaults to
+a placeholder, so pass the real one when cutting a release.
 
 Two flavours are shipped so users pick how AMD's proprietary SDK reaches their machine:
 
-- **full** (`SidebarMonitor.msi`) — bundles AMD's `Platform.dll`, `Device.dll` and driver
+- **full** (`SidebarMonitor-<version>.msi`) — bundles AMD's `Platform.dll`, `Device.dll` and driver
   (redistributed under AMD's EULA, accepted in-app on first run). Works offline.
-- **lite** (`SidebarMonitor-lite.msi`, `-Lite`) — ships **none** of AMD's binaries. `RyzenShim.dll`
+- **lite** (`SidebarMonitor-lite-<version>.msi`, `-Lite`) — ships **none** of AMD's binaries. `RyzenShim.dll`
   then loads `Platform.dll` from the AMD Ryzen Master / Monitoring SDK the user installs; without it,
   CPU sensors fall back to basic mode. Our own shims (`RyzenShim.dll`, `AdlxShim.dll`) and the Microsoft
   VC runtime stay. Build full first, then lite with `-SkipPublish` (it reuses the stage and prunes the
@@ -62,16 +66,16 @@ machine where SidebarMonitor isn't already running from a manual/`install.ps1` d
 the Program Files instance and the existing one will fight over the single-instance lock.
 
 ```powershell
-msiexec /i installer\out\SidebarMonitor.msi        # install (interactive)
-msiexec /x installer\out\SidebarMonitor.msi        # uninstall
-msiexec /i installer\out\SidebarMonitor.msi /qn /l*v install.log   # silent + verbose log
+msiexec /i installer\out\SidebarMonitor-1.4.9.msi        # install (interactive)
+msiexec /x installer\out\SidebarMonitor-1.4.9.msi        # uninstall
+msiexec /i installer\out\SidebarMonitor-1.4.9.msi /qn /l*v install.log   # silent + verbose log
 ```
 
 The custom actions run through `WixQuietExec`, so they show no console window and their output lands in
 the MSI log instead — `/l*v` is how you read what `schtasks` and `taskkill` actually said:
 
 ```powershell
-msiexec /i installer\out\SidebarMonitor.msi /l*v install.log
+msiexec /i installer\out\SidebarMonitor-1.4.9.msi /l*v install.log
 Select-String install.log -Pattern 'WixQuietExec'
 ```
 
@@ -82,17 +86,20 @@ can change that; it goes quiet once the version being replaced is one that had t
 ## Naming the release asset
 
 The in-app updater finds its download by **name**, so what you attach to the GitHub Release is part of
-the contract, not cosmetic. Accepted (see `Updater.IsFlavorAsset`):
+the contract, not cosmetic. `build.ps1` always emits the versioned name, which is what you should ship;
+the bare name is still accepted so older releases keep updating (see `Updater.IsFlavorAsset`):
 
-| Flavour | Accepted asset names                                  |
-|---------|-------------------------------------------------------|
-| full    | `SidebarMonitor.msi` or `SidebarMonitor-1.4.8.msi`     |
-| lite    | `SidebarMonitor-lite.msi` or `SidebarMonitor-lite-1.4.8.msi` |
+| Flavour | Produced by build.ps1        | Also accepted (legacy)    |
+|---------|------------------------------|---------------------------|
+| full    | `SidebarMonitor-1.4.9.msi`   | `SidebarMonitor.msi`      |
+| lite    | `SidebarMonitor-lite-1.4.9.msi` | `SidebarMonitor-lite.msi` |
 
 Only a parseable version may follow the name. Anything else (`SidebarMonitor-final.msi`,
 `SidebarMonitor_1.4.8.msi`) matches nothing, and the failure is **silent**: the updater finds no asset
 and quietly opens the release page in the browser instead of installing. That is exactly how every
-release from 1.4.4 to 1.4.8 shipped with a dead auto-update without anyone noticing.
+release from 1.4.4 to 1.4.8 shipped with a dead auto-update without anyone noticing — the release
+carried the versioned name while the updater looked only for the bare one. Now both the build and the
+updater agree on the versioned name, so they cannot drift.
 
 `tests/SidebarMonitor.Tests/UpdaterIntegrationTests.cs` checks the real latest release for a matching
 asset. After publishing, run it:

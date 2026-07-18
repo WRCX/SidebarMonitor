@@ -143,6 +143,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: SidebarMonitor ${{ steps.ver.outputs.version }}
-          files: installer/out/*.msi   # SidebarMonitor.msi (full) + SidebarMonitor-lite.msi
+          files: installer/out/*.msi   # SidebarMonitor-<ver>.msi (full) + SidebarMonitor-lite-<ver>.msi
           generate_release_notes: true
           draft: true   # review + fill winget manifest, then publish

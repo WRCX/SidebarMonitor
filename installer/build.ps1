@@ -210,9 +210,18 @@ if ($missingStage) {
 
 Write-Host '== Building MSI with WiX ==' -ForegroundColor Cyan
 New-Item -ItemType Directory -Force $out | Out-Null
+# The version goes IN the filename — SidebarMonitor-1.4.9.msi — so the file says which build it is
+# without opening it, and a downloaded copy is self-describing. This is the canonical name, produced
+# the same way for a hand-cut release and for CI (release.yml globs installer/out/*.msi), so the two
+# can no longer drift — which is the exact bug that left every release's auto-update dead: CI made the
+# bare name, hand-cut releases made the versioned one, and the updater only knew the bare one. It now
+# accepts both (Updater.IsFlavorAsset), so old releases keep updating and new ones are always versioned.
+# $Version is 4-part here (padded above); take major.minor.patch for the name, e.g. 1.4.9.0 -> 1.4.9.
+$p = $Version -split '\.'
+$verName = "$($p[0]).$($p[1]).$($p[2])"
 # No ternary operator: that is PowerShell 7 syntax and this script targets Windows PowerShell 5.1.
-if ($Lite) { $msi = Join-Path $out 'SidebarMonitor-lite.msi'; $flavor = 'lite' }
-else       { $msi = Join-Path $out 'SidebarMonitor.msi';      $flavor = 'full' }
+if ($Lite) { $msi = Join-Path $out "SidebarMonitor-lite-$verName.msi"; $flavor = 'lite' }
+else       { $msi = Join-Path $out "SidebarMonitor-$verName.msi";      $flavor = 'full' }
 & wix build (Join-Path $here 'SidebarMonitor.wxs') `
     -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext `
     -d "Stage=$stage" -d "ProjectRoot=$root" -d "Version=$Version" -d "Flavor=$flavor" `

@@ -126,9 +126,10 @@ internal static class Updater
             string notes = root.TryGetProperty("body", out var b) ? b.GetString() ?? "" : "";
             string html = root.TryGetProperty("html_url", out var h) ? h.GetString() ?? "" : "";
 
-            // First match wins: a release can legitimately carry both spellings (CI's "SidebarMonitor.msi"
-            // and a hand-uploaded "SidebarMonitor-1.4.9.msi"), and they are the same bits — but without
-            // stopping, the one we'd use is whichever GitHub happened to list last.
+            // First match wins: a release can legitimately carry both spellings (a bare
+            // "SidebarMonitor.msi" from an older build and a versioned "SidebarMonitor-1.4.9.msi"), and
+            // they are the same bits — but without stopping, the one we'd use is whichever GitHub
+            // happened to list last.
             string? asset = null;
             if (root.TryGetProperty("assets", out var assets))
                 foreach (var a in assets.EnumerateArray())
@@ -145,10 +146,11 @@ internal static class Updater
 
     /// <summary>
     /// True if a release asset is the MSI for <paramref name="flavor"/>. The name carries an OPTIONAL
-    /// trailing "-&lt;version&gt;": CI names it "SidebarMonitor.msi", while releases cut by hand have
-    /// shipped as "SidebarMonitor-1.4.8.msi". Both must match, or the updater finds no asset and falls
-    /// back to opening the browser — which is what every release up to 1.4.8 actually did. The two
-    /// flavours must never cross-match: a "lite" install may not be handed the full MSI.
+    /// trailing "-&lt;version&gt;": the build now always produces the versioned "SidebarMonitor-1.4.9.msi",
+    /// but older releases shipped the bare "SidebarMonitor.msi", so both must match — otherwise the
+    /// updater finds no asset and falls back to opening the browser, which is what every release up to
+    /// 1.4.8 actually did (the bare name it looked for and the versioned name releases carried never
+    /// met). The two flavours must never cross-match: a "lite" install may not be handed the full MSI.
     /// </summary>
     internal static bool IsFlavorAsset(string? name, string flavor)
     {
