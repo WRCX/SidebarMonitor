@@ -6,6 +6,8 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ## [Unreleased]
 
+## [1.5.1] — 2026-07-25
+
 ### Fixed
 
 - **The in-app updater could retry a failed install forever.** Updating 1.4.9 → 1.5.0 on 2026-07-25:
@@ -558,7 +560,11 @@ First public release.
 
 > Not code-signed yet, so Windows SmartScreen may warn on first run — choose **More info → Run anyway**.
 
-[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.4.7...HEAD
+[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.5.1...HEAD
+[1.5.1]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.1
+[1.5.0]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.0
+[1.4.9]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.4.9
+[1.4.8]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.4.8
 [1.4.7]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.4.7
 [1.4.6]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.4.6
 [1.4.5]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.4.5
