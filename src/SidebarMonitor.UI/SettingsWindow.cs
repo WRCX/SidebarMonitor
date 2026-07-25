@@ -470,6 +470,9 @@ internal sealed class SettingsWindow : Window
         {
             Foreground = Theme.InkSecondary, FontFamily = Theme.Ui, FontSize = 12.5,
             Margin = new Thickness(0, 12, 0, 0), TextWrapping = TextWrapping.Wrap,
+            // Opens on the last failed update rather than blank: this page is where somebody comes
+            // after pressing «Actualizar» and finding themselves on the same version as before.
+            Text = _host.LastUpdateError ?? "",
         };
         var check = TextButton(Loc.T("Buscar ahora"));
         check.Click += (_, _) => _host.RunUpdateCheck(true, s => status.Text = s);

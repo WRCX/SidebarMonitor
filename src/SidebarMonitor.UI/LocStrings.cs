@@ -308,6 +308,22 @@ internal static class LocStrings
         ["Descargando… {0}%"] = "Downloading… {0}%",
         ["Instalando…"] = "Installing…",
         ["No se pudo actualizar. Prueba a descargarlo manualmente."] = "Update failed. Try downloading it manually.",
+        ["No se pudo actualizar a {0}: {1}."] = "Couldn't update to {0}: {1}.",
+        ["No se pudo actualizar a {0}: {1}. Pulsa «Actualizar» para reintentar."]
+            = "Couldn't update to {0}: {1}. Click «Update» to try again.",
+        ["Detalles en {0}"] = "Details in {0}",
+        ["Ya hay una actualización en curso."] = "An update is already in progress.",
+        // Why msiexec gave up, as spliced into the messages above.
+        ["se canceló el aviso de Windows (UAC)"] = "the Windows (UAC) prompt was dismissed",
+        ["error irrecuperable durante la instalación"] = "fatal error during installation",
+        ["ya había otra instalación en curso"] = "another installation was already in progress",
+        ["el paquete descargado no se pudo abrir"] = "the downloaded package couldn't be opened",
+        ["ya hay otra versión instalada"] = "another version is already installed",
+        ["una instalación silenciosa no puede pedir permisos de administrador"]
+            = "a silent install cannot ask for administrator rights",
+        ["msiexec devolvió el error {0}"] = "msiexec returned error {0}",
+        ["msiexec informó de éxito pero la versión no cambió"] = "msiexec reported success but the version didn't change",
+        ["el intento anterior no llegó a informar del resultado"] = "the previous attempt never reported a result",
 
         // ── First-run dialog ──────────────────────────────────────────────────────────────────
         ["SidebarMonitor — activar sensores de tu Ryzen"] = "SidebarMonitor — enable your Ryzen's sensors",

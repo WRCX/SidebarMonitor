@@ -24,6 +24,7 @@ internal sealed partial class MainWindow
     /// found: an ignored notification should come back tomorrow.</summary>
     public void StartUpdateWatch()
     {
+        ReportFailedAttempt();
         RunUpdateCheck(false);
         _updateTimer = new System.Windows.Threading.DispatcherTimer { Interval = UpdateInterval };
         _updateTimer.Tick += (_, _) => RunUpdateCheck(false);
@@ -32,6 +33,35 @@ internal sealed partial class MainWindow
 
     // Held so OnClosing can stop it, like every other timer here.
     private System.Windows.Threading.DispatcherTimer? _updateTimer;
+
+    /// <summary>What the last update attempt came to, if it failed — the Settings page opens on this
+    /// instead of a blank status line, since that page is where somebody goes after "it didn't work".
+    /// Null when there is nothing to report.</summary>
+    public string? LastUpdateError { get; private set; }
+
+    /// <summary>
+    /// A relaunch after a FAILED install used to be indistinguishable from a relaunch after a
+    /// successful one: the same old version came back without a word, which reads as "the button did
+    /// nothing" and invites another press — and another download, msiexec and relaunch. Say what
+    /// happened, once. The marker itself is what keeps the automatic path from retrying.
+    /// </summary>
+    private void ReportFailedAttempt()
+    {
+        var last = UpdateAttempt.Read();
+        if (last.Version is null || last.Notified) return;
+
+        // Here we are running that version or better, so it landed — this run, or later by hand. Forget
+        // the attempt, or the marker would go on suppressing a version with nothing wrong with it.
+        if (!Updater.IsNewer(last.Version, Updater.CurrentVersion())) { UpdateAttempt.Clear(); return; }
+
+        string? why = UpdateAttempt.WhyNotAgain(last.Version);
+        if (why is null) return;   // still in flight — nothing to report yet
+
+        UpdateAttempt.MarkNotified();
+        string msg = Loc.T("No se pudo actualizar a {0}: {1}.", Updater.Format(last.Version), why);
+        LastUpdateError = msg + " " + Loc.T("Detalles en {0}", UpdateAttempt.MsiLogPath);
+        _tray?.Notify(msg);
+    }
 
     /// <summary>Checks GitHub for a newer release. Auto (fromUser=false) only runs when the user has
     /// opted in. A newer version surfaces in the tray; <paramref name="onResult"/> reports status text
@@ -58,24 +88,46 @@ internal sealed partial class MainWindow
 
         // Zero-friction path: if the user opted into automatic install and this is an MSI install with a
         // matching asset, download + install it silently right now — no prompt, no progress window, no
-        // browser. (Truly hands-off only where elevation is silent; elsewhere msiexec still elevates.)
+        // browser.
+        //
+        // Only where elevation is already granted, though, and NOT in the way this comment used to
+        // claim ("elsewhere msiexec still elevates"). /qn tells Windows Installer to show no UI at
+        // all, which includes the UAC consent prompt a per-machine package needs — so from an
+        // unelevated UI it does not prompt, it fails with 1925. The script left behind by the 1.4.9 →
+        // 1.5.0 loop on 2026-07-25 was the /qn one, which is the best explanation of five silent,
+        // instant, invisible failures in a row. It is left to try exactly once and report what it got:
+        // the exit code now lands in UpdateAttempt, so the next occurrence is a fact rather than this
+        // paragraph, and either way it never retries itself.
         //
         // Except when someone ELSE is logged in: this per-machine update would close their sidebar
         // mid-session, and "silent" must never mean "silent for the person it happens to". Fall back
         // to the normal prompt, which names them and asks. Auto-update is a convenience for a machine
         // you have to yourself.
+        //
+        // And except when we already tried this exact version and it did not end with us running it.
+        // That automatic retry — old UI comes back, checks, installs, fails, comes back — IS the loop,
+        // and there was no backoff and no limit to stop it. One attempt is enough: the tray item and
+        // «Actualizar ahora» still work, so a deliberate press retries, which is the one retry worth
+        // having.
+        string? triedBefore = UpdateAttempt.WhyNotAgain(rel.Version);
         if (_cfg.AutoInstallUpdates && _install.FromMsi && rel.AssetUrl is not null && !_updateBusy
-            && Updater.OtherLoggedInUsers().Count == 0)
+            && triedBefore is null && Updater.OtherLoggedInUsers().Count == 0)
         {
             _updateBusy = true;
             Report(Loc.T("Instalando {0} automáticamente…", ver));
             Dispatcher.Invoke(() => _tray?.Notify(Loc.T("Actualizando a {0}…", ver)));
-            try { await Updater.ApplyAsync(rel, _install, () => Dispatcher.Invoke(Close), silent: true); }
-            catch { _updateBusy = false; Report(Loc.T("No se pudo actualizar automáticamente.")); }
-            return;
+            try
+            {
+                var outcome = await Updater.ApplyAsync(rel, _install, () => Dispatcher.Invoke(Close), silent: true);
+                if (outcome == Updater.ApplyOutcome.Started) return;   // on our way out; the script takes over
+                _updateBusy = false;                                   // nothing started — fall through to the prompt
+            }
+            catch { _updateBusy = false; Report(Loc.T("No se pudo actualizar automáticamente.")); return; }
         }
 
-        Report(Loc.T("Disponible {0} — pulsa «Actualizar».", ver));
+        Report(triedBefore is not null
+            ? Loc.T("No se pudo actualizar a {0}: {1}. Pulsa «Actualizar» para reintentar.", ver, triedBefore)
+            : Loc.T("Disponible {0} — pulsa «Actualizar».", ver));
     }
 
     /// <summary>Applies the pending update: MSI installs update in place (one UAC prompt, then the UI
@@ -91,12 +143,21 @@ internal sealed partial class MainWindow
         {
             string ver = Updater.Format(latest.Version);
 
+            // Visual feedback through every phase: Downloading %… → Installing… (msiexec shows its own
+            // progress bar too) → the panel closes and relaunches into the new version.
+            void Report(string s) { onProgress?.Invoke(s); _tray?.Notify(s); }
+
             if (!_install.FromMsi || latest.AssetUrl is null)
             {
                 // Not an MSI install (or no matching asset): send them to the release page.
                 try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(latest.HtmlUrl) { UseShellExecute = true }); } catch { }
                 return;
             }
+
+            // A hand-off from a moment ago is still running (the tray item and the Settings button are
+            // two ways to press the same thing, and msiexec takes a while). Starting another one only
+            // earns a 1618; the machine is seconds from restarting into the new version anyway.
+            if (UpdateAttempt.InFlight()) { Report(Loc.T("Ya hay una actualización en curso.")); return; }
 
             // Pressing "Update" IS the confirmation — from here it runs straight through to the new
             // version: download, install, relaunch, no further clicks. (msiexec still raises one UAC
@@ -115,12 +176,15 @@ internal sealed partial class MainWindow
                     != MessageBoxResult.OK) return;
             }
 
-            // Visual feedback through every phase: Downloading %… → Installing… (msiexec shows its own
-            // progress bar too) → the panel closes and relaunches into the new version.
-            void Report(string s) { onProgress?.Invoke(s); _tray?.Notify(s); }
             var progress = new Progress<string>(Report);
             Report(Loc.T("Descargando {0}…", ver));
-            await Updater.ApplyAsync(latest, _install, Close, silent: false, progress: progress);
+            // Pressing the button IS the user asking again, so it retries a version that failed before:
+            // ApplyAsync overwrites the marker on the way past. "Do not auto-retry" must never harden
+            // into "never again" — the fix for a dismissed UAC prompt is pressing it once more.
+            LastUpdateError = null;
+            if (await Updater.ApplyAsync(latest, _install, Close, silent: false, progress: progress)
+                == Updater.ApplyOutcome.AlreadyRunning)
+                Report(Loc.T("Ya hay una actualización en curso."));
         }
         catch
         {

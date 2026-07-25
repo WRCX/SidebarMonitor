@@ -35,8 +35,10 @@ public sealed class UiConfig
 
     /// <summary>Zero-friction updates: when a newer release is found, download and install it silently
     /// (msiexec /qn — no prompt, no progress window, no browser) and relaunch the panel. Implies
-    /// <see cref="CheckUpdates"/>. Only truly hands-off where elevation is silent (UAC off / set to
-    /// elevate-without-prompting); elsewhere msiexec still raises the usual elevation prompt.</summary>
+    /// <see cref="CheckUpdates"/>. Only works where the panel already has elevation (UAC off): /qn
+    /// suppresses ALL installer UI, the consent prompt included, so a per-machine package it cannot
+    /// prompt for fails with 1925 rather than asking. When that happens the version is reported and
+    /// left alone, and «Actualizar» installs it with the normal prompt.</summary>
     public bool AutoInstallUpdates { get; set; }
 
     // ── First-run / platform consent ──────────────────────────────────────────────────────────

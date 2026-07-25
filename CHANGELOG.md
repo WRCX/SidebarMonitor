@@ -6,6 +6,31 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ## [Unreleased]
 
+### Fixed
+
+- **The in-app updater could retry a failed install forever.** Updating 1.4.9 → 1.5.0 on 2026-07-25:
+  the sidebar closed, came back, and vanished again about five times, spawning a fresh `msiexec` and
+  `wscript` each cycle while `HKLM\Software\SidebarMonitor\Version` never moved off 1.4.9.0. The
+  relauncher script ran `msiexec` with `bWaitOnReturn=True` — which has always returned the exit code
+  — and nobody read it, so it started the UI whatever happened. That UI was still the old version, so
+  its update check found the same newer release and the whole thing began again: download, msiexec,
+  relaunch, with no backoff and no limit. The MSI was never at fault; the same downloaded file
+  installed cleanly by hand. Now the script reads the exit code, writes it down, and the attempt is
+  remembered: **a version that failed to install is never installed automatically again**, and the
+  reason is shown ("No se pudo actualizar a v1.5.0: se canceló el aviso de Windows (UAC)") in the tray
+  and on the Settings page instead of being thrown away. Pressing «Actualizar» still retries — a
+  person asking again is not a loop.
+- **A second update could start on top of one already running**, which is one of the ways the loop fed
+  itself: the new `msiexec` fails with 1618 ("another installation is already in progress"), and a
+  failure was all it took to go round again. Both the tray item and «Actualizar ahora» now decline
+  while a hand-off is in flight.
+
+### Changed
+
+- **`msiexec` now always writes a verbose log** to `%LOCALAPPDATA%\SidebarMonitor\update\msi-install.log`.
+  A failed update used to leave nothing behind at all, which is why the cause of the loop above had to
+  be reproduced by hand. The Settings page points at the file when an update fails.
+
 ## [1.5.0] — 2026-07-25
 
 ### Fixed

@@ -190,19 +190,36 @@ internal static class Updater
         (u.Host == "github.com" || u.Host.EndsWith(".github.com", StringComparison.OrdinalIgnoreCase)
                                 || u.Host.EndsWith(".githubusercontent.com", StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>What a call to <see cref="ApplyAsync"/> actually did.</summary>
+    public enum ApplyOutcome
+    {
+        /// <summary>Nothing to apply here: not an MSI install, or no matching asset. The caller should
+        /// open <see cref="Release.HtmlUrl"/> instead.</summary>
+        NotApplicable,
+        /// <summary>Downloaded and handed off; <paramref name="shutdown"/> has been called and the next
+        /// thing on screen is a freshly started UI.</summary>
+        Started,
+        /// <summary>A previous hand-off is still in flight, so this one was not started.</summary>
+        AlreadyRunning,
+    }
+
     /// <summary>
     /// Downloads the release's MSI and hands off to msiexec via a hidden relauncher, then invokes
-    /// <paramref name="shutdown"/> so the UI exits and msiexec can replace it. Returns false if there's
-    /// nothing to apply (no asset / not MSI-installed); the caller should open <see cref="Release.HtmlUrl"/>
-    /// in that case. One UAC prompt appears (per-machine MSI).
+    /// <paramref name="shutdown"/> so the UI exits and msiexec can replace it. One UAC prompt appears
+    /// (per-machine MSI). The outcome of the install itself lands in <see cref="UpdateAttempt"/>, not
+    /// in the return value: by the time msiexec has an answer this process no longer exists.
     /// </summary>
-    public static async Task<bool> ApplyAsync(Release r, Install install, Action shutdown, bool silent = false,
+    public static async Task<ApplyOutcome> ApplyAsync(Release r, Install install, Action shutdown, bool silent = false,
         IProgress<string>? progress = null, CancellationToken ct = default)
     {
-        if (!install.FromMsi || install.Path is null || r.AssetUrl is null) return false;
+        if (!install.FromMsi || install.Path is null || r.AssetUrl is null) return ApplyOutcome.NotApplicable;
 
-        string dir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SidebarMonitor", "update");
+        // Never start a second hand-off on top of a live one: that msiexec fails with 1618 ("another
+        // installation is already in progress"), and a failure is precisely what used to feed the
+        // relaunch-and-retry loop. Cheaper to not start than to explain afterwards.
+        if (UpdateAttempt.InFlight()) return ApplyOutcome.AlreadyRunning;
+
+        string dir = UpdateAttempt.Dir;
         Directory.CreateDirectory(dir);
         // Local name from our own flavour constant, never from the (attacker-influenceable) URL path.
         string msi = Path.Combine(dir, install.Flavor == "lite" ? "SidebarMonitor-lite.msi" : "SidebarMonitor.msi");
@@ -236,24 +253,62 @@ internal static class Updater
         progress?.Report(Loc.T("Instalando…"));
 
         // A detached, hidden relauncher: run msiexec (elevates; a prompt appears unless elevation is
-        // silent), then start the new UI. wscript with window style 0 keeps it console-less and it is
-        // not killed when this UI exits. silent => /qn (no msiexec UI at all) for the zero-friction path;
-        // otherwise /qb shows a basic progress bar.
+        // silent), record how it went, then start the UI. wscript with window style 0 keeps it
+        // console-less and it is not killed when this UI exits. silent => /qn (no msiexec UI at all)
+        // for the zero-friction path; otherwise /qb shows a basic progress bar.
+        //
+        // Three things this script did not use to do, all of them one bug:
+        //
+        //  * Read the exit code. sh.Run with bWaitOnReturn=True has always returned it and nobody
+        //    looked, so a failed install was indistinguishable from a successful one — the UI came
+        //    back either way, still old, and went looking for updates again.
+        //  * Write it down. UpdateAttempt is what the relaunched UI reads to say "no se pudo
+        //    actualizar" and, more importantly, to stop installing this version automatically.
+        //  * Log. /l*v costs one file and turns "it failed on my machine" into an answer; the same MSI
+        //    run by hand with /l*v installed cleanly, which is how we know the package is not at fault.
+        //
+        // The UI is still started on failure. Not relaunching would leave the machine with no sidebar
+        // and no explanation, which is worse than the old behaviour rather than better; what breaks
+        // the loop is the recorded failure, not withholding the relaunch.
         string flag = silent ? "/qn" : "/qb";
         int show = silent ? 0 : 1;
         string ui = Path.Combine(install.Path, "SidebarMonitor.UI.exe");
         string vbs = Path.Combine(dir, "apply-update.vbs");
-        await File.WriteAllLinesAsync(vbs, new[]
-        {
-            "Set sh = CreateObject(\"WScript.Shell\")",
-            $"sh.Run \"msiexec /i \"\"{msi}\"\" {flag}\", {show}, True",
-            $"sh.Run \"\"\"{ui}\"\"\", 0, False",
-        }, ct);
+        await File.WriteAllLinesAsync(vbs, BuildRelauncher(msi, flag, show, ui, r.Version), ct);
 
-        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
+        // Recorded BEFORE the script is launched, so the script's rewrite (which carries msiexec's
+        // exit code) can never be clobbered by this one.
+        UpdateAttempt.BeginRunning(r.Version);
+        using var runner = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
             "wscript.exe", $"//B //Nologo \"{vbs}\"") { UseShellExecute = false });
+        if (runner is not null) UpdateAttempt.SetRunnerPid(runner.Id);
 
         shutdown();
-        return true;
+        return ApplyOutcome.Started;
     }
+
+    /// <summary>
+    /// The relauncher script, line by line. Split out so a test can read it without installing
+    /// anything — the quoting is the kind of thing that is only ever wrong on somebody else's path.
+    /// VBScript doubles a quote to escape it, hence the <c>""</c> around every path.
+    /// </summary>
+    internal static string[] BuildRelauncher(string msi, string flag, int show, string ui, Version version) =>
+    [
+        "' Generated by SidebarMonitor. Runs the downloaded MSI, records the result, restarts the UI.",
+        "Set sh = CreateObject(\"WScript.Shell\")",
+        "Set fso = CreateObject(\"Scripting.FileSystemObject\")",
+        $"rc = sh.Run(\"msiexec /i \"\"{msi}\"\" {flag} /l*v \"\"{UpdateAttempt.MsiLogPath}\"\"\", {show}, True)",
+        "' 0 = installed. 3010 and 1641 = installed, Windows wants a reboot. Everything else failed.",
+        "If rc = 0 Or rc = 3010 Or rc = 1641 Then",
+        "  stage = \"done\"",
+        "Else",
+        "  stage = \"failed\"",
+        "End If",
+        $"Set f = fso.CreateTextFile(\"{UpdateAttempt.StatePath}\", True)",
+        $"f.WriteLine \"version={version}\"",
+        "f.WriteLine \"stage=\" & stage",
+        "f.WriteLine \"exit=\" & rc",
+        "f.Close",
+        $"sh.Run \"\"\"{ui}\"\"\", 0, False",
+    ];
 }
