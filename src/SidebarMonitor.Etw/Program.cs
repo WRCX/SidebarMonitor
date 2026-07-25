@@ -425,13 +425,17 @@ internal static class Program
                     snapshot.CpuTdcPct = pawnData.TdcPct;
                     snapshot.CpuTjMaxC = pawnData.TjMaxC;
                 }
-                // Clocks are PawnIO's regardless of the SDK: the SDK has no global-limit field at
-                // all, and the table's effective clock only ever RAISES the best-core figure.
+                // The global limit is PawnIO's regardless of the SDK — the SDK has no such field at all.
+                // The per-core clock is a different story. It used to RAISE the SDK's best-core figure,
+                // which meant the published number could exceed what either source actually measured;
+                // taking the larger of two independent estimates every window biases the result upward,
+                // and it showed as "GHz máx" reading above HWiNFO. Now the SDK owns that number where
+                // it is present, and the table fills in where it is not (mobile APUs).
                 if (pawnData.HasClocks)
                 {
                     snapshot.CpuPawnIoOk |= 4;
                     snapshot.CpuLimitMhz = pawnData.LimitMhz;
-                    if (pawnData.BestEffMhz > snapshot.CpuBestFreqMhz)
+                    if (snapshot.CpuSdkOk == 0 && pawnData.BestEffMhz > 0)
                         snapshot.CpuBestFreqMhz = pawnData.BestEffMhz;
                 }
                 // Per-core temps from the PM_Table, only where the SDK isn't (mobile APUs). Fills the

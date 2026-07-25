@@ -82,9 +82,13 @@ public struct EtwSnapshot
     public byte CpuSdkOk;
     public double CpuTempC;
     public float CpuPackageW;
-    /// <summary>Best-core current clock (MHz) straight from the AMD SDK's per-core dCurrentFreq — the
-    /// actual boost clock HWiNFO shows (reaches ~5040 on a 7800X3D). Windows' % Processor Performance
-    /// averages the sample and undershoots the brief single-core boost, so the agent prefers this.</summary>
+    /// <summary>Best-core REQUESTED clock (MHz), from the AMD SDK's per-core dCurrentFreq — the boost
+    /// clock HWiNFO calls "Core Clock" (reaches ~5040 on a 7800X3D). Windows' % Processor Performance
+    /// averages the sample and undershoots the brief single-core boost, so the agent prefers this.
+    /// Where there is no SDK (mobile APUs) this carries the PM_Table's per-core clock instead — the
+    /// only one available there, and a requested clock as well (its values track HWiNFO's "Reloj", not
+    /// the much lower "Reloj efectivo", so the field name BestEffMhz is a misnomer). The two sources
+    /// are never mixed: max()ing them published a clock above what either one measured.</summary>
     public float CpuBestFreqMhz;
 
     /// <summary>Average core voltage (Vcore / VID), volts. 0 = not read.</summary>

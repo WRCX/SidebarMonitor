@@ -247,11 +247,17 @@ internal static class Program
             s.Cpu.PackagePowerW = e.CpuPackageW;
             s.Cpu.VidV = e.CpuVidV;
             s.Cpu.TjMaxC = e.CpuTjMaxC;
-            // "GHz máx" = the highest current core clock from either source: the SDK's best-core
-            // dCurrentFreq catches the real single-core boost (~5040) that PDH's averaged % Processor
-            // Performance smooths away, while the max() keeps it from ever reading below the per-core
-            // rows (which are PDH) at an instant the SDK sampled lower.
-            if (e.CpuBestFreqMhz > 0) s.Cpu.FreqBestMhz = Math.Max(s.Cpu.FreqBestMhz, e.CpuBestFreqMhz);
+            // "GHz máx" = the best core's REQUESTED clock, straight from the SDK's dCurrentFreq. It
+            // replaces the PDH figure outright rather than being max()ed with it.
+            //
+            // Max()ing them looked harmless and was not. PDH's averaged % Processor Performance, the
+            // SDK's requested clock and PawnIO's effective clock are three different quantities, and
+            // taking the largest of three noisy estimates every tick biases the result upward — it
+            // read ~100-150 MHz above HWiNFO on a 7800X3D, which is what a user comparing the two
+            // notices. Requested is also the number people mean by "boost clock", and the one HWiNFO
+            // shows as "Core Clock"; its "Effective Clock" is the lower, C-state-weighted sibling and
+            // is deliberately NOT what we report here.
+            if (e.CpuBestFreqMhz > 0) s.Cpu.FreqBestMhz = e.CpuBestFreqMhz;
             s.Cpu.PptPct = e.CpuPptPct;
             s.Cpu.TdcPct = e.CpuTdcPct;
             s.Cpu.EdcPct = e.CpuEdcPct;
@@ -299,10 +305,20 @@ internal static class Program
         }
         if ((e.CpuPawnIoOk & 4) != 0)
         {
-            // The SMU's dynamic boost ceiling; the UI uses it as the boost line's denominator
-            // instead of the achieved session peak. Effective clock only ever raises "GHz máx".
+            // The SMU's dynamic boost ceiling; the UI uses it as the boost line's denominator instead
+            // of the achieved session peak. Measured against HWiNFO's "Frequency Limit - Global" on a
+            // 7800X3D it runs ~78 MHz high on average and never low, so the two are not the same
+            // quantity: ours moves in exact 25 MHz steps (a real SMU register), theirs is smooth, and
+            // no other float in the whole table tracks theirs. Left as-is rather than "corrected"
+            // towards a number we cannot derive — but worth knowing when comparing tools.
             if (e.CpuLimitMhz > 0) s.Cpu.LimitMhz = e.CpuLimitMhz;
-            if (e.CpuBestFreqMhz > 0) s.Cpu.FreqBestMhz = Math.Max(s.Cpu.FreqBestMhz, e.CpuBestFreqMhz);
+            // The PM_Table's per-core clock is the REQUESTED clock too (its values track HWiNFO's
+            // "Reloj", not its much lower "Reloj efectivo"), so it is a valid source for "GHz máx" —
+            // but only where the SDK is absent, as on the mobile APUs the Ryzen Master SDK cannot read.
+            // Which of the two tracks HWiNFO more closely on a desktop is not yet established: the one
+            // measurement taken so far was invalid, having compared a frozen map value (the helper was
+            // starved) with the SDK switched off.
+            if (e.CpuSdkOk == 0 && e.CpuBestFreqMhz > 0) s.Cpu.FreqBestMhz = e.CpuBestFreqMhz;
         }
         // Per-core temps from PawnIO's PM_Table (mobile APUs, no SDK). Expand physical→logical like
         // the SDK path so both SMT siblings share their physical core's temperature.
