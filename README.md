@@ -82,11 +82,34 @@ CPU sensors are enabled. Uninstall from Add/Remove Programs.
 *(A developer `install.ps1` in the repo root does the same from a source checkout, installing to
 `%LOCALAPPDATA%`; `uninstall.ps1 -Purge` also deletes the saved config.)*
 
-### Code signing
+### Code signing, and an antivirus false positive
 
-The installers **aren't code-signed yet**, so Windows SmartScreen may warn on first run — choose
-**More info → Run anyway**. Free code signing through the [SignPath Foundation](https://signpath.org/)
-OSS program is planned.
+The installers and binaries **aren't code-signed**, so Windows SmartScreen may warn on first run —
+choose **More info → Run anyway**. Free signing through the [SignPath Foundation](https://signpath.org/)
+OSS program was applied for and declined: the project needs more visibility and track record first.
+
+Being unsigned has one concrete consequence worth knowing about.
+
+**Bitdefender flags `AdlxShim.dll` as `Gen:Variant.Ulise.606614` and quarantines it.** It is a false
+positive. `Gen:` marks a *generic heuristic* hit, not a match against known malware, and this file is
+the one most likely to trip one:
+
+- It is the bridge to AMD's ADLX GPU telemetry API, built from
+  [`native/AdlxShim/AdlxShim.cpp`](native/AdlxShim/AdlxShim.cpp) — 178 lines you can read in this repo.
+- It also compiles in **AMD's own SDK sources** (`ADLXHelper.cpp`, `WinAPIs.cpp`), so most of the
+  binary is AMD's code, including a layer that resolves Windows APIs dynamically. That pattern, inside
+  an unsigned DLL, is what generic heuristics react to. The same AMD code signed and shipped by AMD is
+  flagged by nobody.
+- Its sibling `RyzenShim.dll` is near-identical in size and equally unsigned, yet is not flagged —
+  it links against a system library instead of embedding a vendor's API-resolution layer.
+
+If it gets quarantined, **restore it and add an exclusion** for
+`C:\Program Files\SidebarMonitor\AdlxShim.dll`, or every scan will take it again. Losing it costs only
+AMD GPU telemetry (an AMD/integrated GPU's temperature, power and clocks); CPU, memory, disk, network
+and NVIDIA GPU sensors are unaffected.
+
+Reports to the vendor are the real fix and are worth filing; signing is the permanent one, once the
+project can get a certificate.
 
 ## How it works
 
