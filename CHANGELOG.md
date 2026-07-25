@@ -6,6 +6,33 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-07-25
+
+### Fixed
+
+- **The sidebar announced "sin helper" while the helper was alive and well.** Under sustained load it
+  flapped between having sensors and having none. Nothing in the codebase ever set a process priority,
+  so all three processes took whatever they inherited — and Windows had them at **BelowNormal**, the
+  worst possible class for processes whose job is sampling on a fixed cadence exactly when the machine
+  is busy. Measured with the CPU at 88%: the helper's publish interval kept its 1.02 s median but
+  showed a **23.6 s gap**, and the agent calls a snapshot older than 5 s a dead helper. The helper now
+  claims `AboveNormal` and the agent `Normal`, which costs nothing — measured under full load they use
+  0.03% and 0.07% of total CPU. The staleness threshold also goes to 20 s: taking a few more seconds
+  to notice a genuinely dead helper costs nothing, while crying "sin helper" during a stall lands
+  exactly when the user is watching the sensors.
+- **"GHz máx" could show a stale clock.** Same root cause: a starved helper republishes nothing, so the
+  reading fossilises — observed stuck at 4645 MHz while the real clock sat near 4500, which is what a
+  user comparing against HWiNFO notices. Fixed by the priority change above.
+
+### Changed
+
+- **The best-core clock now comes from one source instead of the largest of three.** It was assembled
+  with `Math.Max` across PDH's averaged % Processor Performance, the AMD SDK's requested clock and the
+  PM_Table's per-core clock — three different quantities, whose maximum is a number none of them
+  measured. The SDK owns it where present; the PM_Table fills in on the mobile APUs the Ryzen Master
+  SDK cannot read. Verified against HWiNFO afterwards: the sidebar now tracks its per-core "Reloj"
+  within a mean of 41 MHz.
+
 ## [1.4.9] — 2026-07-16
 
 ### Fixed
