@@ -39,6 +39,17 @@ internal static class Program
             }
         }
 
+        // A sensor helper has to keep sampling PRECISELY when the machine is saturated — that is when
+        // its numbers matter most. At the default priority it does not: measured on a loaded desktop
+        // (CPU at 88%), the publish window slipped from its 1 s median to a 23.6 s gap, and the agent,
+        // which calls a snapshot older than a few seconds dead, dropped the reader and made the sidebar
+        // announce "sin helper" while this process was alive and well.
+        //
+        // Raising the whole process is safe here because the helper is almost pure idle: measured at
+        // 0.03% of total CPU over 10 s under that same load. It publishes once a second and sleeps.
+        try { Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.AboveNormal; }
+        catch { /* not fatal: we just risk being starved again under full load */ }
+
         // Never come up while Windows Installer is mid-transaction. Merely running maps this exe from
         // the very folder an install is replacing, so InstallValidate reports "files in use" (naming
         // whichever windows it guesses, not us) and a rollback could not put the old files back.

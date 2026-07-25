@@ -38,6 +38,14 @@ internal static class Program
     {
         Console.OutputEncoding = System.Text.Encoding.UTF8;
 
+        // The UI spawns us, so we inherit its priority class — and Windows had put the UI (a background
+        // desktop app) at BelowNormal, which is the worst possible class for the process that has to
+        // sample on a fixed cadence exactly when the machine is loaded. Claim Normal explicitly rather
+        // than inheriting whatever our parent happened to be; at 0.07% of total CPU, measured under a
+        // fully loaded desktop, we are not taking anything from anyone.
+        try { System.Diagnostics.Process.GetCurrentProcess().PriorityClass = System.Diagnostics.ProcessPriorityClass.Normal; }
+        catch { /* best effort */ }
+
         int intervalMs = ArgParse.Int(args, "--interval=", 1000);
         // Processes are the dominant cost (NtQuerySystemInformation, ~6-16 ms) and the least
         // time-sensitive number on screen, so they sample every Nth tick by default.
@@ -182,6 +190,11 @@ internal static class Program
         return 0;
     }
 
+    /// <summary>How old the helper's snapshot may get before we treat the helper as gone. It publishes
+    /// once a second, so this is ~20 missed windows: far beyond any scheduling hiccup, and still fast
+    /// enough that a helper that really died is reported while the user is still looking.</summary>
+    private static readonly TimeSpan StaleAfter = TimeSpan.FromSeconds(20);
+
     /// <summary>
     /// Copies the elevated helper's attribution into our snapshot, if it is publishing. Returns
     /// the reader, or null if the helper died (a stale map keeps its last values forever, so the
@@ -197,8 +210,16 @@ internal static class Program
 
         if (!etw.TryRead(out var e)) return etw;   // caught it mid-write; try again next tick
 
+        // A late snapshot is not a dead helper. The threshold used to be 5 s, which a loaded machine
+        // crosses routinely — the helper publishes every second, but under full CPU load its window has
+        // been measured slipping to 23 s, and every slip past the threshold made the sidebar claim
+        // there was no helper while the process was alive. The helper now runs AboveNormal so those
+        // slips should not happen, but the cost of the two mistakes is not symmetric: waiting a few
+        // more seconds to notice a genuinely dead helper costs nothing, while crying "sin helper"
+        // during a slip is exactly the moment the user is looking at the sensors. Hence a threshold
+        // generous enough to ride out a stall, still short enough that a real death is obvious.
         var age = DateTime.UtcNow - new DateTime(e.TimestampUtcTicks, DateTimeKind.Utc);
-        if (age > TimeSpan.FromSeconds(5))
+        if (age > StaleAfter)
         {
             etw.Dispose();
             Array.Fill(diskTemps, float.NaN);
