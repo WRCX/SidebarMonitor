@@ -94,10 +94,10 @@ internal sealed partial class MainWindow
         _cpuGraphHost.Children.Add(_cpuCoreSpark);
         _cpuCoreGrid.Columns = _cfg.CpuGraphColumns;
         _cpuGraphHost.Children.Add(_cpuCoreGrid);
-        _cpuPct.HorizontalAlignment = HorizontalAlignment.Right;
-        _cpuPct.VerticalAlignment = VerticalAlignment.Top;
-        _cpuPct.Margin = new Thickness(0, 1, 6, 0);
-        _cpuGraphHost.Children.Add(_cpuPct);
+        // The percentage overlays the chart, so it carries its own dark chip: over the per-core overlay
+        // (up to 24 bright lines) plain white text on the graph was unreadable.
+        _cpuPctBox.Child = _cpuPct;
+        _cpuGraphHost.Children.Add(_cpuPctBox);
         Theme.SetCorePalette(_cfg.CorePalette);
         ApplyCpuGraphMode();
         panel.Children.Add(_cpuGraphHost);
@@ -129,7 +129,7 @@ internal sealed partial class MainWindow
         _cpuSpark.Visibility = mode == 0 ? Visibility.Visible : Visibility.Collapsed;
         _cpuCoreSpark.Visibility = mode == 1 ? Visibility.Visible : Visibility.Collapsed;
         _cpuCoreGrid.Visibility = mode == 2 ? Visibility.Visible : Visibility.Collapsed;
-        _cpuPct.Visibility = mode == 2 ? Visibility.Collapsed : Visibility.Visible;   // each grid cell has its own %
+        _cpuPctBox.Visibility = mode == 2 ? Visibility.Collapsed : Visibility.Visible;   // each grid cell has its own %
         // Row colouring is now an explicit setting, no longer silently tied to the main graph. Auto (0)
         // keeps the old behaviour (match the graph); 1 = always by process, 2 = always by core.
         _coreRows.UseCoreColors = _cfg.CoreBarColorMode switch { 1 => false, 2 => true, _ => mode != 0 };

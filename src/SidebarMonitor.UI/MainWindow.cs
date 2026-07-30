@@ -59,6 +59,17 @@ internal sealed partial class MainWindow : AppBarWindow
     // where the value carries the % ("47% · 2700 rpm").
     private readonly TextBlock _cpuFanCap = Theme.Text("%vent", 9, Theme.InkMuted);
     private readonly TextBlock _cpuPct;
+    /// <summary>The chip the percentage sits in, so it reads over a chart full of per-core lines.
+    /// Visibility is toggled on THIS, not on the TextBlock — the label and its backing are one thing.</summary>
+    private readonly Border _cpuPctBox = new()
+    {
+        Background = Theme.OverlayLabelBg,
+        CornerRadius = new CornerRadius(3),
+        Padding = new Thickness(4, 0, 4, 1),
+        HorizontalAlignment = HorizontalAlignment.Right,
+        VerticalAlignment = VerticalAlignment.Top,
+        Margin = new Thickness(0, 1, 6, 0),
+    };
     private readonly Sparkline _cpuSpark = new(Theme.SeriesCpu) { FixedMax = 100 };
     private readonly CoreSparkline _cpuCoreSpark = new(height: 48);
     private readonly CoreGrid _cpuCoreGrid = new();

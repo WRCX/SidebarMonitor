@@ -29,6 +29,15 @@ internal static class Theme
     public static readonly Brush Grid = Freeze("#2C2C2A");        // hairlines, meter tracks
     public static readonly Brush Baseline = Freeze("#383835");
 
+    /// <summary>
+    /// Backing for a label drawn ON TOP of a chart. The per-core overlay puts 8, 16 or 24 bright lines
+    /// behind the CPU percentage and white-on-anything stops being legible — the reading you look at
+    /// most is the one the graph eats. Dark and mostly opaque, but not fully: the lines should stay
+    /// discernible through it rather than be blanked out. Same idea, and nearly the same value, as the
+    /// backing CoreRows already paints behind its overlaid per-core metric.
+    /// </summary>
+    public static readonly Brush OverlayLabelBg = Freeze("#B4121210");
+
     public static readonly Color SeriesCpu = (Color)ColorConverter.ConvertFromString("#3987E5");   // blue
     public static readonly Color SeriesGpu = (Color)ColorConverter.ConvertFromString("#9085E9");   // violet
     public static readonly Color SeriesIn = (Color)ColorConverter.ConvertFromString("#199E70");    // aqua: DL, disk read
