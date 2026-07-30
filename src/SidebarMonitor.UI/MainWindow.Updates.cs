@@ -90,17 +90,16 @@ internal sealed partial class MainWindow
         // matching asset, download + install it silently right now — no prompt, no progress window, no
         // browser.
         //
-        // Only where this process is ALREADY elevated, and NOT in the way this comment used to claim
-        // ("elsewhere msiexec still elevates"). /qn tells Windows Installer to show no UI at all, the
-        // UAC consent prompt included, so from an unelevated UI it cannot ask and fails — measured on
-        // 2026-07-30 from both a per-user and a machine-wide path: "Error 1925 ... sufficient
-        // privileges", surfacing as exit 1603, in six seconds, every time.
+        // "Silent" means no dialogs of ours and no browser — but it cannot mean no UAC prompt, because
+        // a per-machine MSI has to run elevated. Until 1.5.4 this path passed /qn to an unelevated
+        // msiexec, which suppresses the consent prompt along with everything else, so it died at
+        // InstallFinalize with 1925 every single time (measured 2026-07-30 from both a per-user and a
+        // machine-wide path, surfacing as exit 1603, in six seconds). It installed nothing, anywhere,
+        // ever — it only manufactured the failures the pre-1.5.1 updater then retried forever.
         //
-        // So this path never installed anything on a machine with UAC on — it only manufactured the
-        // failures the old updater then retried forever. It loses nothing on the way (the privileges
-        // go missing at InstallFinalize, before the deferred script touches a file), but a feature
-        // that cannot work should not be attempted: hence Updater.IsElevated() below. Unelevated, the
-        // update is reported like any other and «Actualizar» installs it with the prompt that works.
+        // The relauncher now elevates msiexec explicitly, so this works: one UAC prompt, or none at all
+        // where elevation is silent (UAC off). Declining it is recorded as a cancel and, like any other
+        // failure, is never retried automatically.
         //
         // Except when someone ELSE is logged in: this per-machine update would close their sidebar
         // mid-session, and "silent" must never mean "silent for the person it happens to". Fall back
@@ -114,7 +113,7 @@ internal sealed partial class MainWindow
         // having.
         string? triedBefore = UpdateAttempt.WhyNotAgain(rel.Version);
         if (_cfg.AutoInstallUpdates && _install.FromMsi && rel.AssetUrl is not null && !_updateBusy
-            && triedBefore is null && Updater.IsElevated() && Updater.OtherLoggedInUsers().Count == 0)
+            && triedBefore is null && Updater.OtherLoggedInUsers().Count == 0)
         {
             _updateBusy = true;
             Report(Loc.T("Instalando {0} automáticamente…", ver));

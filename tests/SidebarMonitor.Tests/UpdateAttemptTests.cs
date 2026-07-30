@@ -114,9 +114,9 @@ public class UpdateAttemptTests
 public class RelauncherScriptTests
 {
     private static string Script(string msi = @"C:\Users\Ada Lovelace\AppData\Local\SidebarMonitor\update\SidebarMonitor.msi",
-                                 string flag = "/qb", int show = 1,
+                                 string flag = "/qb",
                                  string ui = @"C:\Program Files\SidebarMonitor\SidebarMonitor.UI.exe")
-        => string.Join("\n", Updater.BuildRelauncher(msi, flag, show, ui, new Version(1, 5, 0)));
+        => string.Join("\n", Updater.BuildRelauncher(msi, flag, ui, new Version(1, 5, 0)));
 
     /// <summary>Paths with spaces are the normal case (Program Files, and any user with a space in
     /// their name), and VBScript escapes a quote by doubling it.</summary>
@@ -129,17 +129,85 @@ public class RelauncherScriptTests
         Assert.Contains(@"""""""C:\Program Files\SidebarMonitor\SidebarMonitor.UI.exe""""""", s);
     }
 
-    /// <summary>bWaitOnReturn=True is what makes sh.Run return the exit code at all — and reading it
-    /// is the entire fix. Without the assignment the script is the old one that could not tell a
-    /// failed install from a successful one.</summary>
+    /// <summary>
+    /// It must ELEVATE. A per-machine MSI run unelevated dies at InstallFinalize with 1925 whatever /q
+    /// level it is given, which is what made the automatic install a permanent no-op.
+    /// </summary>
     [Fact]
-    public void Waits_for_msiexec_and_keeps_its_exit_code()
+    public void Elevates_msiexec()
     {
         var s = Script();
 
-        Assert.Contains("rc = sh.Run(", s);
-        Assert.Contains(", True)", s);
+        Assert.Contains("\"runas\"", s);
+        Assert.Contains("app.ShellExecute \"cmd.exe\"", s);
+    }
+
+    /// <summary>
+    /// ShellExecute("runas") neither waits nor returns a code, so the exit code comes back through a
+    /// file — and it has to be DELAYED expansion. %errorlevel% is substituted while cmd parses the
+    /// line, before msiexec runs, so it would report the previous command's result forever.
+    /// </summary>
+    [Fact]
+    public void Brings_the_exit_code_back_through_a_file()
+    {
+        var s = Script();
+
+        Assert.Contains("/v:on", s);
+        Assert.Contains("!errorlevel!", s);
+        Assert.DoesNotContain("%errorlevel%", s);
+        Assert.Contains("rc = CLng(line)", s);
         Assert.Contains("f.WriteLine \"exit=\" & rc", s);
+    }
+
+    /// <summary>A leftover code from the previous attempt would be read as this attempt's result —
+    /// a success recorded for an install that never ran.</summary>
+    [Fact]
+    public void Deletes_a_stale_result_before_starting()
+    {
+        var s = Script();
+
+        Assert.Contains("If fso.FileExists(res) Then fso.DeleteFile res, True", s);
+        Assert.True(s.IndexOf("fso.DeleteFile res", StringComparison.Ordinal)
+                  < s.IndexOf("app.ShellExecute", StringComparison.Ordinal),
+            "the stale result must be deleted BEFORE msiexec is launched");
+    }
+
+    /// <summary>Declining the UAC prompt makes ShellExecute raise, which is a cancel — not a crash,
+    /// and not a success. 1602 is the code msiexec itself uses for it.</summary>
+    [Fact]
+    public void A_declined_prompt_is_recorded_as_a_cancel()
+    {
+        var s = Script();
+
+        Assert.Contains("rc = 1602", s);
+        Assert.Contains("On Error Resume Next", s);
+        Assert.True(s.IndexOf("rc = 1602", StringComparison.Ordinal)
+                  < s.IndexOf("app.ShellExecute", StringComparison.Ordinal),
+            "the cancel default has to be set before the call that can fail");
+    }
+
+    /// <summary>Waiting forever would leave the record stuck at "running", which blocks every later
+    /// update; the wait is bounded and the timeout is a recorded failure like any other.</summary>
+    [Fact]
+    public void The_wait_is_bounded()
+    {
+        var s = Script();
+
+        Assert.Contains($"Do While waited < {Updater.WaitSeconds}", s);
+        Assert.Contains($"rc = {Updater.ExitTimedOut}", s);
+    }
+
+    /// <summary>The panel must come back unelevated: sh.Run inherits this script's token, and this
+    /// script is not the elevated half. An admin-token UI would be a lasting side effect of updating.</summary>
+    [Fact]
+    public void Relaunches_the_UI_unelevated()
+    {
+        var s = Script();
+
+        // sh.Run inherits this script's (unelevated) token; the elevating ShellExecute is only ever
+        // used for cmd.exe. An admin-token panel would be a lasting side effect of having updated.
+        Assert.Matches(@"sh\.Run\s+""""""[^\n]*SidebarMonitor\.UI\.exe", s);
+        Assert.DoesNotContain("app.ShellExecute \"\"\"", s);
     }
 
     /// <summary>3010 and 1641 mean "installed, now reboot". Treating them as failures would suppress
@@ -175,17 +243,19 @@ public class RelauncherScriptTests
             "The relauncher must record msiexec's verdict before starting the UI that reads it:\n" + s);
     }
 
-    /// <summary>The silent path asks for no msiexec UI and a hidden window; the visible one shows the
-    /// basic progress bar. Getting these crossed makes an "automatic" update pop a window, or a manual
-    /// one look like nothing happened.</summary>
+    /// <summary>
+    /// The quiet level reaches msiexec. There is no window-style knob any more: the 0 passed to
+    /// ShellExecute hides the cmd wrapper, not the installer, so /qb still draws its own progress bar
+    /// and /qn still draws nothing. Passing 1 would only flash a console window.
+    /// </summary>
     [Theory]
-    [InlineData("/qn", 0)]
-    [InlineData("/qb", 1)]
-    public void Passes_the_quiet_flag_and_window_style_through(string flag, int show)
+    [InlineData("/qn")]
+    [InlineData("/qb")]
+    public void Passes_the_quiet_flag_through(string flag)
     {
-        var s = Script(flag: flag, show: show);
+        var s = Script(flag: flag);
 
         Assert.Contains($" {flag} ", s);
-        Assert.Contains($", {show}, True)", s);
+        Assert.Contains("\"runas\", 0", s);
     }
 }

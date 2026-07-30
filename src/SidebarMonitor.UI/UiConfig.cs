@@ -33,12 +33,13 @@ public sealed class UiConfig
     /// the only network call is to GitHub's public API — nothing about you is sent. See PRIVACY.md.</summary>
     public bool CheckUpdates { get; set; }
 
-    /// <summary>Zero-friction updates: when a newer release is found, download and install it silently
-    /// (msiexec /qn — no prompt, no progress window, no browser) and relaunch the panel. Implies
-    /// <see cref="CheckUpdates"/>. Only works where the panel already has elevation (UAC off): /qn
-    /// suppresses ALL installer UI, the consent prompt included, so a per-machine package it cannot
-    /// prompt for fails with 1925 rather than asking. When that happens the version is reported and
-    /// left alone, and «Actualizar» installs it with the normal prompt.</summary>
+    /// <summary>Zero-friction updates: when a newer release is found, download and install it in the
+    /// background (msiexec /qn — no installer UI, no dialogs of ours, no browser) and relaunch the
+    /// panel. Implies <see cref="CheckUpdates"/>. Windows still asks for consent once, because a
+    /// per-machine package cannot install without elevation — the relauncher requests it explicitly
+    /// rather than passing /qn to an unelevated msiexec, which could only ever fail with 1925.
+    /// Truly unattended only where elevation is silent (UAC off). Declining the prompt is recorded as
+    /// a cancel and, like any failure, is never retried by itself.</summary>
     public bool AutoInstallUpdates { get; set; }
 
     // ── First-run / platform consent ──────────────────────────────────────────────────────────

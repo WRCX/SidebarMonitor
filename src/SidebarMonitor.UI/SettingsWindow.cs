@@ -461,7 +461,7 @@ internal sealed class SettingsWindow : Window
             Loc.T("Al arrancar (y a diario) consulta GitHub Releases. Solo se contacta la API pública de GitHub; no se envía nada tuyo."),
             () => _cfg.CheckUpdates, v => { _cfg.CheckUpdates = v; if (!v) _cfg.AutoInstallUpdates = false; _cfg.Save(); }));
         p.Children.Add(Toggle(Loc.T("Instalar automáticamente (silencioso)"),
-            Loc.T("Al detectar una versión nueva, la descarga e instala sola en segundo plano y reinicia el panel — sin avisos, diálogos ni navegador. Requiere «Buscar actualizaciones» activado."),
+            Loc.T("Al detectar una versión nueva, la descarga e instala sola en segundo plano y reinicia el panel — sin diálogos ni navegador. Windows pedirá permiso una vez: una instalación para todo el equipo no puede hacerse sin ello (sin aviso si tienes el UAC desactivado). Requiere «Buscar actualizaciones» activado."),
             () => _cfg.AutoInstallUpdates, v => { _cfg.AutoInstallUpdates = v; if (v) _cfg.CheckUpdates = true; _cfg.Save(); }));
 
         p.Children.Add(SubHeader(Loc.T("Versión actual: {0}", _host.CurrentVersionText)));

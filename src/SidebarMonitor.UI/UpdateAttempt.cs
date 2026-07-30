@@ -61,6 +61,15 @@ internal static class UpdateAttempt
     /// baked in — the script is the only writer that knows how msiexec ended.</summary>
     public static string StatePath => Path.Combine(Dir, "last-attempt.txt");
 
+    /// <summary>
+    /// Where the ELEVATED half of the hand-off drops msiexec's exit code, for the unelevated half to
+    /// pick up. Two processes are needed because elevation and a return value are mutually exclusive
+    /// here: ShellExecute("runas") can elevate but neither waits nor reports, so the elevated cmd
+    /// writes the number down and the script waits for the file. Deleted before each attempt — a
+    /// leftover from last time would be read as this time's result.
+    /// </summary>
+    public static string ResultPath => Path.Combine(Dir, "msiexec-exitcode.txt");
+
     public static Record Read()
     {
         try { return File.Exists(StatePath) ? Parse(File.ReadAllText(StatePath)) : Nothing; }
@@ -156,6 +165,7 @@ internal static class UpdateAttempt
             1603 => Loc.T("error irrecuperable durante la instalación"),
             int inner => Describe(inner),
         },
+        Updater.ExitTimedOut => Loc.T("la instalación no terminó en {0} minutos", Updater.WaitSeconds / 60),
         1618 => Loc.T("ya había otra instalación en curso"),
         1619 or 1620 => Loc.T("el paquete descargado no se pudo abrir"),
         1638 => Loc.T("ya hay otra versión instalada"),

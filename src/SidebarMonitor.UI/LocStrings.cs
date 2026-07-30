@@ -299,8 +299,8 @@ internal static class LocStrings
         ["Estás en la última versión."] = "You're on the latest version.",
         ["Disponible {0} — pulsa «Actualizar»."] = "{0} available — click «Update».",
         ["Instalar automáticamente (silencioso)"] = "Install automatically (silent)",
-        ["Al detectar una versión nueva, la descarga e instala sola en segundo plano y reinicia el panel — sin avisos, diálogos ni navegador. Requiere «Buscar actualizaciones» activado."]
-            = "When a new version is found, it downloads and installs itself in the background and restarts the panel — no notifications, dialogs or browser. Requires «Check for updates» on.",
+        ["Al detectar una versión nueva, la descarga e instala sola en segundo plano y reinicia el panel — sin diálogos ni navegador. Windows pedirá permiso una vez: una instalación para todo el equipo no puede hacerse sin ello (sin aviso si tienes el UAC desactivado). Requiere «Buscar actualizaciones» activado."]
+            = "When a new version is found, it downloads and installs itself in the background and restarts the panel — no dialogs, no browser. Windows will ask for consent once: a machine-wide install cannot happen without it (no prompt at all if you have UAC off). Requires «Check for updates» on.",
         ["Instalando {0} automáticamente…"] = "Installing {0} automatically…",
         ["Actualizando a {0}…"] = "Updating to {0}…",
         ["No se pudo actualizar automáticamente."] = "Automatic update failed.",
@@ -317,6 +317,7 @@ internal static class LocStrings
         ["se canceló el aviso de Windows (UAC)"] = "the Windows (UAC) prompt was dismissed",
         ["error irrecuperable durante la instalación"] = "fatal error during installation",
         ["ya había otra instalación en curso"] = "another installation was already in progress",
+        ["la instalación no terminó en {0} minutos"] = "the install did not finish within {0} minutes",
         ["el paquete descargado no se pudo abrir"] = "the downloaded package couldn't be opened",
         ["ya hay otra versión instalada"] = "another version is already installed",
         ["una instalación silenciosa no puede pedir permisos de administrador"]
