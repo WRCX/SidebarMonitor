@@ -454,7 +454,15 @@ internal sealed partial class MainWindow : AppBarWindow
             {
                 case 1: _cpuCoreSpark.Push(ref s); break;
                 case 2: _cpuCoreGrid.Push(ref s); break;
-                default: _cpuSpark.Push(c.TotalUsagePct); break;
+                default:
+                    // Optionally take the heaviest process's colour, so the total line and the per-core
+                    // bars (which colour by process in this mode) are finally the same scheme instead of
+                    // a fixed blue next to seven hues. Procs is sorted, so [0] is the one.
+                    _cpuSpark.SetSeriesColor(_cfg.CpuGraphByProcess && s.ProcCount > 0
+                        ? Theme.ProcessColor(NameField.Get(ref s.Procs[0].Name))
+                        : Theme.SeriesCpu);
+                    _cpuSpark.Push(c.TotalUsagePct);
+                    break;
             }
             _coreRows.Update(ref s);
         }

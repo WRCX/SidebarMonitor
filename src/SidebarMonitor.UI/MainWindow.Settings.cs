@@ -84,6 +84,7 @@ internal sealed partial class MainWindow
             case "ram": ApplyRamModulesMode(); break;
             case "palette":
                 Theme.SetCorePalette(_cfg.CorePalette);
+                Theme.SetGraphPalette(_cfg.GraphPalette);
                 _cpuCoreSpark.ResetColors();
                 _cpuCoreGrid.ResetColors();
                 _coreRows.InvalidateVisual();

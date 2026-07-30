@@ -112,8 +112,14 @@ internal static class LocStrings
             = "Fits each axis to the min/max of its window to see detail when values are low.",
         ["Colores"] = "Colors",
         ["Colores de núcleos"] = "Core colors",
-        ["Paleta para las barras, líneas y mini-gráficas por núcleo."]
-            = "Palette for the per-core bars, lines and mini-graphs.",
+        ["Paleta para las barras por núcleo."] = "Palette for the per-core bars.",
+        ["Colores de la gráfica"] = "Graph colors",
+        ["Igual que las barras"] = "Same as the bars",
+        ["Paleta para las líneas y mini-gráficas por núcleo. Independiente de las barras: en la gráfica superpuesta «Contraste» separa mucho mejor las líneas."]
+            = "Palette for the per-core lines and mini-graphs. Independent of the bars: on the overlaid chart, «Contrast» separates the lines far better.",
+        ["Gráfica total con el color del proceso"] = "Total graph in the process's colour",
+        ["En el modo «Total», pinta la línea con el color del proceso que más CPU consume, en vez del azul fijo — así coincide con las barras por núcleo, que en ese modo también se colorean por proceso."]
+            = "In «Total» mode, draws the line in the colour of the heaviest process instead of the fixed blue — matching the per-core bars, which colour by process in that mode too.",
         ["Tooltips"] = "Tooltips",
         ["Opacidad de tooltips"] = "Tooltip opacity",
         ["Transparencia del fondo de los tooltips (1 = opaco)."]

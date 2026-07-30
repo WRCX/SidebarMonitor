@@ -86,9 +86,27 @@ public sealed class UiConfig
     /// comparable). Default false — the grid exists to compare cores.</summary>
     public bool CpuGridAutoScale { get; set; }
 
-    /// <summary>Colour palette for the per-core bars/lines/mini-graphs: 0 rainbow, 1 high-contrast,
-    /// 2 cool (blues), 3 warm (reds), 4 pastel.</summary>
+    /// <summary>Colour palette for the per-core bars: 0 rainbow, 1 high-contrast, 2 cool (blues),
+    /// 3 warm (reds), 4 pastel. Also the chart's, unless <see cref="GraphPalette"/> overrides it.</summary>
     public int CorePalette { get; set; }
+
+    /// <summary>
+    /// Palette for the per-core CHART (overlay and grid), independent of the bars. -1 = use the bars'
+    /// one, which is the default and what the single shared palette always did.
+    ///
+    /// Separate because the two are read differently: the bars one at a time (which core is busy),
+    /// where neighbouring hues are fine, and the overlay chart all at once on top of itself, where a
+    /// high-contrast spread is far easier to trace a single line through.
+    /// </summary>
+    public int GraphPalette { get; set; } = -1;
+
+    /// <summary>
+    /// Colour the TOTAL CPU graph (mode 0, the single line) with the heaviest process's colour instead
+    /// of the fixed CPU blue, so it matches the per-core bars — which colour themselves by process in
+    /// that mode. Off by default: the blue line is what the panel has always looked like, and this is
+    /// the one graph the eye uses as a landmark.
+    /// </summary>
+    public bool CpuGraphByProcess { get; set; }
 
     /// <summary>Per-core clock / temperature on each core row, and where it sits.</summary>
     public bool ShowCoreFreq { get; set; } = true;

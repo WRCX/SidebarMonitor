@@ -72,9 +72,24 @@ internal static class Theme
     public static readonly Brush KernelFill = Freeze("#898781");
 
     private static readonly Dictionary<int, Color> CoreColorCache = [];
+    private static readonly Dictionary<int, Color> GraphColorCache = [];
 
     /// <summary>Active per-core colour preset: 0 rainbow, 1 high-contrast, 2 cool, 3 warm, 4 pastel.</summary>
     public static int CorePalette { get; private set; }
+
+    /// <summary>
+    /// The preset for the per-core CHART, independent of the bars — or <see cref="FollowBars"/> to use
+    /// the bars' one, which is the default and what the single shared palette always did.
+    ///
+    /// Two presets exist because the two widgets have different jobs. The bars are read one at a time
+    /// (which core is busy), so neighbouring hues are fine; the overlay chart draws every core on top of
+    /// itself at once, where a high-contrast spread is far easier to pick a line out of. Forcing one
+    /// choice on both meant tuning for whichever you looked at more.
+    /// </summary>
+    public static int GraphPalette { get; private set; } = FollowBars;
+
+    /// <summary>"No palette of its own — use the bars'." Not a preset index.</summary>
+    public const int FollowBars = -1;
 
     /// <summary>How many cores the palette spreads its colours across. Every preset uses its FULL
     /// range over exactly this many cores, so an 8-core rainbow spans the whole wheel just like a
@@ -89,6 +104,17 @@ internal static class Theme
         if (id == CorePalette) return;
         CorePalette = id;
         CoreColorCache.Clear();   // CoreBrush derives from CoreColor, so this recolours everything
+        // The chart follows the bars unless it has its own preset, so its cache is stale too.
+        if (GraphPalette == FollowBars) GraphColorCache.Clear();
+    }
+
+    /// <summary>Switch the chart's palette (or <see cref="FollowBars"/>) and drop its cache. Same
+    /// contract as <see cref="SetCorePalette"/>: the caller resets the pen-caching widgets after.</summary>
+    public static void SetGraphPalette(int id)
+    {
+        if (id == GraphPalette) return;
+        GraphPalette = id;
+        GraphColorCache.Clear();
     }
 
     /// <summary>Set the core count the palette spans. Returns true when it changed — the caller then
@@ -99,6 +125,7 @@ internal static class Theme
         if (n == _coreCount) return false;
         _coreCount = n;
         CoreColorCache.Clear();
+        GraphColorCache.Clear();
         return true;
     }
 
@@ -110,14 +137,21 @@ internal static class Theme
     /// preset that is count-independent by nature), and hue-limited cool/warm bands. The +25° offset
     /// keeps core 0 off pure red (a status colour).
     /// </summary>
-    public static Color CoreColor(int index)
+    public static Color CoreColor(int index) => Spread(index, CorePalette, CoreColorCache);
+
+    /// <summary>The same, for the per-core CHART: its own preset when it has one, else the bars'.</summary>
+    public static Color GraphCoreColor(int index) => GraphPalette == FollowBars
+        ? CoreColor(index)
+        : Spread(index, GraphPalette, GraphColorCache);
+
+    private static Color Spread(int index, int palette, Dictionary<int, Color> cache)
     {
-        if (CoreColorCache.TryGetValue(index, out var cached)) return cached;
+        if (cache.TryGetValue(index, out var cached)) return cached;
         int n = Math.Max(1, _coreCount);
         double alt = index % 2 == 0 ? 0 : 1;              // small lightness alternation to separate neighbours
         double wheel = (double)index / n;                 // 0..1 over the full hue wheel (last core leaves a gap before wrapping)
         double band = n > 1 ? (double)index / (n - 1) : 0; // 0..1 spanning a limited hue band end-to-end
-        Color c = CorePalette switch
+        Color c = palette switch
         {
             1 => FromHsl((index * 137.5 + 25) % 360, 0.72, 0.55 + alt * 0.12),   // high-contrast (golden angle)
             2 => FromHsl(180 + 120.0 * band, 0.58, 0.60 + alt * 0.06),           // cool: cyan→blue→violet
@@ -125,7 +159,7 @@ internal static class Theme
             4 => FromHsl((25 + 360.0 * wheel) % 360, 0.42, 0.72),                // pastel
             _ => FromHsl((25 + 360.0 * wheel) % 360, 0.68, 0.62),                // rainbow (default)
         };
-        CoreColorCache[index] = c;
+        cache[index] = c;
         return c;
     }
 
@@ -133,6 +167,9 @@ internal static class Theme
     public static readonly string[] CorePaletteNames = [Loc.T("Arcoíris"), Loc.T("Contraste"), Loc.T("Fríos"), Loc.T("Cálidos"), Loc.T("Pastel")];
 
     public static Brush CoreBrush(int index) => SeriesBrush(CoreColor(index));
+
+    /// <summary>Per-core brush for the CHART. Same index, possibly a different palette.</summary>
+    public static Brush GraphCoreBrush(int index) => SeriesBrush(GraphCoreColor(index));
 
     private static Color FromHsl(double h, double s, double l)
     {
@@ -162,13 +199,19 @@ internal static class Theme
     /// <summary>
     /// Stable name -> colour. FNV-1a so the same process lands on the same hue across ticks,
     /// across cores, and across restarts.
+    ///
+    /// The name is normalised first, because the same process reaches us spelled two ways: the ETW
+    /// per-core owners give "claude" while the process list gives "claude.exe", and hashing those
+    /// separately paints one process in two colours depending on which widget names it. A ×N suffix
+    /// ("chrome ×42", the summed-instances label) would do the same.
     /// </summary>
     public static Brush ProcessBrush(string name)
     {
-        if (ProcessBrushes.TryGetValue(name, out var cached)) return cached;
+        string key = NormalizeProcess(name);
+        if (ProcessBrushes.TryGetValue(key, out var cached)) return cached;
 
         uint hash = 2166136261;
-        foreach (char ch in name)
+        foreach (char ch in key)
         {
             hash ^= char.ToLowerInvariant(ch);
             hash *= 16777619;
@@ -176,7 +219,23 @@ internal static class Theme
 
         var brush = new SolidColorBrush(ProcessPalette[hash % (uint)ProcessPalette.Length]);
         brush.Freeze();
-        return ProcessBrushes[name] = brush;
+        return ProcessBrushes[key] = brush;
+    }
+
+    /// <summary>The colour behind <see cref="ProcessBrush"/>, for callers that need the Color itself
+    /// (a Sparkline builds its own pen and gradient from it).</summary>
+    public static Color ProcessColor(string name) => ((SolidColorBrush)ProcessBrush(name)).Color;
+
+    /// <summary>One spelling per process: no ".exe", no " ×N" instance count, trimmed.</summary>
+    internal static string NormalizeProcess(string name)
+    {
+        string s = name.Trim();
+        int x = s.IndexOf(" ×", StringComparison.Ordinal);
+        if (x > 0) s = s[..x].TrimEnd();
+        // Length > 4, not >= : a process literally called ".exe" must not normalise to the empty
+        // string, which would then collide with every other stem-less name on one colour.
+        if (s.Length > 4 && s.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) s = s[..^4];
+        return s;
     }
 
     public static readonly FontFamily Ui = new("Segoe UI");

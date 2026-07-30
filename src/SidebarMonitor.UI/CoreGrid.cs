@@ -58,7 +58,7 @@ internal sealed class CoreGrid : Grid
         _cells = new Cell[n];
         for (int i = 0; i < n; i++)
         {
-            var color = Theme.CoreColor(i);
+            var color = Theme.GraphCoreColor(i);
             var spark = new Sparkline(color, height: 22 * GraphScale)
             {
                 FixedMax = AutoScale ? 0 : 100,
@@ -68,7 +68,7 @@ internal sealed class CoreGrid : Grid
                 SecondsPerSample = SecondsPerSample,
                 Format = v => v.ToString("F0", Ci) + " %",
             };
-            var label = Theme.Text("", 8.5, Theme.CoreBrush(i), mono: true);
+            var label = Theme.Text("", 8.5, Theme.GraphCoreBrush(i), mono: true);
             label.Text = i.ToString(Ci);
             var box = new StackPanel { Margin = new Thickness(0, 0, 4, 4) };
             box.Children.Add(label);

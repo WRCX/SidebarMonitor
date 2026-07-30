@@ -49,11 +49,13 @@ internal sealed class Sparkline : FrameworkElement
     private readonly float[]? _b;
     private int _count;
 
-    private readonly Pen _penA;
+    // Series A is recolourable (see SetSeriesColor) so the CPU total can take the dominant process's
+    // colour and match the bars below it. B is not — no caller needs it.
+    private Pen _penA;
     private readonly Pen? _penB;
-    private readonly Brush _fillA;
+    private Brush _fillA;
     private readonly Brush? _fillB;
-    private readonly Color _colorA;
+    private Color _colorA;
     private readonly Color? _colorB;
 
     private double _hoverX = -1;
@@ -82,6 +84,19 @@ internal sealed class Sparkline : FrameworkElement
 
     /// <summary>How far apart samples are, for the hover tooltip's "hace N s".</summary>
     public double SecondsPerSample { get; set; } = 1;
+
+    /// <summary>
+    /// Recolours series A. Cheap to call every tick: unchanged colours return immediately, so the pen
+    /// and gradient are only rebuilt when the colour actually moves.
+    /// </summary>
+    public void SetSeriesColor(Color c)
+    {
+        if (c == _colorA) return;
+        _colorA = c;
+        _penA = MakePen(c);
+        _fillA = MakeFill(c);
+        InvalidateVisual();
+    }
 
     /// <summary>Formats a sample for the tooltip; defaults to a plain number.</summary>
     public Func<float, string> Format { get; set; } = v => v.ToString("F0", System.Globalization.CultureInfo.InvariantCulture);
@@ -428,7 +443,7 @@ internal sealed class CoreSparkline : FrameworkElement
     {
         while (_corePens.Count <= index)
         {
-            var p = new Pen(Theme.CoreBrush(_corePens.Count), 1) { LineJoin = PenLineJoin.Round };
+            var p = new Pen(Theme.GraphCoreBrush(_corePens.Count), 1) { LineJoin = PenLineJoin.Round };
             p.Freeze();
             _corePens.Add(p);
         }
@@ -486,7 +501,7 @@ internal sealed class CoreSparkline : FrameworkElement
             // A dot per core in its own colour, then the total on top in white — the visual echo of
             // the tooltip's numbers, so you can read the spread at a glance.
             for (int c = 0; c < _coreCount; c++)
-                dc.DrawEllipse(Theme.Surface, new Pen(Theme.CoreBrush(c), 1.5),
+                dc.DrawEllipse(Theme.Surface, new Pen(Theme.GraphCoreBrush(c), 1.5),
                     new Point(x, YAt(_cores[c][hoverIdx], lo, hi, h)), 2.0, 2.0);
             dc.DrawEllipse(Theme.Surface, new Pen(Theme.InkPrimary, 2),
                 new Point(x, YAt(_total[hoverIdx], lo, hi, h)), 3.0, 3.0);

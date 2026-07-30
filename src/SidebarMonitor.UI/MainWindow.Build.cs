@@ -99,6 +99,7 @@ internal sealed partial class MainWindow
         _cpuPctBox.Child = _cpuPct;
         _cpuGraphHost.Children.Add(_cpuPctBox);
         Theme.SetCorePalette(_cfg.CorePalette);
+        Theme.SetGraphPalette(_cfg.GraphPalette);
         ApplyCpuGraphMode();
         panel.Children.Add(_cpuGraphHost);
 

@@ -152,8 +152,20 @@ internal sealed class SettingsWindow : Window
 
         p.Children.Add(SubHeader(Loc.T("Colores")));
         var palettes = Theme.CorePaletteNames.Select((name, i) => (name, i)).ToArray();
-        p.Children.Add(Choice(Loc.T("Colores de núcleos"), Loc.T("Paleta para las barras, líneas y mini-gráficas por núcleo."),
+        p.Children.Add(Choice(Loc.T("Colores de núcleos"), Loc.T("Paleta para las barras por núcleo."),
             palettes, () => _cfg.CorePalette, v => { _cfg.CorePalette = v; _host.ApplyLive("palette"); }));
+
+        // The chart may take its own preset: the bars are read one core at a time, the overlay draws
+        // every core on top of itself at once, and those want different things from a palette.
+        var graphPalettes = new[] { (Loc.T("Igual que las barras"), Theme.FollowBars) }
+            .Concat(palettes).ToArray();
+        p.Children.Add(Choice(Loc.T("Colores de la gráfica"),
+            Loc.T("Paleta para las líneas y mini-gráficas por núcleo. Independiente de las barras: en la gráfica superpuesta «Contraste» separa mucho mejor las líneas."),
+            graphPalettes, () => _cfg.GraphPalette, v => { _cfg.GraphPalette = v; _host.ApplyLive("palette"); }));
+
+        p.Children.Add(Toggle(Loc.T("Gráfica total con el color del proceso"),
+            Loc.T("En el modo «Total», pinta la línea con el color del proceso que más CPU consume, en vez del azul fijo — así coincide con las barras por núcleo, que en ese modo también se colorean por proceso."),
+            () => _cfg.CpuGraphByProcess, v => { _cfg.CpuGraphByProcess = v; _host.ApplyLive("palette"); }));
 
         p.Children.Add(SubHeader(Loc.T("Tooltips")));
         p.Children.Add(Slider(Loc.T("Opacidad de tooltips"), Loc.T("Transparencia del fondo de los tooltips (1 = opaco)."),
