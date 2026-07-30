@@ -163,6 +163,25 @@ internal static class Updater
         return string.Equals(stem, wanted, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Does this process already hold administrator rights? It decides whether a SILENT install is
+    /// even attemptable: /qn suppresses all installer UI, the UAC consent prompt included, so a
+    /// per-machine package that needs to elevate cannot ask and fails — measured on 2026-07-30 from
+    /// both a per-user and a machine-wide path, "Error 1925 ... sufficient privileges", surfacing as
+    /// exit 1603, in six seconds, every time. So the automatic path had never worked anywhere UAC is
+    /// on; it only produced the failures the old updater then retried forever.
+    /// </summary>
+    public static bool IsElevated()
+    {
+        try
+        {
+            using var id = System.Security.Principal.WindowsIdentity.GetCurrent();
+            return new System.Security.Principal.WindowsPrincipal(id)
+                .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+        }
+        catch { return false; }   // can't tell => assume not, i.e. take the path that asks
+    }
+
     /// <summary>Compares major.minor.build only (revision is ignored; AssemblyVersion is pinned).</summary>
     public static bool IsNewer(Version latest, Version current)
     {

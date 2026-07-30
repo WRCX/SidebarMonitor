@@ -6,6 +6,26 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ## [Unreleased]
 
+## [1.5.2] — 2026-07-30
+
+### Fixed
+
+- **The automatic update never could have worked, and that is what the loop was made of.** 1.5.1 stopped
+  the retrying; this is why there was something to retry. Measured on 2026-07-30 by running exactly what
+  the updater ran — an unelevated `msiexec /i … /qn` — from both a per-user and a machine-wide path:
+  `Error 1925. You do not have sufficient privileges to complete this installation for all users of the
+  machine`, surfacing as exit **1603**, in six seconds, every time. `/qn` suppresses *all* installer UI,
+  and that includes the UAC consent prompt a per-machine package needs, so it cannot ask and simply
+  fails. On any machine with UAC on, "install automatically" produced nothing but failures — which the
+  pre-1.5.1 updater then retried forever, download and all.
+  **A silent install is now only attempted when the panel is already elevated.** Otherwise the update is
+  reported like any other and «Actualizar» installs it with the usual prompt, which does work. Nothing
+  was ever lost to the failed attempts themselves: the privileges go missing at `InstallFinalize`, before
+  the installer's deferred script touches a file.
+- **`1603` no longer hides the real error.** It means "something failed inside the install" and says
+  nothing by itself; the cause is a line in the verbose log 1.5.1 started writing. The message now names
+  it (1925 above) instead of the wrapper.
+
 ## [1.5.1] — 2026-07-25
 
 ### Fixed
@@ -560,7 +580,8 @@ First public release.
 
 > Not code-signed yet, so Windows SmartScreen may warn on first run — choose **More info → Run anyway**.
 
-[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.5.1...HEAD
+[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.5.2...HEAD
+[1.5.2]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.2
 [1.5.1]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.1
 [1.5.0]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.0
 [1.4.9]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.4.9

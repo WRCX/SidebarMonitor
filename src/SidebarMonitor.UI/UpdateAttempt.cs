@@ -147,16 +147,50 @@ internal static class UpdateAttempt
     public static string Describe(int code) => code switch
     {
         1602 => Loc.T("se canceló el aviso de Windows (UAC)"),
-        1603 => Loc.T("error irrecuperable durante la instalación"),
+        // 1603 is "something failed inside the install" and says nothing by itself — the error that
+        // actually stopped it is a line in the verbose log. Never report the wrapper when the log
+        // holds the cause: the real failure here came back as 1603 with 1925 inside it.
+        1603 => InnerError() switch
+        {
+            0 => Loc.T("error irrecuperable durante la instalación"),
+            1603 => Loc.T("error irrecuperable durante la instalación"),
+            int inner => Describe(inner),
+        },
         1618 => Loc.T("ya había otra instalación en curso"),
         1619 or 1620 => Loc.T("el paquete descargado no se pudo abrir"),
         1638 => Loc.T("ya hay otra versión instalada"),
-        // A per-machine MSI cannot elevate when it is told not to show any UI: with /qn and an
-        // unelevated caller, Windows Installer has no way to raise the consent prompt and fails here
-        // instead. The prime suspect for the automatic-install path, which is the one that used /qn.
+        // A per-machine MSI cannot elevate when it is told to show no UI: with /qn from an unelevated
+        // caller, Windows Installer has no way to raise the consent prompt. Measured on 2026-07-30 —
+        // this is what the automatic path was hitting, and it took the installed version down with it.
         1925 => Loc.T("una instalación silenciosa no puede pedir permisos de administrador"),
         _ => Loc.T("msiexec devolvió el error {0}", code),
     };
+
+    /// <summary>
+    /// The error msiexec logged before giving up, dug out of the verbose log ("Error 1925. You do not
+    /// have sufficient privileges…"). 0 when there is no log or nothing to find. Reads only the tail:
+    /// the fatal error is logged near the end, and these logs run to megabytes.
+    /// </summary>
+    private static int InnerError()
+    {
+        try
+        {
+            if (!File.Exists(MsiLogPath)) return 0;
+            var tail = new Queue<string>();
+            foreach (var line in File.ReadLines(MsiLogPath))
+            {
+                tail.Enqueue(line);
+                if (tail.Count > 400) tail.Dequeue();
+            }
+            foreach (var line in tail.Reverse())
+            {
+                var m = System.Text.RegularExpressions.Regex.Match(line, @"\bError (\d{4})\b");
+                if (m.Success && int.TryParse(m.Groups[1].Value, out int n) && n != 1603) return n;
+            }
+        }
+        catch { /* diagnostics must never be the thing that breaks */ }
+        return 0;
+    }
 
     // ── Storage ──────────────────────────────────────────────────────────────────────────────────
 

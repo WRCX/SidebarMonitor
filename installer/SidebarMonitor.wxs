@@ -19,7 +19,14 @@
            Compressed="yes">
 
     <!-- AllowSameVersionUpgrades lets the user switch between the full and lite installers (same
-         version, different bundling) without uninstalling first. -->
+         version, different bundling) without uninstalling first.
+
+         Schedule is left at the default (afterInstallValidate). Moving it to afterInstallExecute was
+         tried on 2026-07-30, on the theory that a failed upgrade had wiped an install — but the MSI
+         log disproved it: the unelevated silent upgrade lost its privileges at InstallFinalize, which
+         is before the deferred script touches anything, so nothing was installed OR removed. With no
+         evidence of harm, resequencing the upgrade is an unvalidated change that also widens the
+         window in which two products are registered at once. -->
     <MajorUpgrade AllowSameVersionUpgrades="yes"
                   DowngradeErrorMessage="A newer version of SidebarMonitor is already installed." />
     <MediaTemplate EmbedCab="yes" />
