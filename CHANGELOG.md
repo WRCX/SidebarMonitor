@@ -6,6 +6,38 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ## [Unreleased]
 
+## [1.5.5] — 2026-07-30
+
+### Fixed
+
+- **The automatic install now actually installs.** 1.5.2 stopped it attempting something that could
+  never work (an unelevated `/qn` dies at `InstallFinalize` with 1925 every time), which left the
+  feature honest but useless. The relauncher now **elevates `msiexec` explicitly**, so it works: one
+  UAC prompt, or none where elevation is silent. "Silent" cannot mean "no consent prompt" for a
+  machine-wide package, and the setting's description no longer pretends otherwise.
+  Getting the exit code back took a round trip through a file, since elevation and a return value are
+  mutually exclusive from a script — `ShellExecute("runas")` elevates but neither waits nor reports.
+  The elevated half writes msiexec's code down, the unelevated half waits for it, and the panel is
+  restarted with the ordinary token so it never comes back running as administrator. Declining the
+  prompt is recorded as a cancel, and the wait is bounded at 15 minutes.
+- **The CPU percentage was unreadable over the per-core graph.** With the overlay selected the chart
+  draws one bright line per core — 16 on a 7800X3D — directly behind it, and white-on-anything does not
+  work. It now sits on a dark rounded chip, like the backing the per-core rows already use.
+- **One process could be drawn in two different colours.** The per-core owners arrive from ETW as
+  `claude` while the process list says `claude.exe` and labels summed instances `chrome ×42`; those
+  hashed to different palette slots. The name is normalised before hashing now, so a process has one
+  colour wherever it appears.
+
+### Added
+
+- **A separate palette for the per-core chart** (Settings → CPU → *Colores de la gráfica*), independent
+  of the bars', defaulting to "same as the bars" — which is exactly what the single shared palette did.
+  They are read differently: the bars one core at a time, where neighbouring hues are fine, and the
+  overlay all at once on top of itself, where the high-contrast spread is much easier to trace one line
+  through.
+- **The total CPU graph can be drawn in the heaviest process's colour** instead of the fixed blue, so it
+  matches the per-core bars, which colour by process in that mode. Off by default.
+
 ## [1.5.4] — 2026-07-30
 
 ### Fixed
@@ -622,7 +654,8 @@ First public release.
 
 > Not code-signed yet, so Windows SmartScreen may warn on first run — choose **More info → Run anyway**.
 
-[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.5.4...HEAD
+[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.5.5...HEAD
+[1.5.5]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.5
 [1.5.4]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.4
 [1.5.3]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.3
 [1.5.2]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.2
