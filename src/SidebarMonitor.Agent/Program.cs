@@ -248,7 +248,9 @@ internal static class Program
             s.Cpu.VidV = e.CpuVidV;
             s.Cpu.TjMaxC = e.CpuTjMaxC;
             // "GHz máx" = the best core's REQUESTED clock, straight from the SDK's dCurrentFreq. It
-            // replaces the PDH figure outright rather than being max()ed with it.
+            // replaces the PDH figure outright rather than being max()ed with it. The per-core rows
+            // are fed from the same array below, so this is the maximum of what the user can see —
+            // it was not, and a core row reading above it is what surfaced the split.
             //
             // Max()ing them looked harmless and was not. PDH's averaged % Processor Performance, the
             // SDK's requested clock and PawnIO's effective clock are three different quantities, and
@@ -278,6 +280,13 @@ internal static class Program
                 // C0 residency maps the same way: both SMT siblings inherit the physical core's
                 // awake-fraction, so a parked physical core shows both its logical rows asleep.
                 s.Cpu.CoreC0Pct[i] = e.CpuCoreC0Pct[p];
+                // And the clock, which the rows were taking from PDH while "GHz máx" above them came
+                // from the SDK — two unsynchronised measures of different quantities, so a row could
+                // read higher than the maximum it sits under. Same source now, same physical→logical
+                // expansion (SMT siblings share a core, so they share its clock). Only overwritten
+                // where the SDK actually gave a number: PDH stays the fallback everywhere else, which
+                // is every Intel CPU and every mobile APU the Ryzen Master SDK cannot read.
+                if (!float.IsNaN(e.CpuCoreFreqMhz[p])) s.Cpu.CoreFreqMhz[i] = e.CpuCoreFreqMhz[p];
             }
 
             s.CpuFromAmd = true;

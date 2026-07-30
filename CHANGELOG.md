@@ -6,6 +6,29 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ## [Unreleased]
 
+## [1.5.3] — 2026-07-30
+
+### Fixed
+
+- **A core could show a higher clock than "GHz máx" above it.** Reported on a 7800X3D, and true: the two
+  numbers were measuring different things from different sources. "GHz máx" is the maximum of the AMD
+  SDK's per-core *requested* clock, while each core row was `nominal × % Processor Performance` from
+  PDH — Windows' averaged estimate. Two unsynchronised quantities, so nothing stopped a row from
+  passing the maximum it sits under. It was invisible before 1.5.0 only because "GHz máx" was then a
+  `max()` across PDH as well, which made it ≥ any row by construction; removing that (which fixed a
+  real +100-150 MHz bias against HWiNFO) left the rows behind on the old source.
+  The per-core clocks now come from the same SDK array the maximum is taken from, expanded onto the
+  logical rows exactly like per-core temperature and C0 already were — so "GHz máx" is the maximum of
+  what you can actually see, and both are the quantity HWiNFO calls "Reloj". PDH remains the fallback
+  wherever the SDK is absent: every Intel CPU, and the mobile APUs the Ryzen Master SDK cannot read.
+  A glitch filter that drops a core from the maximum now necessarily drops it from its row too — same
+  line of code, with tests pinning that invariant.
+
+### Changed
+
+- Shared-memory contract 16 → 17 (a per-core clock array). All three processes ship together in the
+  MSI, so this only matters if you run a mismatched pair by hand.
+
 ## [1.5.2] — 2026-07-30
 
 ### Fixed
@@ -580,7 +603,8 @@ First public release.
 
 > Not code-signed yet, so Windows SmartScreen may warn on first run — choose **More info → Run anyway**.
 
-[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.5.2...HEAD
+[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.5.3...HEAD
+[1.5.3]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.3
 [1.5.2]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.2
 [1.5.1]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.1
 [1.5.0]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.0

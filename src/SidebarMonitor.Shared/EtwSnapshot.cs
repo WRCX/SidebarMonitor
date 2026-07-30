@@ -7,7 +7,7 @@ public static class EtwLayout
 {
     /// <summary>'SBME' little-endian.</summary>
     public const uint Signature = 0x454D4253;
-    public const uint Version = 16;
+    public const uint Version = 17;
     /// <summary>Global\ on purpose: there is exactly ONE elevated helper per machine (the NT Kernel
     /// Logger session it owns is single-instance machine-wide), and every user's session must see
     /// it. Creating a Global\ map needs SeCreateGlobalPrivilege — the helper is elevated, so it has
@@ -113,6 +113,20 @@ public struct EtwSnapshot
     /// of the sample the core was awake. ~0 = parked/asleep — the "Sleep" state Ryzen Master shows.
     /// The agent maps these onto the logical rows. -1 when unavailable.</summary>
     public PhysCoreTempArray CpuCoreC0Pct;
+
+    /// <summary>
+    /// Per-PHYSICAL-core REQUESTED clock (MHz) from the AMD SDK's dCurrentFreq — the same numbers
+    /// <see cref="CpuBestFreqMhz"/> is the maximum of, published so the per-core rows can show that
+    /// same quantity instead of a different one.
+    ///
+    /// They used to disagree, and visibly: "GHz máx" came from here (via the max) while the rows came
+    /// from PDH's nominal × % Processor Performance, two unsynchronised estimates of different things.
+    /// So a row could read ABOVE the maximum above it, which is nonsense on its face. Before 1.5.0 the
+    /// maximum was a max() over PDH as well, which hid the split by construction; fixing that clock's
+    /// upward bias exposed it. NaN where unavailable, and for a glitch read (≥6 GHz) — filtered here
+    /// exactly as it is for the maximum, or the row would once again beat it.
+    /// </summary>
+    public PhysCoreTempArray CpuCoreFreqMhz;
 
     // ---- From PawnIO's signed RyzenSMU module, when installed + opted in (advanced sensors) ----
 

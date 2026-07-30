@@ -334,12 +334,9 @@ internal static class Program
                 snapshot.CpuPackageW = rm.PackageW;
                 // Best-core current clock from the SDK's per-core dCurrentFreq — the real boost clock
                 // (reaches ~5040), which Windows' averaged % Processor Performance never catches.
-                double bestCur = 0;
-                // Ignore glitch reads (>6 GHz is impossible): a stray spike would otherwise pin the UI's
-                // session boost-peak forever and skew the boost ratio.
-                for (int i = 0; i < rm.CoreCount && i < 16; i++)
-                    if (rm.CoreFreqMhz[i] < 6000) bestCur = Math.Max(bestCur, rm.CoreFreqMhz[i]);
-                snapshot.CpuBestFreqMhz = (float)bestCur;
+                // Both the maximum and the per-core rows, from one array in one place — see CoreClocks
+                // for why that has to be one place. The rows are what "GHz máx" is now the max OF.
+                snapshot.CpuBestFreqMhz = CoreClocks.Publish(rm.CoreFreqMhz, rm.CoreCount, snapshot.CpuCoreFreqMhz);
                 snapshot.CpuVidV = rm.VidV;
                 snapshot.CpuTjMaxC = rm.TjMaxC;
                 snapshot.CpuPptPct = rm.PptPct;
@@ -356,7 +353,8 @@ internal static class Program
                 int nc = Math.Min(rm.CoreCount, corePeak.Length);
                 for (int i = 0; i < nc; i++)
                     // Cap out glitches (a stray 6+ GHz reading would pin the star to a wrong core forever).
-                    if (rm.CoreFreqMhz[i] > corePeak[i] && rm.CoreFreqMhz[i] < 6000) corePeak[i] = rm.CoreFreqMhz[i];
+                    if (rm.CoreFreqMhz[i] > corePeak[i] && rm.CoreFreqMhz[i] < CoreClocks.GlitchMhz)
+                        corePeak[i] = rm.CoreFreqMhz[i];
                 int best = -1, second = -1;
                 for (int i = 0; i < nc; i++)
                 {
@@ -759,6 +757,44 @@ internal static class Program
 /// Persists the per-physical-core peak clocks so the best/second-core ranking survives restarts and
 /// converges on the fixed CPPC preferred cores, instead of being re-learned (and jumping) each run.
 /// </summary>
+/// <summary>
+/// The AMD SDK's per-core requested clocks, published two ways at once: every core's own value, and
+/// the maximum the UI shows as "GHz máx".
+///
+/// One function on purpose. These used to be computed in different places from different sources — the
+/// maximum here from the SDK, the per-core rows in the agent from PDH's nominal × % Processor
+/// Performance — so a core row could read ABOVE the maximum printed above it. Anything that filters a
+/// core out of the maximum has to filter it out of its row too, and that is only guaranteed when it is
+/// the same line of code.
+/// </summary>
+internal static class CoreClocks
+{
+    /// <summary>Above this a reading is a glitch, not a clock. A stray spike published as a row would
+    /// beat the maximum; published to the peak tracker it would pin the best-core star forever.</summary>
+    internal const double GlitchMhz = 6000;
+
+    /// <summary>
+    /// Fills <paramref name="perCore"/> with each physical core's clock (NaN where unavailable or
+    /// glitched) and returns the maximum of exactly those values — so the maximum is always the
+    /// maximum of what the rows will show. 0 when nothing was readable.
+    /// </summary>
+    internal static float Publish(ReadOnlySpan<double> coreFreqMhz, int coreCount, Span<float> perCore)
+    {
+        for (int i = 0; i < perCore.Length; i++) perCore[i] = float.NaN;
+
+        double best = 0;
+        int n = Math.Min(coreCount, Math.Min(coreFreqMhz.Length, perCore.Length));
+        for (int i = 0; i < n; i++)
+        {
+            double mhz = coreFreqMhz[i];
+            if (mhz <= 0 || mhz >= GlitchMhz || double.IsNaN(mhz)) continue;
+            perCore[i] = (float)mhz;
+            best = Math.Max(best, mhz);
+        }
+        return (float)best;
+    }
+}
+
 internal static class CorePeakStore
 {
     private static string Path => System.IO.Path.Combine(
