@@ -6,6 +6,25 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ## [Unreleased]
 
+## [1.5.4] — 2026-07-30
+
+### Fixed
+
+- **«Siempre encima» did nothing in the default layout — so the panel sat on top of a full-screen RDP
+  session with no way to stop it.** `ApplyPlacement` cleared `WS_EX_TOPMOST` as asked and then called
+  `PositionOnEdge`, whose final `SetWindowPos` passed `HWND_TOPMOST` as a **literal** — undoing it on the
+  very next line. Docked + reserve-space is the default, so that was everyone's path; the shell's
+  `ABN_POSCHANGED` notification re-asserted it too. The class comment has said "Topmost is a user choice,
+  not a constant" since it was written, and in that one call it was a constant.
+  All four `SetWindowPos` Z-order call sites now read one field, and `SetTopmost` takes no argument, so no
+  caller can pass one value here and a different one to the placement that follows.
+  Measured before and after on the reporting machine, reading the window's real extended style with
+  `Topmost=false` in the config: installed 1.5.3 → `WS_EX_TOPMOST` **present**; fixed build → absent, and
+  present again with `Topmost=true`.
+  Note that unticking it does **not** let ordinary windows cover the panel while *Reservar espacio* is on:
+  the shell still reserves the strip, so only a window that takes the whole monitor and ignores the work
+  area — a full-screen remote session, a game — draws over it. Which is the point.
+
 ## [1.5.3] — 2026-07-30
 
 ### Fixed
@@ -603,7 +622,8 @@ First public release.
 
 > Not code-signed yet, so Windows SmartScreen may warn on first run — choose **More info → Run anyway**.
 
-[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.5.3...HEAD
+[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.5.4...HEAD
+[1.5.4]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.4
 [1.5.3]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.3
 [1.5.2]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.2
 [1.5.1]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.1

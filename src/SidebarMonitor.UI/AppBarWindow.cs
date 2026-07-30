@@ -37,6 +37,19 @@ internal abstract class AppBarWindow : Window
     protected int PanelWidth { get; private set; } = 280;
     protected bool Minimized { get; private set; }
 
+    /// <summary>
+    /// The user's "Siempre encima" choice, held here because the Z-order has to be re-asserted from
+    /// places that have no parameter to carry it — <see cref="PositionOnEdge"/> also runs on its own,
+    /// from the shell's ABN_POSCHANGED notification.
+    ///
+    /// Named KeepOnTop rather than Topmost only because WPF's Window.Topmost already owns that name;
+    /// this window sets WS_EX_TOPMOST by hand. Every SetWindowPos that passes a Z-order must read THIS
+    /// and nothing else: PositionOnEdge used to pass HWND_TOPMOST as a literal, so ApplyPlacement's
+    /// SetTopmost(false) was undone by the very next line and unticking the setting did nothing at all
+    /// in the default docked + reserve-space layout — including over a full-screen RDP session.
+    /// </summary>
+    protected bool KeepOnTop { get; private set; } = true;
+
     protected AppBarWindow()
     {
         WindowStyle = WindowStyle.None;
@@ -101,13 +114,14 @@ internal abstract class AppBarWindow : Window
         EdgeLeft = edgeLeft;
         PanelWidth = width;
         Minimized = minimized;
+        KeepOnTop = topmost;
 
         int strip = minimized ? MinimizedWidth : width;
 
         _placing = true;
         try
         {
-            SetTopmost(topmost);
+            SetTopmost();
 
             if (docked && reserveSpace)
             {
@@ -119,14 +133,14 @@ internal abstract class AppBarWindow : Window
                 // plain edge placement so it is ALWAYS sized to the configured width; a later
                 // ReapplyPlacement re-tries the AppBar once the shell is ready.
                 if (_registered) PositionOnEdge(strip);
-                else PositionAtEdgeNoReserve(strip, topmost);
+                else PositionAtEdgeNoReserve(strip);
             }
             else if (docked)
             {
                 // Edge-pinned overlay without an AppBar: no reserved work area, so other windows
                 // maximise, snap and go fullscreen across the whole monitor and just draw under us.
                 RemoveAppBar();
-                PositionAtEdgeNoReserve(strip, topmost);
+                PositionAtEdgeNoReserve(strip);
             }
             else
             {
@@ -135,7 +149,7 @@ internal abstract class AppBarWindow : Window
                 // every re-placement, not just the first. Without it, a later placement/resize can let
                 // the WS_THICKFRAME sizing border re-appear and re-inset the client, which offsets all
                 // hit-testing (dead right-click, wrong element) and paints a visible edge strip.
-                Native.SetWindowPos(_hwnd, topmost ? Native.HWND_TOPMOST : Native.HWND_NOTOPMOST,
+                Native.SetWindowPos(_hwnd, KeepOnTop ? Native.HWND_TOPMOST : Native.HWND_NOTOPMOST,
                     (int)floatX, (int)floatY, strip, (int)floatHeight, Native.SWP_NOACTIVATE | Native.SWP_FRAMECHANGED);
             }
         }
@@ -161,23 +175,26 @@ internal abstract class AppBarWindow : Window
 
     /// <summary>Positions the panel flush against the chosen edge, full monitor height, without
     /// registering an AppBar — so the shell reserves nothing and window management stays whole.</summary>
-    private void PositionAtEdgeNoReserve(int strip, bool topmost)
+    private void PositionAtEdgeNoReserve(int strip)
     {
         var mon = MonitorRect();
         int x = EdgeLeft ? mon.Left : mon.Right - strip;
-        Native.SetWindowPos(_hwnd, topmost ? Native.HWND_TOPMOST : Native.HWND_NOTOPMOST,
+        Native.SetWindowPos(_hwnd, KeepOnTop ? Native.HWND_TOPMOST : Native.HWND_NOTOPMOST,
             x, mon.Top, strip, mon.Bottom - mon.Top, Native.SWP_NOACTIVATE | Native.SWP_FRAMECHANGED);
     }
 
-    private void SetTopmost(bool topmost)
+    /// <summary>Applies <see cref="KeepOnTop"/> to both WS_EX_TOPMOST and the Z-order. Takes no
+    /// argument on purpose — the field is the single source, so no caller can pass one thing here and
+    /// another to the placement that follows.</summary>
+    private void SetTopmost()
     {
         long ex = (long)Native.GetWindowLongPtr(_hwnd, Native.GWL_EXSTYLE);
-        ex = topmost ? ex | Native.WS_EX_TOPMOST : ex & ~Native.WS_EX_TOPMOST;
+        ex = KeepOnTop ? ex | Native.WS_EX_TOPMOST : ex & ~Native.WS_EX_TOPMOST;
         Native.SetWindowLongPtr(_hwnd, Native.GWL_EXSTYLE, new IntPtr(ex));
 
         // FRAMECHANGED re-asserts the borderless client area even on a topmost-only toggle (NOSIZE
         // otherwise skips WM_NCCALCSIZE), so this path can't leave the thick frame painted either.
-        Native.SetWindowPos(_hwnd, topmost ? Native.HWND_TOPMOST : Native.HWND_NOTOPMOST,
+        Native.SetWindowPos(_hwnd, KeepOnTop ? Native.HWND_TOPMOST : Native.HWND_NOTOPMOST,
             0, 0, 0, 0, Native.SWP_NOACTIVATE | Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_FRAMECHANGED);
     }
 
@@ -219,7 +236,10 @@ internal abstract class AppBarWindow : Window
         else abd.rc.Left = abd.rc.Right - strip;
         Native.SHAppBarMessage(Native.ABM_SETPOS, ref abd);
 
-        Native.SetWindowPos(_hwnd, Native.HWND_TOPMOST,
+        // KeepOnTop, never a literal — see the field. Registering an AppBar reserves the strip so
+        // ordinary maximized windows cannot cover it; staying above a window that took the whole
+        // monitor anyway (a full-screen RDP client, a game) is a separate decision, and the user's.
+        Native.SetWindowPos(_hwnd, KeepOnTop ? Native.HWND_TOPMOST : Native.HWND_NOTOPMOST,
             abd.rc.Left, abd.rc.Top, abd.rc.Width, abd.rc.Height, Native.SWP_NOACTIVATE | Native.SWP_FRAMECHANGED);
     }
 
