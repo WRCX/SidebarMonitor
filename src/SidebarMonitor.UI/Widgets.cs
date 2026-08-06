@@ -8,6 +8,31 @@ using SidebarMonitor.Shared;
 
 namespace SidebarMonitor.UI;
 
+/// <summary>Shared chart helpers that are pure functions, so they can be unit-tested — the chart
+/// classes themselves are FrameworkElements and need a WPF dispatcher to exist.</summary>
+internal static class ChartMath
+{
+    /// <summary>
+    /// True when a window's scanned min/max can be used as axis bounds.
+    /// <para>
+    /// Deliberately written as <c>hi &gt;= lo</c> rather than <c>!(hi &lt; lo)</c>. Both reject the
+    /// empty window (where lo stays MaxValue and hi MinValue), but only this one rejects NaN. A NaN
+    /// sample propagates through Math.Min/Max, and every comparison against NaN is false — so the
+    /// intuitive test says "these bounds are fine", the axis renders "NaN", the span is NaN, and the
+    /// chart draws nothing at all until the sample scrolls out of the buffer. Seen in the wild on the
+    /// CPU chart when PDH missed a tick and the agent published NaN, which it does on purpose to mean
+    /// "no reading" as distinct from "0%".
+    /// </para>
+    /// </summary>
+    public static bool BoundsUsable(double lo, double hi) => hi >= lo;
+
+    /// <summary>The sample to store when a reading is missing (NaN). Holds the previous value rather
+    /// than zeroing: zero would draw a dip to idle that never happened, and on a usage graph an
+    /// invented idle moment reads as real.</summary>
+    public static float HoldIfMissing(float value, float previous) =>
+        float.IsNaN(value) ? (float.IsNaN(previous) ? 0f : previous) : value;
+}
+
 /// <summary>Shared helper: the little min/max axis labels every chart draws, with a faint backing
 /// so they stay legible over the line. They update every frame, so a moving max/min is the visible
 /// cue that the axis is auto-scaling up or down.</summary>
@@ -261,7 +286,7 @@ internal sealed class Sparkline : FrameworkElement
             dLo = Math.Min(dLo, _a[i]); dHi = Math.Max(dHi, _a[i]);
             if (_b is not null) { dLo = Math.Min(dLo, _b[i]); dHi = Math.Max(dHi, _b[i]); }
         }
-        if (dHi < dLo) { dLo = 0; dHi = MinRange; }
+        if (!ChartMath.BoundsUsable(dLo, dHi)) { dLo = 0; dHi = MinRange; }
 
         double tLo, tHi;
         if (AutoScale)
@@ -471,8 +496,14 @@ internal sealed class CoreSparkline : FrameworkElement
             _count--;
         }
 
-        for (int c = 0; c < n; c++) _cores[c][_count] = s.Cpu.CoreUsagePct[c];
-        _total[_count] = s.Cpu.TotalUsagePct;
+        // NaN means "PDH could not read this tick", which the agent publishes deliberately — that is
+        // not the same statement as 0%. It must not reach the buffer: one NaN sample blanked the whole
+        // chart and put "NaN %" on the axis until it scrolled out.
+        for (int c = 0; c < n; c++)
+            _cores[c][_count] = ChartMath.HoldIfMissing(
+                s.Cpu.CoreUsagePct[c], _count > 0 ? _cores[c][_count - 1] : 0f);
+        _total[_count] = ChartMath.HoldIfMissing(
+            s.Cpu.TotalUsagePct, _count > 0 ? _total[_count - 1] : 0f);
         _count++;
         InvalidateVisual();
     }
@@ -523,7 +554,7 @@ internal sealed class CoreSparkline : FrameworkElement
             for (int c = 0; c < _coreCount; c++)
                 for (int i = 0; i < _count; i++) { dLo = Math.Min(dLo, _cores[c][i]); dHi = Math.Max(dHi, _cores[c][i]); }
             for (int i = 0; i < _count; i++) { dLo = Math.Min(dLo, _total[i]); dHi = Math.Max(dHi, _total[i]); }
-            if (dHi < dLo) { dLo = 0; dHi = 10; }
+            if (!ChartMath.BoundsUsable(dLo, dHi)) { dLo = 0; dHi = 10; }
             double range = Math.Max(dHi - dLo, 8);   // never zoom past an 8-point span
             double margin = range * 0.15;
             tHi = Math.Min(100, dHi + margin);
