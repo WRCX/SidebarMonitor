@@ -6,6 +6,26 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ## [Unreleased]
 
+## [1.5.6] — 2026-10-15
+
+1.5.5 was built and installed locally but never published, so this is the first public release
+since 1.5.4 and carries 1.5.5's changes too (see below).
+
+### Fixed
+
+- **The collapsed panel reopened itself when a remote desktop session connected or disconnected** —
+  and wrote `Minimized=false` to `ui.json`, as if you had clicked the tab. It was not a restart (the
+  same UI process had been running for days); the live window was reopening. The only thing in the UI
+  that reopens the panel is the tab's handler, and it fired on any mouse *release* over the tab, wherever
+  the button went down. The tab sits on the screen edge, which is where the cursor lands when a session
+  change resizes the desktop under it. A click is now a press and a release on the same element, and
+  leaving it in between cancels it. The minimise button had the same shape and is fixed the same way.
+- **One missed PDH reading blanked the whole CPU chart** and labelled its axis `NaN %` until the sample
+  scrolled out. The agent publishes NaN on purpose when PDH has no reading for a tick — that is not the
+  same statement as 0% — but the chart stored it as-is, and its bounds guard (`hi < lo`) cannot see a
+  NaN, because every comparison against NaN is false. A missing sample now holds the previous value
+  (zero would draw a drop to idle that never happened), and the guard is written so that NaN fails it.
+
 ## [1.5.5] — 2026-07-30
 
 ### Fixed
