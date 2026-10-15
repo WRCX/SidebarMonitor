@@ -56,7 +56,7 @@ internal sealed partial class MainWindow
 
         _minButton.Cursor = Cursors.Hand;
         _minButton.Padding = new Thickness(4, 0, 2, 0);
-        _minButton.MouseLeftButtonUp += (_, e) => { e.Handled = true; SetMinimized(true); };
+        WireClick(_minButton, () => SetMinimized(true));
         ToolTipService.SetToolTip(_minButton, Loc.T("Minimizar a pestaña"));
         Grid.SetColumn(_minButton, 2);
 

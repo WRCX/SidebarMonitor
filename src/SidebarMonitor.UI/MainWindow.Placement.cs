@@ -69,6 +69,21 @@ internal sealed partial class MainWindow
         _cfg.Save();
     }
 
+    /// <summary>Runs <paramref name="onClick"/> on a real click: press and release both on <paramref name="el"/>.
+    /// See <see cref="ClickGate"/> for why a bare MouseLeftButtonUp is not one.</summary>
+    private static void WireClick(UIElement el, Action onClick)
+    {
+        var gate = new ClickGate();
+        el.MouseLeftButtonDown += (_, _) => gate.Press();
+        el.MouseLeave += (_, _) => gate.Leave();
+        el.MouseLeftButtonUp += (_, e) =>
+        {
+            if (!gate.Release()) return;
+            e.Handled = true;
+            onClick();
+        };
+    }
+
     private void SetMinimized(bool minimized)
     {
         _cfg.Minimized = minimized;

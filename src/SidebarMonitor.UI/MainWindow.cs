@@ -166,7 +166,7 @@ internal sealed partial class MainWindow : AppBarWindow
         _tabArrow.HorizontalAlignment = HorizontalAlignment.Center;
         _tabArrow.VerticalAlignment = VerticalAlignment.Center;
         _tab = new Border { Background = Theme.Page, Child = _tabArrow, Cursor = Cursors.Hand, Visibility = Visibility.Collapsed };
-        _tab.MouseLeftButtonUp += (_, _) => SetMinimized(false);
+        WireClick(_tab, () => SetMinimized(false));
         ToolTipService.SetToolTip(_tab, Loc.T("Abrir SidebarMonitor"));
 
         var root = new Grid();
