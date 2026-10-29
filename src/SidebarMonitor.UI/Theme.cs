@@ -376,25 +376,30 @@ internal static class Theme
         FontFamily = mono ? Mono : Ui,
     };
 
+    // Every number on the panel is formatted invariant ("1.5"), whatever the OS locale. These three
+    // used to follow the current culture, so a Spanish Windows showed "R8,3M" next to "6.9T/12.0T"
+    // in the same section, and "VRAM 1,5 / 16,0 GiB" under "20.4 / 31.1 GiB".
+    private static readonly System.Globalization.CultureInfo Inv = System.Globalization.CultureInfo.InvariantCulture;
+
     /// <summary>Rate in KiB/MiB/GiB (binary, 1024) or KB/MB/GB (decimal, 1000), per the caller.</summary>
     public static string Bytes(double bytesPerSec, bool binary = true)
     {
         double k = binary ? 1024 : 1000, m = k * k, g = m * k;
         (string ku, string mu, string gu) = binary ? ("KiB", "MiB", "GiB") : ("KB", "MB", "GB");
-        return bytesPerSec >= g ? $"{bytesPerSec / g:F2} {gu}/s"
-             : bytesPerSec >= m ? $"{bytesPerSec / m:F1} {mu}/s"
-             : $"{bytesPerSec / k:F1} {ku}/s";
+        return bytesPerSec >= g ? string.Create(Inv, $"{bytesPerSec / g:F2} {gu}/s")
+             : bytesPerSec >= m ? string.Create(Inv, $"{bytesPerSec / m:F1} {mu}/s")
+             : string.Create(Inv, $"{bytesPerSec / k:F1} {ku}/s");
     }
 
     public static string BytesShort(double bytesPerSec, bool binary = true)
     {
         double k = binary ? 1024 : 1000, m = k * k, g = m * k;
-        return bytesPerSec >= g ? $"{bytesPerSec / g:F1}G"
-             : bytesPerSec >= m ? $"{bytesPerSec / m:F1}M"
-             : $"{bytesPerSec / k:F0}K";
+        return bytesPerSec >= g ? string.Create(Inv, $"{bytesPerSec / g:F1}G")
+             : bytesPerSec >= m ? string.Create(Inv, $"{bytesPerSec / m:F1}M")
+             : string.Create(Inv, $"{bytesPerSec / k:F0}K");
     }
 
-    public static string Gib(ulong bytes) => $"{bytes / (1024.0 * 1024 * 1024):F1}";
+    public static string Gib(ulong bytes) => string.Create(Inv, $"{bytes / (1024.0 * 1024 * 1024):F1}");
 
     /// <summary>Memory size number in GiB (binary, 1024) or GB (decimal, 1000), per the flag.</summary>
     public static string MemVal(ulong bytes, bool binary) =>

@@ -105,26 +105,77 @@ internal sealed class FrameStats : IDisposable
     {
         int[] col;
         lock (_lock) col = _col;
-        if (col.Length == 0 || col[0] < 0 || col[2] < 0) return;
-
-        var f = line.Split(',');
-        if (f.Length <= col[2]) return;
-        if (!int.TryParse(Get(f, col[1]), out int pid)) return;
-        float frame = Num(Get(f, col[2]));
-        if (float.IsNaN(frame) || frame <= 0) return;
+        if (!TryParseRow(line, col, out var r)) return;
 
         long now = Environment.TickCount64;
+        var app = line.AsSpan()[r.App];
         lock (_lock)
         {
-            if (!_byPid.TryGetValue(pid, out var buf)) { buf = new Buf(); _byPid[pid] = buf; }
-            buf.App = Get(f, col[0]);
-            buf.F.Add((now, frame, Num(Get(f, col[3])), Num(Get(f, col[4])), Num(Get(f, col[5])), Num(Get(f, col[6]))));
+            if (!_byPid.TryGetValue(r.Pid, out var buf)) { buf = new Buf(); _byPid[r.Pid] = buf; }
+            // The name barely ever changes for a pid; only allocate when it does.
+            if (!app.SequenceEqual(buf.App)) buf.App = app.ToString();
+            buf.F.Add((now, r.Frame, r.Disp, r.Gpu, r.Anim, r.Lat));
         }
     }
 
-    private static string Get(string[] f, int i) => i >= 0 && i < f.Length ? f[i] : "";
-    private static float Num(string s) =>
-        float.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out float v) ? v : float.NaN;
+    /// <summary>One CSV row's fields, as <see cref="TryParseRow"/> reads them. <see cref="App"/> is a
+    /// range into the line, so a row costs no allocation at all.</summary>
+    internal struct FrameRow
+    {
+        public int Pid;
+        public Range App;
+        public float Frame, Disp, Gpu, Anim, Lat;
+    }
+
+    /// <summary>
+    /// Parses one PresentMon CSV row with the header-mapped column indices (<see cref="Wanted"/> order).
+    /// False for a row that cannot be a frame: no frame-time column, unparseable pid, or a frame time
+    /// that is missing or ≤ 0. Other missing or unparseable metrics read NaN.
+    /// <para>
+    /// A walk over the line's commas rather than <c>Split</c>: this runs for every frame of every
+    /// process that presents — a game at 300 fps plus a browser and a chat client at their refresh
+    /// rate — and Split built a string per column (~25 of them) plus an array for each one.
+    /// </para>
+    /// </summary>
+    internal static bool TryParseRow(string line, int[] col, out FrameRow row)
+    {
+        row = default;
+        if (col.Length < Wanted.Length || col[0] < 0 || col[2] < 0) return false;
+
+        // Locate the wanted fields in one pass. -1 start = the line has no such column.
+        Span<int> start = stackalloc int[Wanted.Length];
+        Span<int> len = stackalloc int[Wanted.Length];
+        start.Fill(-1);
+        int field = 0, pos = 0;
+        while (true)
+        {
+            int comma = line.IndexOf(',', pos);
+            int end = comma < 0 ? line.Length : comma;
+            for (int k = 0; k < Wanted.Length; k++)
+                if (col[k] == field) { start[k] = pos; len[k] = end - pos; }
+            if (comma < 0) break;
+            pos = comma + 1;
+            field++;
+        }
+
+        ReadOnlySpan<char> F(Span<int> s, Span<int> l, int k) => s[k] < 0 ? default : line.AsSpan(s[k], l[k]);
+        float N(Span<int> s, Span<int> l, int k) =>
+            float.TryParse(F(s, l, k), NumberStyles.Float, CultureInfo.InvariantCulture, out float v) ? v : float.NaN;
+
+        if (start[2] < 0) return false;   // the row is shorter than the frame-time column
+        if (!int.TryParse(F(start, len, 1), NumberStyles.Integer, CultureInfo.InvariantCulture, out int pid)) return false;
+        float frame = N(start, len, 2);
+        if (float.IsNaN(frame) || frame <= 0) return false;
+
+        row.Pid = pid;
+        row.App = start[0] < 0 ? new Range(0, 0) : new Range(start[0], start[0] + len[0]);
+        row.Frame = frame;
+        row.Disp = N(start, len, 3);
+        row.Gpu = N(start, len, 4);
+        row.Anim = N(start, len, 5);
+        row.Lat = N(start, len, 6);
+        return true;
+    }
 
     /// <summary>Computes the current metrics for the foreground app. App empty when nothing qualifies.</summary>
     public FrameInfo Poll()

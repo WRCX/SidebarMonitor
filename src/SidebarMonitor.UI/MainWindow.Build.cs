@@ -56,7 +56,7 @@ internal sealed partial class MainWindow
 
         _minButton.Cursor = Cursors.Hand;
         _minButton.Padding = new Thickness(4, 0, 2, 0);
-        WireClick(_minButton, () => SetMinimized(true));
+        ClickGate.Wire(_minButton, () => SetMinimized(true));
         ToolTipService.SetToolTip(_minButton, Loc.T("Minimizar a pestaña"));
         Grid.SetColumn(_minButton, 2);
 
@@ -176,6 +176,7 @@ internal sealed partial class MainWindow
         _cpuCoreGrid.ApplyGraphScale(Scale("cpu"));
         _gpuSection.ApplyGraphScale(Scale("gpu"));
         _netSpark.Height = 36 * Scale("net");
+        _batterySection.ApplyGraphScale(Scale("bat"));
         foreach (var b in _diskBlocks) b.Spark.Height = 22 * Scale("disk");
     }
 
@@ -213,6 +214,7 @@ internal sealed partial class MainWindow
         _cpuSpark.SecondsPerSample = _cpuCoreSpark.SecondsPerSample = EffectiveRefresh("cpu") / 1000.0;
         _gpuSection.SecondsPerSample = EffectiveRefresh("gpu") / 1000.0;
         _netSpark.SecondsPerSample = EffectiveRefresh("net") / 1000.0;
+        _batterySection.SecondsPerSample = EffectiveRefresh("bat") / 1000.0;
         foreach (var b in _diskBlocks) b.Spark.SecondsPerSample = EffectiveRefresh("disk") / 1000.0;
     }
 
@@ -434,7 +436,16 @@ internal sealed partial class MainWindow
             caption.Margin = new Thickness(3, 0, 0, 1.5);   // small gap, sat on the number's baseline
             cell.Children.Add(value);
             cell.Children.Add(caption);
-            grid.Children.Add(cell);
+            // Shrink-to-fit, never grow: four tiles in a narrow panel (240 px is allowed) overflowed their
+            // quarter and clipped on BOTH sides — "4.77 GHz máx" read ".77 GHz má". At normal widths
+            // the cell fits and the Viewbox leaves it at exactly its natural size.
+            grid.Children.Add(new Viewbox
+            {
+                Child = cell,
+                Stretch = Stretch.Uniform,
+                StretchDirection = StretchDirection.DownOnly,
+                VerticalAlignment = VerticalAlignment.Bottom,
+            });
         }
         return grid;
     }

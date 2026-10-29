@@ -21,7 +21,6 @@ internal static class LocStrings
         // ── Tray + top-level menu ─────────────────────────────────────────────────────────────
         ["Abrir SidebarMonitor"] = "Open SidebarMonitor",
         ["Mostrar / ocultar"] = "Show / hide",
-        ["Configuración…"] = "Settings…",
         ["Salir"] = "Quit",
         ["Ajustes…"] = "Settings…",
         ["Secciones"] = "Sections",
@@ -358,5 +357,47 @@ internal static class LocStrings
         ["No encuentro License.rtf empaquetada. Está en la instalación del SDK de AMD, normalmente en C:\\Program Files\\AMD\\RyzenMasterMonitoringSDK\\License.rtf."]
             = "I can't find a bundled License.rtf. It's in the AMD SDK installation, usually at C:\\Program Files\\AMD\\RyzenMasterMonitoringSDK\\License.rtf.",
         ["Licencia de AMD"] = "AMD license",
+
+        // ── Battery section ───────────────────────────────────────────────────────────────────
+        ["BATERÍA"] = "BATTERY",
+        ["quedan {0}"] = "{0} left",
+        ["llena en ~{0}"] = "full in ~{0}",
+        ["cargando"] = "charging",
+        ["con batería"] = "on battery",
+        ["conectada · llena"] = "plugged in · full",
+        ["conectada"] = "plugged in",
+
+        // ── Alerts (notifications + Settings → Alertas) ───────────────────────────────────────
+        ["CPU muy caliente"] = "CPU running hot",
+        ["{0:F0} °C, a {1:F0} °C de su límite térmico"] = "{0:F0} °C, {1:F0} °C below its thermal limit",
+        ["GPU muy caliente"] = "GPU running hot",
+        ["Memoria casi llena"] = "Memory almost full",
+        ["{0:F0} % en uso"] = "{0:F0} % in use",
+        ["Batería baja"] = "Battery low",
+        ["{0:F0} % · quedan {1}"] = "{0:F0} % · {1} left",
+        ["Poco espacio en disco"] = "Low disk space",
+        ["{0} alertas"] = "{0} alerts",
+        ["{0} — quedan {1} ({2:F0} % libre)"] = "{0} — {1} left ({2:F0} % free)",
+        ["Alertas"] = "Alerts",
+        ["Un aviso en la bandeja cuando una lectura se queda pasado su umbral, aunque el panel esté plegado, minimizado u oculto. Cada alerta avisa una vez y no vuelve a hacerlo hasta que el valor regresa claramente a la normalidad, y nunca antes de 10 minutos."]
+            = "A tray notification when a reading stays past its threshold, even with the panel folded, minimised or hidden. Each alert fires once and not again until the value is clearly back to normal, and never within 10 minutes.",
+        ["En la zona roja del panel: a 4 °C de su límite térmico (Tjmax), o 90 °C si no se conoce. Durante 10 s seguidos."]
+            = "In the panel's red zone: within 4 °C of its thermal limit (Tjmax), or 90 °C if unknown. For 10 s straight.",
+        ["La GPU más caliente, durante 10 s seguidos."] = "The hottest GPU, for 10 s straight.",
+        ["Umbral de GPU"] = "GPU threshold",
+        ["Durante 30 s seguidos."] = "For 30 s straight.",
+        ["Umbral de memoria"] = "Memory threshold",
+        ["Cualquier unidad fija. Se comprueba una vez por minuto."] = "Any fixed drive. Checked once a minute.",
+        ["Avisar con menos de"] = "Warn below",
+        ["5 % libre"] = "5 % free",
+        ["10 % libre"] = "10 % free",
+        ["15 % libre"] = "15 % free",
+        ["20 % libre"] = "20 % free",
+        ["Solo mientras se descarga. En un sobremesa no hace nada."] = "Only while discharging. Does nothing on a desktop.",
+        ["Umbral de batería"] = "Battery threshold",
+        ["Probar aviso"] = "Test notification",
+        ["Muestra un aviso de ejemplo, para ver dónde y cómo aparecen."] = "Shows a sample notification, to see where and how they appear.",
+        ["Alerta de prueba"] = "Test alert",
+        ["Así se verán los avisos de SidebarMonitor."] = "This is how SidebarMonitor's alerts will look.",
     };
 }

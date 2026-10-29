@@ -595,6 +595,10 @@ internal sealed class BarMeter : FrameworkElement
 
     public BarMeter(Color series) { Height = 6; _fill = Theme.SeriesBrush(series); SnapsToDevicePixels = true; }
 
+    /// <summary>A gauge where empty is the danger (a battery), not full (RAM, VRAM): turns serious at
+    /// 20 % and critical at 10 % instead of at 80 / 90 %.</summary>
+    public bool LowIsBad { get; init; }
+
     public void Update(double fraction)
     {
         _fraction = Math.Clamp(fraction, 0, 1);
@@ -606,7 +610,9 @@ internal sealed class BarMeter : FrameworkElement
         double w = ActualWidth, h = ActualHeight;
         if (w <= 0) return;
         dc.DrawRoundedRectangle(Theme.Grid, null, new System.Windows.Rect(0, 0, w, h), 3, 3);
-        Brush fill = _fraction >= 0.90 ? Theme.StatusCritical : _fraction >= 0.80 ? Theme.StatusSerious : _fill;
+        Brush fill = LowIsBad
+            ? (_fraction <= 0.10 ? Theme.StatusCritical : _fraction <= 0.20 ? Theme.StatusSerious : _fill)
+            : (_fraction >= 0.90 ? Theme.StatusCritical : _fraction >= 0.80 ? Theme.StatusSerious : _fill);
         if (_fraction > 0.005)
             dc.DrawRoundedRectangle(fill, null, new System.Windows.Rect(0, 0, w * _fraction, h), 3, 3);
     }
@@ -649,10 +655,15 @@ internal sealed class Section : StackPanel
         };
         titleBlock.Inlines.Add(_titleSuffix);
 
+        // When title and summary don't both fit, the title gives way (ellipsis) and the live summary
+        // stays whole: a narrow panel used to run them together, "RTX 4070 Ti SUPER1% 2640MHz".
+        titleBlock.TextTrimming = TextTrimming.CharacterEllipsis;
+        _summary.Margin = new Thickness(8, 0, 0, 0);
+
         var headerGrid = new Grid { Margin = new Thickness(8, 5, 8, 3) };
         headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         Grid.SetColumn(_arrow, 0);
         Grid.SetColumn(titleBlock, 1);
         Grid.SetColumn(_summary, 2);
@@ -661,7 +672,9 @@ internal sealed class Section : StackPanel
         headerGrid.Children.Add(_summary);
 
         var header = new Border { Child = headerGrid, Background = Brushes.Transparent, Cursor = Cursors.Hand };
-        header.MouseLeftButtonUp += (_, _) => { Expanded = !Expanded; StateChanged?.Invoke(); };
+        // A real click only (see ClickGate): a bare release folded or unfolded a section — and saved
+        // that to ui.json — when a drag that began on a chart ended over a header.
+        ClickGate.Wire(header, () => { Expanded = !Expanded; StateChanged?.Invoke(); });
 
         var bodyHost = new Border { Child = body, Padding = new Thickness(8, 0, 8, 6) };
 

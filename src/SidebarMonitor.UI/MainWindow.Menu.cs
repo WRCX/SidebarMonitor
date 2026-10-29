@@ -28,7 +28,7 @@ internal sealed partial class MainWindow
         foreach (var s in _sections)
         {
             var sec = s;
-            var it = new MenuItem { Header = sec.Title, IsCheckable = true, IsChecked = sec.Visibility == Visibility.Visible };
+            var it = new MenuItem { Header = sec.Title, IsCheckable = true, IsChecked = IsSectionWanted(sec) };
             it.Click += (_, _) => SetSectionShown(sec, it.IsChecked);
             quickSections.Items.Add(it);
         }

@@ -92,6 +92,9 @@ internal sealed partial class MainWindow : AppBarWindow
     private readonly GpuSection _gpuSection = new();
     private readonly GameSection _gameSection = new();
     public bool TestFakeFps { get; init; }   // set by --fake-fps to preview the GAME section
+    private readonly BatterySection _batterySection = new();
+    public bool TestFakeBattery { get; init; }   // set by --fake-battery to preview BATTERY on a desktop
+    private readonly AlertMonitor _alerts;
 
     // NET
     private readonly Sparkline _netSpark = new(Theme.SeriesIn, Theme.SeriesOut);
@@ -121,6 +124,11 @@ internal sealed partial class MainWindow : AppBarWindow
     {
         _cfg = cfg;
         _monitors = monitors;
+        _alerts = new AlertMonitor(cfg, (title, text) =>
+        {
+            _tray?.Alert(title, text);
+            Console.WriteLine($"alerta: {title} | {text}");   // visible with --dump/--shot's console; a no-op otherwise
+        });
         // Migrate the old boolean "usage from C0" into the new 4-way bar mode.
         if (_cfg.CoreUsageC0 && _cfg.CoreBarMode == 0) { _cfg.CoreBarMode = 1; _cfg.CoreUsageC0 = false; }
         // Migrate the old boolean CPU-per-core-graph into the new 3-way graph mode.
@@ -143,6 +151,7 @@ internal sealed partial class MainWindow : AppBarWindow
         if (_cfg.LogCsv) _csv.Start(DateTime.Now);
         Register(new Section("cpu", Loc.T("CPU"), BuildCpu()));
         Register(new Section("ram", Loc.T("MEMORIA"), BuildRam()));
+        Register(new Section("bat", Loc.T("BATERÍA"), _batterySection));
         Register(new Section("gpu", Loc.T("GPU"), BuildGpu()));
         Register(new Section("game", Loc.T("JUEGO"), _gameSection));
         Register(new Section("net", Loc.T("RED"), BuildNet()));
@@ -166,7 +175,7 @@ internal sealed partial class MainWindow : AppBarWindow
         _tabArrow.HorizontalAlignment = HorizontalAlignment.Center;
         _tabArrow.VerticalAlignment = VerticalAlignment.Center;
         _tab = new Border { Background = Theme.Page, Child = _tabArrow, Cursor = Cursors.Hand, Visibility = Visibility.Collapsed };
-        WireClick(_tab, () => SetMinimized(false));
+        ClickGate.Wire(_tab, () => SetMinimized(false));
         ToolTipService.SetToolTip(_tab, Loc.T("Abrir SidebarMonitor"));
 
         var root = new Grid();
@@ -181,6 +190,9 @@ internal sealed partial class MainWindow : AppBarWindow
 
         ApplyRefreshRates();
         Resized += OnPanelResized;
+        // Hidden from the tray or the menu: give the reserved strip back to the desktop, and take it
+        // again on show (ApplyPlacement only registers the AppBar while the window is visible).
+        IsVisibleChanged += (_, _) => ReapplyPlacement();
         _displaySettle.Tick += (_, _) => RecoverFromDisplayChange();
         _timer.Tick += (_, _) => Tick();
         Loaded += (_, _) =>
@@ -227,7 +239,9 @@ internal sealed partial class MainWindow : AppBarWindow
     {
         _tray = tray;
         tray.ToggleRequested += () => Visibility = Visibility == Visibility.Visible ? Visibility.Hidden : Visibility.Visible;
-        tray.ConfigRequested += () => { if (ContextMenu is not null) ContextMenu.IsOpen = true; };
+        tray.ConfigRequested += OpenSettings;
+        tray.SetClickThrough(_cfg.ClickThrough);
+        tray.ClickThroughRequested += () => { _cfg.ClickThrough = !_cfg.ClickThrough; ApplyLive("clickthrough"); };
         tray.ExitRequested += Close;
         tray.UpdateRequested += () => ApplyUpdate();
     }
@@ -239,19 +253,11 @@ internal sealed partial class MainWindow : AppBarWindow
         _byKey[s.Key] = s;
     }
 
-    /// <summary>The sections in display order: those named in the saved order first, then any
-    /// unlisted ones in their default (registration) position.</summary>
-    private IEnumerable<Section> OrderedSections()
-    {
-        var byKey = _sections.ToDictionary(s => s.Key);
-        var seen = new HashSet<string>();
-        foreach (var key in _cfg.SectionOrder)
-            if (byKey.TryGetValue(key, out var s) && seen.Add(key))
-                yield return s;
-        foreach (var s in _sections)
-            if (seen.Add(s.Key))
-                yield return s;
-    }
+    /// <summary>The sections in display order: the saved order, with any section it doesn't name (one
+    /// added in a later version) slotted in right after its registration predecessor. Appending those
+    /// at the end put a new BATTERY section under WSL for everyone who had ever reordered.</summary>
+    private IEnumerable<Section> OrderedSections() =>
+        SectionOrder.Merge(_cfg.SectionOrder, _sections.Select(s => s.Key).ToList()).Select(k => _byKey[k]);
 
     /// <summary>Rehomes the section panels under the title bar in the configured order.</summary>
     private void ApplySectionOrder()
@@ -310,6 +316,14 @@ internal sealed partial class MainWindow : AppBarWindow
             s.Frame.GpuBusyPct = 97; s.Frame.AnimationErrorMs = 1.4f; s.Frame.LatencyMs = 32;
         }
 
+        if (TestFakeBattery)   // --fake-battery: a laptop on battery, slowly draining, for a desktop preview
+        {
+            float draw = 14.5f + (float)(3 * Math.Sin(Environment.TickCount64 / 2000.0));
+            uint full = 52_000, rem = 31_400 - (uint)(Environment.TickCount64 / 1000 % 600);
+            s.Battery = BatteryDecode.Decode(acOnline: false, present: true, charging: false, discharging: true,
+                                             full, rem, unchecked((uint)(int)(-draw * 1000)), BatteryDecode.UnknownTime);
+        }
+
         // A dead agent leaves a stale map behind; detect it by the timestamp going flat.
         var age = DateTime.UtcNow - new DateTime(s.TimestampUtcTicks, DateTimeKind.Utc);
         if (age > TimeSpan.FromSeconds(10))
@@ -341,6 +355,9 @@ internal sealed partial class MainWindow : AppBarWindow
         // the verbose readout reflects live contract/SDK/helper state.
         if (_csv.IsRunning) _csv.Log(ref s, DateTime.UtcNow);
         if (_cfg.LogVerbose) UpdateDebugOverlay(ref s, age);
+
+        // Alerts too: folded, minimised or hidden is exactly when nobody is watching the numbers.
+        _alerts.Evaluate(ref s, DateTime.UtcNow);
 
         // A minimized panel shows nothing; skip every update but keep the reader warm.
         if (_cfg.Minimized) return;
@@ -446,7 +463,9 @@ internal sealed partial class MainWindow : AppBarWindow
                 if (c.EdcPct > 0) extra.Add(string.Create(ci, $"EDC {c.EdcPct:F0}%"));
                 if (c.TjMaxC > 0 && !float.IsNaN(c.TempC)) extra.Add(Loc.T("térm {0:F0}%", c.TempC / c.TjMaxC * 100));
             }
-            _cpuExtra.Text = string.Join("  ·  ", extra);
+            // The line wraps when narrow, but only BETWEEN items: no-break spaces inside each one, and
+            // the dot glued to the item before it, so it never splits "térm" from its "78%".
+            _cpuExtra.Text = string.Join(" ·  ", extra.Select(x => x.Replace(' ', ' ')));
             _cpuExtra.Foreground = throttle && _cfg.ShowCpuLimits ? Theme.StatusCritical : Theme.InkMuted;
             _cpuExtra.Visibility = extra.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
 
@@ -476,6 +495,17 @@ internal sealed partial class MainWindow : AppBarWindow
             _ramText.Text = string.Create(ci, $"{Theme.MemVal(s.Mem.PhysUsed, memBin)} / {Theme.MemVal(s.Mem.PhysTotal, memBin)} {mu}");
             _ramMeter.Update(ramFrac);
             _commitText.Text = string.Create(ci, $"commit {Theme.MemVal(s.Mem.CommitUsed, memBin)} / {Theme.MemVal(s.Mem.CommitTotal, memBin)} {mu}");
+        }
+
+        // BATTERY: there only when the machine has one (and the user hasn't turned it off). Live while
+        // folded, like GPU, so its power graph is populated the moment it is opened.
+        var batSec = Find("bat");
+        bool hasBattery = s.Battery.Present != 0;
+        batSec.Visibility = hasBattery && _cfg.ShowBattery ? Visibility.Visible : Visibility.Collapsed;
+        if (batSec.Visibility == Visibility.Visible && SectionDue("bat"))
+        {
+            _batterySection.Update(ref s.Battery);
+            batSec.SetSummary(_batterySection.Summary);
         }
 
         // Primary GPU (Gpus[0]: discrete-first) model name after the GPU title, when asked. Inside
@@ -630,7 +660,9 @@ internal sealed partial class MainWindow : AppBarWindow
             {
                 if (i >= rows) { _topRows[i].Name.Text = _topRows[i].Cpu.Text = _topRows[i].Mem.Text = ""; continue; }
                 ref var p = ref s.Procs[i];
-                string name = NameField.Get(ref p.Name);
+                // No ".exe": the header summary and the RED rows already drop it, and it ate the width
+                // the ellipsis then took from the name itself.
+                string name = StripExe(NameField.Get(ref p.Name));
                 // "chrome ×42" says at a glance that this row is 42 processes summed.
                 _topRows[i].Name.Text = p.Instances > 1 ? $"{name} ×{p.Instances}" : name;
                 _topRows[i].Cpu.Text = string.Create(ci, $"{p.CpuPct:F1}%");
@@ -648,10 +680,12 @@ internal sealed partial class MainWindow : AppBarWindow
     {
         if (s.ProcCount == 0) return "";
         ref var first = ref s.Procs[0];
-        string name = NameField.Get(ref first.Name);
-        if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) name = name[..^4];
+        string name = StripExe(NameField.Get(ref first.Name));
         return string.Create(ci, $"{Truncate(name, 12)} {first.CpuPct:F1}%");
     }
+
+    private static string StripExe(string name) =>
+        name.Length > 4 && name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? name[..^4] : name;
 
     private static string W(float watts) => float.IsNaN(watts) ? "" : string.Create(CultureInfo.InvariantCulture, $" {watts:F0}W");
 
@@ -772,6 +806,30 @@ internal sealed partial class MainWindow : AppBarWindow
         Application.Current?.Shutdown();
     }
 
+}
+
+internal static class SectionOrder
+{
+    /// <summary>The saved order (unknown and repeated keys dropped), with each key it lacks inserted
+    /// after the nearest key that precedes it in <paramref name="registered"/> — or first, if none does.</summary>
+    public static List<string> Merge(IEnumerable<string> saved, IReadOnlyList<string> registered)
+    {
+        var known = new HashSet<string>(registered);
+        var order = new List<string>();
+        foreach (var k in saved) if (known.Contains(k) && !order.Contains(k)) order.Add(k);
+        for (int i = 0; i < registered.Count; i++)
+        {
+            if (order.Contains(registered[i])) continue;
+            int at = 0;
+            for (int j = i - 1; j >= 0; j--)
+            {
+                int p = order.IndexOf(registered[j]);
+                if (p >= 0) { at = p + 1; break; }
+            }
+            order.Insert(at, registered[i]);
+        }
+        return order;
+    }
 }
 
 internal static class SectionExtensions

@@ -570,7 +570,7 @@ internal static class Program
                 string netTop = snapshot.NetProcCount > 0
                     ? $"{NameField.Get(ref snapshot.NetProcs[0].Name)} ↓{snapshot.NetProcs[0].RxBytesPerSec / 1024:F1}K ↑{snapshot.NetProcs[0].TxBytesPerSec / 1024:F1}K"
                     : "(nada)";
-                Console.WriteLine($"pub {published,4}  {snapshot.WindowSeconds:F2}s  " +
+                Console.WriteLine($"pub {published,4}  {snapshot.WindowSeconds:F2}s  perfSamples_total={Interlocked.Read(ref perfSamples)}  " +
                                   $"netEvents_total={Interlocked.Read(ref netEvents)}  netProcs={snapshot.NetProcCount}  top: {netTop}");
             }
             }

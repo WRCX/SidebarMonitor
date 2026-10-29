@@ -201,6 +201,27 @@ public sealed class UiConfig
     public bool NetUnitsBinary { get; set; } = true;
     public bool DiskUnitsBinary { get; set; } = true;
 
+    /// <summary>The BATTERY section, where there is a battery at all. Its visibility can't live in
+    /// <see cref="Sections"/> like the others': on a desktop it is always hidden, and saving that
+    /// would hide it on the laptop the same config is copied to.</summary>
+    public bool ShowBattery { get; set; } = true;
+
+    // ---- Alerts: a tray notification when a reading stays past its threshold (AlertMonitor) ----
+
+    /// <summary>CPU temperature in the panel's own red zone (within 4 °C of Tjmax; 90 °C if unknown).</summary>
+    public bool AlertCpuTemp { get; set; } = true;
+    public bool AlertGpuTemp { get; set; } = true;
+    public int AlertGpuTempC { get; set; } = 87;
+    /// <summary>Off by default: a full RAM is normal for some workloads, unlike a hot chip.</summary>
+    public bool AlertRam { get; set; }
+    public int AlertRamPct { get; set; } = 90;
+    public bool AlertDisk { get; set; } = true;
+    /// <summary>Any fixed volume with less free space than this, in % of its size.</summary>
+    public int AlertDiskFreePct { get; set; } = 10;
+    public bool AlertBattery { get; set; } = true;
+    /// <summary>Battery at or below this % while discharging.</summary>
+    public int AlertBatteryPct { get; set; } = 15;
+
     /// <summary>Disk kinds to leave out of the list.</summary>
     public bool HideVirtualDisks { get; set; } = true;
     public bool HideRemovableDisks { get; set; }

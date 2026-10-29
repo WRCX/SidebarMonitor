@@ -6,6 +6,62 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ## [Unreleased]
 
+### Added
+
+- **Alerts** (Settings → Alertas): a tray notification when the CPU stays in the panel's red zone,
+  the hottest GPU passes its threshold, RAM fills up, a fixed drive runs low on space, or the battery
+  runs low while discharging. Each needs the reading to persist (10 s for temperatures, 30 s for RAM),
+  fires once, re-arms only when the value is clearly back, and never repeats within 10 minutes; several
+  firing together arrive as one notification. They run while the panel is folded, minimised or hidden.
+  The free-space check runs off the UI thread once a minute, so a sleeping HDD can't freeze the panel.
+  «Probar aviso» shows a sample.
+- **BATTERY section** on laptops: charge, state, power in or out with time to empty (or ~ to full),
+  Wh, and a power graph — on battery that is the whole machine's draw. Read unelevated via
+  `CallNtPowerInformation`; on a desktop the section never appears. Snapshot contract **v27**, so the
+  agent and UI must match (they ship together). CSV logs gain `battery_pct,battery_w` at the end.
+- A section added in a newer version now appears after its neighbour in a saved custom order,
+  instead of at the very bottom.
+
+### Fixed
+
+- **Hiding the panel left an empty reserved strip on the desktop.** «Ocultar (queda en la bandeja)» hid
+  the window but kept its AppBar registered, so maximised windows still stopped at an edge with nothing
+  in it until the panel was closed. Measured on the second monitor: hidden, the work area still started
+  300 px in; now it is given back on hide and taken again on show.
+- **A section header folded or unfolded on a release it never saw the press of** — a drag that began on
+  a chart and ended over a header was enough, and the new state was saved. The same press-and-release
+  rule the 1.5.6 tab fix introduced now covers the headers, the Settings toggle rows and the first-run
+  link.
+- **Mixed decimal separators on a Spanish (or any comma-decimal) Windows.** Byte rates, VRAM, the disk
+  queue and a few tooltips followed the OS locale while everything else used a dot, so one section could
+  read `R8,3M` next to `6.9T/12.0T`. Every number on the panel is invariant now.
+- **Clipped readouts in a narrow panel.** At the 240 px minimum the CPU stat row overflowed and cut the
+  frequency on both sides (`.77 GHz má`), and a section's model name ran into its live summary
+  (`RTX 4070 Ti SUPER1%`). The stat tiles shrink to fit and the title ellipsises instead.
+- The CPU limits line wrapped mid-item (`térm` / `78%`); it now only breaks between items. An iGPU no
+  longer shows `PCIe x0`, and a missing GPU power reading no longer reaches the header as `NaNW`.
+
+### Performance
+
+- **The agent's PDH tick allocates 97 % less** (186 → 6 KiB a second) and takes 1.8 ms instead of 2.5.
+  Nearly all of it was the `GPU Engine` counter: every process that ever touched the GPU keeps an
+  instance per engine per adapter — 751 on the dev desktop, 5 of them non-zero — and the agent built a
+  string for each one every second, then threw away the idle ones. Idle instances are now skipped
+  before their name is decoded, items are read without the marshaller, and the per-core performance
+  array is read once a tick instead of three times. Output verified identical sample-for-sample. Whole-
+  process CPU did not move measurably: the tick is dominated by NVML, so this is GC pressure, not a %.
+- **PresentMon rows are parsed without allocating** (1.1 KB → 0 per frame, ~650 KiB/s less garbage in
+  the helper while a game, a browser and a chat client are all presenting). Checked against the
+  previous `Split` parser, kept verbatim in the tests, on every edge case it handled.
+
+### Changed
+
+- **Tray:** «Configuración…» is now «Ajustes…» and opens the Settings window directly (it used to pop the
+  panel's context menu), and the tray gains an «Ignorar clics» toggle — the only way back once
+  click-through is on, which the setting's description already promised.
+- Settings buttons react to hover and press, and the one-letter graph-size buttons (P/M/G/E) have
+  tooltips. The process list drops `.exe`, like the header summary and the network rows already did.
+
 ## [1.5.6] — 2026-10-15
 
 1.5.5 was built and installed locally but never published, so this is the first public release

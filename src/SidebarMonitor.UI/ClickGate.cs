@@ -32,4 +32,20 @@ internal sealed class ClickGate
         _pressed = false;
         return wasPressed;
     }
+
+    /// <summary>Runs <paramref name="onClick"/> on a real click: press and release both on <paramref name="el"/>.
+    /// Every clickable non-Button element goes through this — the tab, the minimise button, and the
+    /// section headers, which folded on a release dragged in from a chart just the same.</summary>
+    public static void Wire(System.Windows.UIElement el, Action onClick)
+    {
+        var gate = new ClickGate();
+        el.MouseLeftButtonDown += (_, _) => gate.Press();
+        el.MouseLeave += (_, _) => gate.Leave();
+        el.MouseLeftButtonUp += (_, e) =>
+        {
+            if (!gate.Release()) return;
+            e.Handled = true;
+            onClick();
+        };
+    }
 }

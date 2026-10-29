@@ -93,6 +93,10 @@ internal sealed class CsvLogger : IDisposable
             for (int i = 0; i < _cores; i++) N(sb, c.CoreTempC[i]);
             for (int i = 0; i < _cores; i++) N(sb, c.CoreC0Pct[i]);
 
+            // Battery last, after the variable-width per-core block, so existing columns keep their
+            // positions. Blank on a desktop (NaN).
+            N(sb, s.Battery.Pct); N(sb, s.Battery.RateW);
+
             _writer.WriteLine(sb.ToString());
             RowCount++;
             if (RowCount % 20 == 0) _writer.Flush();   // survive a crash without flushing every row
@@ -111,6 +115,7 @@ internal sealed class CsvLogger : IDisposable
         for (int i = 0; i < _cores; i++) h.Append(Ci, $",core{i}_ghz");
         for (int i = 0; i < _cores; i++) h.Append(Ci, $",core{i}_temp_c");
         for (int i = 0; i < _cores; i++) h.Append(Ci, $",core{i}_c0_pct");
+        h.Append(",battery_pct,battery_w");
         _writer!.WriteLine(h.ToString());
     }
 

@@ -252,7 +252,7 @@ internal static class FirstRunDialog
             TextDecorations = TextDecorations.Underline,
         };
         tb.Inlines.Add(new Run(text));
-        tb.MouseLeftButtonUp += (_, _) => onClick();
+        ClickGate.Wire(tb, onClick);
         return tb;
     }
 

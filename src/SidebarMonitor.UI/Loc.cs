@@ -34,7 +34,9 @@ public static class Loc
         => Current == Lang.En ? LocStrings.En.GetValueOrDefault(es, es) : es;
 
     /// <summary>Convenience for interpolation: <c>Loc.T("{0} discos", n)</c>-style formatting where the
-    /// Spanish key contains composite-format placeholders.</summary>
+    /// Spanish key contains composite-format placeholders. Invariant, like every other number on the
+    /// panel: the language is a choice of words, not of decimal separator, and following the OS locale
+    /// here put "cola 0,00" and "12,3% uso" next to "4.58 GHz".</summary>
     public static string T(string es, params object[] args)
-        => string.Format(CultureInfo.CurrentCulture, T(es), args);
+        => string.Format(CultureInfo.InvariantCulture, T(es), args);
 }

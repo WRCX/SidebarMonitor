@@ -151,6 +151,7 @@ internal static class Program
                 // attribution inside always runs. Tick 0 is a vendor tick, so fields never start empty.
                 FillGpus(ref snapshot, nvml, adlx, gpuAdapters, pdh, procs, ticks % gpuEvery == 0);
                 FillDisks(ref snapshot, pdh, inventory, diskTemps, etwDiskTemps);
+                Battery.Fill(ref snapshot.Battery);
 
                 // Adapters come and go (VPN up, dock unplugged); rescanning every tick is wasteful.
                 // A mid-sample disappearance (forceNicRefresh) rescans on the next tick regardless.
@@ -540,8 +541,12 @@ internal static class Program
     private static void FillEngines(ref Snapshot s, PdhQuery pdh, Processes procs, List<GpuAdapters.Adapter> adapters)
     {
         if (s.GpuCount == 0) return;
-        var eng = pdh.GpuEngine();
-        if (eng.Count == 0) return;
+        // No GPU Engine counter set on this machine: leave the GPUs as the vendor pass left them.
+        if (!pdh.HasGpuEngine) return;
+        // Active instances only; this loop skipped NaN and ≤ 0 anyway, so the result is the same.
+        // An idle GPU now yields an empty list — which must still fall through, not return: the
+        // loop below is also what clears TopProc and sets an iGPU's load (to 0) for this tick.
+        var eng = pdh.GpuEngineActive();
 
         var byPid = new Dictionary<int, float>[s.GpuCount];
         for (int i = 0; i < s.GpuCount; i++) byPid[i] = new Dictionary<int, float>(16);

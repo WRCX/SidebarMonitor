@@ -76,6 +76,7 @@ internal sealed class SettingsWindow : Window
         AddPage(Loc.T("GPU"), BuildGpu);
         AddPage(Loc.T("Red"), BuildNet);
         AddPage(Loc.T("Discos"), BuildDisks);
+        AddPage(Loc.T("Alertas"), BuildAlerts);
         AddPage(Loc.T("Refresco"), BuildRefresh);
         AddPage(Loc.T("Colocación"), BuildPlacement);
         AddPage(Loc.T("Diagnóstico"), BuildDiagnostics);
@@ -134,10 +135,12 @@ internal sealed class SettingsWindow : Window
             v => { _cfg.GraphScale = v / 100.0; _host.ApplyLive("graphheights"); }));
 
         p.Children.Add(SubHeader(Loc.T("Alto por gráfica (sobreescribe el global)")));
+        // One letter per size keeps four rows of these on one line; the tooltip spells each one out.
         void Override(string label, string key) => p.Children.Add(Choice(label, null,
             [(Loc.T("Global"), -1), (Loc.T("P"), 100), (Loc.T("M"), 150), (Loc.T("G"), 200), (Loc.T("E"), 300)],
             () => _cfg.GraphScales.TryGetValue(key, out double v) ? (int)Math.Round(v * 100) : -1,
-            val => { if (val < 0) _cfg.GraphScales.Remove(key); else _cfg.GraphScales[key] = val / 100.0; _host.ApplyLive("graphheights"); }));
+            val => { if (val < 0) _cfg.GraphScales.Remove(key); else _cfg.GraphScales[key] = val / 100.0; _host.ApplyLive("graphheights"); },
+            [null, Loc.T("Pequeñas"), Loc.T("Medianas"), Loc.T("Grandes"), Loc.T("Enormes")]));
         Override(Loc.T("CPU"), "cpu");
         Override(Loc.T("GPU"), "gpu");
         Override(Loc.T("Red"), "net");
@@ -183,7 +186,7 @@ internal sealed class SettingsWindow : Window
         {
             var sec = s;
             p.Children.Add(Toggle(sec.Title, null,
-                () => sec.Visibility == Visibility.Visible,
+                () => _host.IsSectionWanted(sec),
                 v => _host.SetSectionShown(sec, v)));
         }
 
@@ -361,6 +364,46 @@ internal sealed class SettingsWindow : Window
         p.Children.Add(Choice(Loc.T("Unidades de las tasas"), Loc.T("Binario (KiB/MiB) o decimal (KB/MB) para las velocidades de lectura/escritura. La capacidad va siempre en decimal (como se anuncian los discos)."),
             [(Loc.T("Binario"), 1), (Loc.T("Decimal"), 0)], () => _cfg.DiskUnitsBinary ? 1 : 0,
             v => { _cfg.DiskUnitsBinary = v == 1; _cfg.Save(); }));
+        return p;
+    }
+
+    private UIElement BuildAlerts()
+    {
+        var p = Page(Loc.T("Alertas"));
+        p.Children.Add(Note(Loc.T("Un aviso en la bandeja cuando una lectura se queda pasado su umbral, aunque el panel esté plegado, minimizado u oculto. Cada alerta avisa una vez y no vuelve a hacerlo hasta que el valor regresa claramente a la normalidad, y nunca antes de 10 minutos.")));
+
+        p.Children.Add(Toggle(Loc.T("CPU muy caliente"),
+            Loc.T("En la zona roja del panel: a 4 °C de su límite térmico (Tjmax), o 90 °C si no se conoce. Durante 10 s seguidos."),
+            () => _cfg.AlertCpuTemp, v => { _cfg.AlertCpuTemp = v; _cfg.Save(); }));
+
+        p.Children.Add(Toggle(Loc.T("GPU muy caliente"), Loc.T("La GPU más caliente, durante 10 s seguidos."),
+            () => _cfg.AlertGpuTemp, v => { _cfg.AlertGpuTemp = v; _cfg.Save(); }));
+        p.Children.Add(Choice(Loc.T("Umbral de GPU"), null,
+            [("80 °C", 80), ("85 °C", 85), ("87 °C", 87), ("90 °C", 90)],
+            () => _cfg.AlertGpuTempC, v => { _cfg.AlertGpuTempC = v; _cfg.Save(); }));
+
+        p.Children.Add(Toggle(Loc.T("Memoria casi llena"), Loc.T("Durante 30 s seguidos."),
+            () => _cfg.AlertRam, v => { _cfg.AlertRam = v; _cfg.Save(); }));
+        p.Children.Add(Choice(Loc.T("Umbral de memoria"), null,
+            [("85 %", 85), ("90 %", 90), ("95 %", 95)],
+            () => _cfg.AlertRamPct, v => { _cfg.AlertRamPct = v; _cfg.Save(); }));
+
+        p.Children.Add(Toggle(Loc.T("Poco espacio en disco"), Loc.T("Cualquier unidad fija. Se comprueba una vez por minuto."),
+            () => _cfg.AlertDisk, v => { _cfg.AlertDisk = v; _cfg.Save(); }));
+        p.Children.Add(Choice(Loc.T("Avisar con menos de"), null,
+            [(Loc.T("5 % libre"), 5), (Loc.T("10 % libre"), 10), (Loc.T("15 % libre"), 15), (Loc.T("20 % libre"), 20)],
+            () => _cfg.AlertDiskFreePct, v => { _cfg.AlertDiskFreePct = v; _cfg.Save(); }));
+
+        p.Children.Add(Toggle(Loc.T("Batería baja"), Loc.T("Solo mientras se descarga. En un sobremesa no hace nada."),
+            () => _cfg.AlertBattery, v => { _cfg.AlertBattery = v; _cfg.Save(); }));
+        p.Children.Add(Choice(Loc.T("Umbral de batería"), null,
+            [("10 %", 10), ("15 %", 15), ("20 %", 20), ("30 %", 30)],
+            () => _cfg.AlertBatteryPct, v => { _cfg.AlertBatteryPct = v; _cfg.Save(); }));
+
+        var test = TextButton(Loc.T("Probar aviso"));
+        test.ToolTip = Loc.T("Muestra un aviso de ejemplo, para ver dónde y cómo aparecen.");
+        test.Click += (_, _) => _host.TestAlert();
+        p.Children.Add(test);
         return p;
     }
 
@@ -567,12 +610,14 @@ internal sealed class SettingsWindow : Window
 
         // Clicking anywhere on the row toggles it.
         var row = new Border { Child = grid, Background = Brushes.Transparent, Padding = new Thickness(0, 7, 0, 7), Cursor = System.Windows.Input.Cursors.Hand };
-        row.MouseLeftButtonUp += (_, _) => check.IsChecked = !(check.IsChecked ?? false);
+        ClickGate.Wire(row, () => check.IsChecked = !(check.IsChecked ?? false));
         return row;
     }
 
-    /// <summary>A labelled segmented control (row of buttons; one selected).</summary>
-    private Border Choice(string label, string? desc, (string Label, int Value)[] options, Func<int> get, Action<int> set)
+    /// <summary>A labelled segmented control (row of buttons; one selected). <paramref name="tips"/>, when
+    /// given, is a tooltip per option (null for none), for options whose label is an abbreviation.</summary>
+    private Border Choice(string label, string? desc, (string Label, int Value)[] options, Func<int> get, Action<int> set,
+        string?[]? tips = null)
     {
         var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         text.Children.Add(new TextBlock { Text = label, Foreground = Theme.InkPrimary, FontFamily = Theme.Ui, FontSize = 13, TextWrapping = TextWrapping.Wrap });
@@ -603,6 +648,7 @@ internal sealed class SettingsWindow : Window
                 Cursor = System.Windows.Input.Cursors.Hand,
             };
             b.Template = FlatButtonTemplate(new CornerRadius(4));
+            if (tips is not null && buttons.Count < tips.Length && tips[buttons.Count] is { } tip) b.ToolTip = tip;
             b.Click += (_, _) => { set(val); Restyle(); };
             buttons.Add((b, val));
             seg.Children.Add(b);
@@ -667,19 +713,47 @@ internal sealed class SettingsWindow : Window
         return b;
     }
 
-    /// <summary>A flat button template (no Aero chrome) that honours Background/CornerRadius.</summary>
+    private static readonly Brush HoverWash = Theme.Freeze("#FFFFFF");
+
+    /// <summary>A flat button template (no Aero chrome) that honours Background/CornerRadius, with a
+    /// faint white wash on hover and a stronger one while pressed — without it nothing on this window
+    /// reacted to the mouse, and a segmented choice gave no sign it was clickable until clicked.</summary>
     private static ControlTemplate FlatButtonTemplate(CornerRadius radius)
     {
         var border = new FrameworkElementFactory(typeof(Border));
         border.SetBinding(Border.BackgroundProperty, new System.Windows.Data.Binding("Background")
         { RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.TemplatedParent) });
         border.SetValue(Border.CornerRadiusProperty, radius);
+
+        // The wash is its own layer over the background rather than a Background trigger: the choice
+        // buttons set Background locally (accent vs grey), and a local value beats a template trigger.
+        var wash = new FrameworkElementFactory(typeof(Border), "Wash");
+        wash.SetValue(Border.BackgroundProperty, HoverWash);
+        wash.SetValue(Border.CornerRadiusProperty, radius);
+        wash.SetValue(UIElement.OpacityProperty, 0.0);
+        wash.SetValue(UIElement.IsHitTestVisibleProperty, false);
+
         var cp = new FrameworkElementFactory(typeof(ContentPresenter));
         cp.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Stretch);
         cp.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
         cp.SetBinding(FrameworkElement.MarginProperty, new System.Windows.Data.Binding("Padding")
         { RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.TemplatedParent) });
-        border.AppendChild(cp);
-        return new ControlTemplate(typeof(Button)) { VisualTree = border };
+
+        var layers = new FrameworkElementFactory(typeof(Grid));
+        layers.AppendChild(wash);
+        layers.AppendChild(cp);
+        border.AppendChild(layers);
+
+        var template = new ControlTemplate(typeof(Button)) { VisualTree = border };
+        var hover = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true };
+        hover.Setters.Add(new Setter(UIElement.OpacityProperty, 0.08, "Wash"));
+        var pressed = new Trigger { Property = System.Windows.Controls.Primitives.ButtonBase.IsPressedProperty, Value = true };
+        pressed.Setters.Add(new Setter(UIElement.OpacityProperty, 0.16, "Wash"));
+        var disabled = new Trigger { Property = UIElement.IsEnabledProperty, Value = false };
+        disabled.Setters.Add(new Setter(UIElement.OpacityProperty, 0.0, "Wash"));
+        template.Triggers.Add(hover);
+        template.Triggers.Add(pressed);   // after hover: a pressed button is also hovered, and the later trigger wins
+        template.Triggers.Add(disabled);
+        return template;
     }
 }

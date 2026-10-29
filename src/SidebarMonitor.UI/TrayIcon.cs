@@ -18,8 +18,10 @@ internal sealed class TrayIcon : IDisposable
     public event Action? ExitRequested;
     public event Action? ConfigRequested;
     public event Action? UpdateRequested;
+    public event Action? ClickThroughRequested;
 
     private ToolStripItem? _updateItem;
+    private readonly ToolStripMenuItem _clickThroughItem;
 
     public TrayIcon()
     {
@@ -33,18 +35,37 @@ internal sealed class TrayIcon : IDisposable
         };
 
         _icon.ContextMenuStrip.Items.Add(Loc.T("Mostrar / ocultar"), null, (_, _) => ToggleRequested?.Invoke());
-        _icon.ContextMenuStrip.Items.Add(Loc.T("Configuración…"), null, (_, _) => ConfigRequested?.Invoke());
+        // Same name as the panel's own menu entry, and it opens the same window — it used to pop the
+        // panel's context menu instead, one more click away from the settings it was named after.
+        _icon.ContextMenuStrip.Items.Add(Loc.T("Ajustes…"), null, (_, _) => ConfigRequested?.Invoke());
+        // With click-through on, the panel takes no clicks at all — its context menu included — so the
+        // tray is the one place left to turn it back off. Settings' description has always said so.
+        _clickThroughItem = new ToolStripMenuItem(Loc.T("Ignorar clics (pasan a través)"), null, (_, _) => ClickThroughRequested?.Invoke());
+        _icon.ContextMenuStrip.Items.Add(_clickThroughItem);
         _icon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
         _icon.ContextMenuStrip.Items.Add(Loc.T("Salir"), null, (_, _) => ExitRequested?.Invoke());
 
         _icon.DoubleClick += (_, _) => ToggleRequested?.Invoke();
     }
 
+    /// <summary>Mirrors the click-through state in the tray item's check mark.</summary>
+    public void SetClickThrough(bool on) => _clickThroughItem.Checked = on;
+
     public void Notify(string text)
     {
         _icon.BalloonTipTitle = "SidebarMonitor";
         _icon.BalloonTipText = text;
+        _icon.BalloonTipIcon = ToolTipIcon.None;
         _icon.ShowBalloonTip(3000);
+    }
+
+    /// <summary>An alert: its own title and the warning icon, so it doesn't read like an update notice.</summary>
+    public void Alert(string title, string text)
+    {
+        _icon.BalloonTipTitle = title;
+        _icon.BalloonTipText = text;
+        _icon.BalloonTipIcon = ToolTipIcon.Warning;
+        _icon.ShowBalloonTip(10000);
     }
 
     /// <summary>Surfaces an available update: a highlighted menu item at the top + a balloon whose

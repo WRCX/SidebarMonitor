@@ -10,7 +10,7 @@ public static class SnapshotLayout
     public const uint Signature = 0x4E4D4253;
 
     /// <summary>Bump on any layout change. The reader refuses anything it does not know.</summary>
-    public const uint Version = 26;
+    public const uint Version = 27;   // 27: Battery
 
     /// <summary>
     /// Local\, not Global\. Creating a Global\ kernel object requires SeCreateGlobalPrivilege,
@@ -221,6 +221,26 @@ public struct FrameInfo
     public float LatencyMs;
 }
 
+/// <summary>
+/// The laptop battery, from CallNtPowerInformation(SystemBatteryState): unelevated, one call, every
+/// battery summed. <see cref="Present"/> 0 on a desktop, and the UI then shows no section at all.
+/// Unknowns are NaN (floats) or -1 (<see cref="SecondsLeft"/>) — firmware leaves rate and capacity out
+/// more often than one would think, and "unknown" must not read as "0 W" or "0 %".
+/// </summary>
+[StructLayout(LayoutKind.Sequential)]
+public struct BatteryInfo
+{
+    public byte Present, AcOnline, Charging, Discharging;
+    /// <summary>Remaining / full-charge capacity, 0..100.</summary>
+    public float Pct;
+    /// <summary>Signed: positive while charging, negative while discharging. On battery this is the
+    /// whole machine's power draw.</summary>
+    public float RateW;
+    public float RemainingWh, FullWh;
+    /// <summary>To empty while discharging, to full while charging (an estimate: charging tapers).</summary>
+    public int SecondsLeft;
+}
+
 [StructLayout(LayoutKind.Sequential)]
 public struct Snapshot
 {
@@ -275,6 +295,9 @@ public struct Snapshot
 
     /// <summary>Foreground game frame-timing (PresentMon via the helper). App empty = none.</summary>
     public FrameInfo Frame;
+
+    /// <summary>Laptop battery (agent, unelevated). Present = 0 on a desktop.</summary>
+    public BatteryInfo Battery;
 }
 
 /// <summary>

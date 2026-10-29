@@ -247,11 +247,13 @@ internal sealed class GpuSection : StackPanel
                 block.Fan!.Text = g.FanPct < 0 ? "—" : string.Create(ci, $"{g.FanPct}");
                 block.Vram!.Text = string.Create(ci, $"VRAM {Theme.Gib(g.VramUsed)} / {Theme.Gib(g.VramTotal)} GiB");
                 block.VramMeter!.Update(g.VramTotal > 0 ? (double)g.VramUsed / g.VramTotal : 0);
-                block.Clocks!.Text = string.Create(ci, $"{g.CoreClockMhz} / {g.MemClockMhz} MHz   PCIe x{g.PcieWidth}");
+                // An iGPU has no PCIe link of its own and reports width 0 — "PCIe x0" said nothing.
+                string pcie = g.PcieWidth > 0 ? string.Create(ci, $"   PCIe x{g.PcieWidth}") : "";
+                block.Clocks!.Text = string.Create(ci, $"{g.CoreClockMhz} / {g.MemClockMhz} MHz{pcie}");
             }
 
             // Who's driving this GPU.
-            string top = NameField.Get(ref g.TopProc);
+            string top = Theme.NormalizeProcess(NameField.Get(ref g.TopProc));   // no ".exe", like every other list
             block.Top!.Text = top.Length > 0 && g.TopProcPct > 0.5f
                 ? string.Create(ci, $"◆ {top}  {g.TopProcPct:F0}%")
                 : "";
@@ -274,7 +276,7 @@ internal sealed class GpuSection : StackPanel
             }
 
             if (b == 0)
-                Summary = float.IsNaN(g.LoadPct) ? "—" : string.Create(ci, $"{g.LoadPct,3:F0}%{(block.HasDetail ? string.Create(ci, $"  {g.CoreClockMhz}MHz {g.PowerW:F0}W") : "")}");
+                Summary = float.IsNaN(g.LoadPct) ? "—" : string.Create(ci, $"{g.LoadPct,3:F0}%{(block.HasDetail ? string.Create(ci, $"  {g.CoreClockMhz}MHz{(float.IsNaN(g.PowerW) ? "" : string.Create(ci, $" {g.PowerW:F0}W"))}") : "")}");
         }
     }
 

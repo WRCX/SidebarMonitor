@@ -123,7 +123,10 @@ internal abstract class AppBarWindow : Window
         {
             SetTopmost();
 
-            if (docked && reserveSpace)
+            // A hidden panel (tray «Ocultar») reserves nothing: the AppBar outlives the window's
+            // visibility, so hiding it used to leave an empty strip that maximised windows stopped at.
+            // The subclass re-applies on IsVisibleChanged, which re-registers when it comes back.
+            if (docked && reserveSpace && IsVisible)
             {
                 EnsureAppBar();
                 // If the shell refuses the AppBar registration (seen when the process is spawned by

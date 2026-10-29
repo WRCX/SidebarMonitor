@@ -48,6 +48,9 @@ internal static class Program
         if (args.Contains("--csv")) { cfg.LogCsv = true; cfg.Ephemeral = true; }
         if (ArgParse.Int(args, "--cpu-name=", -1) is var cn and >= 0) { cfg.CpuNameMode = cn; cfg.Ephemeral = true; }
         if (ArgParse.Int(args, "--gpu-name=", -1) is var gn and >= 0) { cfg.GpuNameMode = gn; cfg.Ephemeral = true; }
+        // Alert thresholds, to fire a real alert on demand (e.g. --alert-gpu=30 on an idle GPU).
+        if (ArgParse.Int(args, "--alert-gpu=", -1) is var ag and >= 0) { cfg.AlertGpuTemp = true; cfg.AlertGpuTempC = ag; cfg.Ephemeral = true; }
+        if (ArgParse.Int(args, "--alert-disk=", -1) is var ad and >= 0) { cfg.AlertDisk = true; cfg.AlertDiskFreePct = ad; cfg.Ephemeral = true; }
 
         int seconds = ArgParse.Int(args, "--seconds=", 0);          // 0 = run until closed
         string? shot = args.FirstOrDefault(a => a.StartsWith("--shot="))?["--shot=".Length..];
@@ -94,7 +97,11 @@ internal static class Program
         if (seconds == 0 && !cfg.Ephemeral && !args.Contains("--no-firstrun"))
             FirstRunDialog.EnsureShown(cfg);
 
-        var win = new MainWindow(cfg, monitors) { TestFakeFps = args.Contains("--fake-fps") };
+        var win = new MainWindow(cfg, monitors)
+        {
+            TestFakeFps = args.Contains("--fake-fps"),
+            TestFakeBattery = args.Contains("--fake-battery"),
+        };
 
         TrayIcon? tray = null;
         if (!args.Contains("--no-tray"))

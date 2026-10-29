@@ -94,7 +94,7 @@ internal sealed partial class MainWindow
             case "autoscale": ApplyAutoScale(); break;
             case "refresh": ApplyRefreshRates(); break;
             case "placement": ReapplyPlacement(); break;
-            case "clickthrough": SetClickThrough(_cfg.ClickThrough); break;
+            case "clickthrough": SetClickThrough(_cfg.ClickThrough); _tray?.SetClickThrough(_cfg.ClickThrough); break;
             case "tooltip": Theme.TooltipBg.Opacity = _cfg.TooltipOpacity; break;
             case "gpuview": _gpuSection.View = _cfg.GpuView; break;
             case "gpuengines": _gpuSection.ShowEngines = _cfg.ShowGpuEngines; break;
@@ -110,9 +110,20 @@ internal sealed partial class MainWindow
 
     internal void SetSectionShown(Section s, bool shown)
     {
+        // BATTERY's visibility is "has a battery AND wanted", decided each tick; only the wish is stored.
+        if (s.Key == "bat") { _cfg.ShowBattery = shown; _cfg.Save(); return; }
         s.Visibility = shown ? Visibility.Visible : Visibility.Collapsed;
         SaveSections();
     }
+
+    /// <summary>Settings → Alertas → «Probar aviso»: the same notification path a real alert takes.</summary>
+    internal void TestAlert() =>
+        _tray?.Alert(Loc.T("Alerta de prueba"), Loc.T("Así se verán los avisos de SidebarMonitor."));
+
+    /// <summary>Whether the user wants a section shown — for the toggles, which must not read BATTERY's
+    /// live visibility (always off on a desktop) as the user's choice.</summary>
+    internal bool IsSectionWanted(Section s) =>
+        s.Key == "bat" ? _cfg.ShowBattery : s.Visibility == Visibility.Visible;
 
     /// <summary>Open the Settings window (single instance; re-focus if already open).</summary>
     internal void OpenSettings()
