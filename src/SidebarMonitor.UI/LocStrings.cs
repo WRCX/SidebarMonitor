@@ -269,8 +269,24 @@ internal static class LocStrings
 
         // ── Settings: Diagnostics ─────────────────────────────────────────────────────────────
         ["Registrar a CSV"] = "Log to CSV",
-        ["Graba una fila por muestra (CPU, límites, por-núcleo, RAM, GPU0, red, disco) a %LOCALAPPDATA%\\SidebarMonitor\\logs."]
-            = "Writes one row per sample (CPU, limits, per-core, RAM, GPU0, network, disk) to %LOCALAPPDATA%\\SidebarMonitor\\logs.",
+        ["Graba una fila por muestra con las métricas elegidas abajo a %LOCALAPPDATA%\\SidebarMonitor\\logs. Se aplica al momento, también si se edita ui.json desde fuera."]
+            = "Writes one row per sample with the metrics chosen below to %LOCALAPPDATA%\\SidebarMonitor\\logs. Applies at once, also when ui.json is edited from outside.",
+        ["Métricas del CSV"] = "CSV metrics",
+        ["Columnas que se graban. Cambiarlas con el registro activo empieza un archivo nuevo, porque cambia la cabecera. Las desactivadas por defecto (ventilador, limitador) son nuevas: los CSV de siempre no cambian."]
+            = "Columns to record. Changing them while logging starts a new file, since the header changes. The ones off by default (fan, limiter) are new: the usual CSVs stay the same.",
+        ["Uso y reloj de CPU"] = "CPU usage and clock",
+        ["Potencia de CPU"] = "CPU power",
+        ["Temperatura de CPU"] = "CPU temperature",
+        ["Límites de CPU"] = "CPU limits",
+        ["Limitador activo (throttling)"] = "Active limiter (throttling)",
+        ["Ventilador"] = "Fan",
+        ["Ventilador de GPU 0"] = "GPU 0 fan",
+        ["Red (total)"] = "Network (total)",
+        ["Disco (total)"] = "Disk (total)",
+        ["Uso por núcleo"] = "Per-core usage",
+        ["Reloj por núcleo"] = "Per-core clock",
+        ["Temperatura por núcleo"] = "Per-core temperature",
+        ["Residencia C0 por núcleo"] = "Per-core C0 residency",
         ["Datos de depuración (overlay)"] = "Debug data (overlay)",
         ["Bajo el título: fabricante/modelo de CPU, versiones del contrato, estado del SDK/helper, cadencia y estado del CSV."]
             = "Under the title: CPU vendor/model, contract versions, SDK/helper status, cadence and CSV status.",
