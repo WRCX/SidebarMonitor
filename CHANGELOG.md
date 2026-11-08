@@ -6,6 +6,8 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ## [Unreleased]
 
+## [1.5.7] — 2026-11-08
+
 ### Added
 
 - **Alerts** (Settings → Alertas): a tray notification when the CPU stays in the panel's red zone,
@@ -741,7 +743,9 @@ First public release.
 
 > Not code-signed yet, so Windows SmartScreen may warn on first run — choose **More info → Run anyway**.
 
-[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.5.5...HEAD
+[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.5.7...HEAD
+[1.5.7]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.7
+[1.5.6]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.6
 [1.5.5]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.5
 [1.5.4]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.4
 [1.5.3]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.3
