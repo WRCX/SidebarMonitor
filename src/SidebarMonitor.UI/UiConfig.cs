@@ -67,6 +67,10 @@ public sealed class UiConfig
     // ── Diagnostics / logging ─────────────────────────────────────────────────────────────────
     /// <summary>Append every snapshot as a row to a CSV under %LOCALAPPDATA%\SidebarMonitor\logs.</summary>
     public bool LogCsv { get; set; }
+    /// <summary>Which metric groups the CSV records, by <see cref="CsvMetric.Key"/>. Null (the default,
+    /// and what older configs load as) = the legacy column set; see <see cref="CsvLogger.DefaultKeys"/>.
+    /// Changing it while logging starts a new file, since the header changes.</summary>
+    public List<string>? CsvMetrics { get; set; }
     /// <summary>Verbose on-screen debug overlay (contract versions, vendor, SDK/helper state, FPS).</summary>
     public bool LogVerbose { get; set; }
 
@@ -273,6 +277,13 @@ public sealed class UiConfig
         "SidebarMonitor", "ui.json");
 
     public static UiConfig Load() => TryLoad(Path) ?? TryLoad(Path + ".bak") ?? new UiConfig();
+
+    /// <summary>Full path of the settings file, for the live-reload watcher.</summary>
+    internal static string FilePath => Path;
+
+    /// <summary>Re-read the settings file as it is on disk right now, without the .bak fallback: a
+    /// half-written or corrupt file returns null and the caller simply ignores that change.</summary>
+    internal static UiConfig? ReadCurrent() => TryLoad(Path);
 
     // An older build wrote a bare {"cpu":2,...} map here; deserializing it into UiConfig yields
     // defaults, which is the right outcome. Returns null on missing/corrupt so Load falls to the backup.

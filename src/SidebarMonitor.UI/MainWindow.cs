@@ -148,7 +148,8 @@ internal sealed partial class MainWindow : AppBarWindow
         _debug.Visibility = _cfg.LogVerbose ? Visibility.Visible : Visibility.Collapsed;
         _titleBar = BuildTitleBar();   // hosts _debug so it survives ApplySectionOrder's rebuild
         _stack.Children.Add(_titleBar);
-        if (_cfg.LogCsv) _csv.Start(DateTime.Now);
+        if (_cfg.LogCsv) _csv.Start(DateTime.Now, _cfg.CsvMetrics);
+        StartConfigWatcher();
         Register(new Section("cpu", Loc.T("CPU"), BuildCpu()));
         Register(new Section("ram", Loc.T("MEMORIA"), BuildRam()));
         Register(new Section("bat", Loc.T("BATERÍA"), _batterySection));
@@ -798,6 +799,7 @@ internal sealed partial class MainWindow : AppBarWindow
         _updateTimer?.Stop();
         SaveSections();
         _cfg.Save();
+        StopConfigWatcher();   // before the final flush, so a late file event can't reopen a CSV
         _csv.Dispose();   // flush and close any open CSV
         if (_ownedAgent is { HasExited: false }) { try { _ownedAgent.Kill(); } catch { } }
         _reader?.Dispose();

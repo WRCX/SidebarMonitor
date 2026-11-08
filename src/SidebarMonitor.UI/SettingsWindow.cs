@@ -438,7 +438,29 @@ internal sealed class SettingsWindow : Window
     private UIElement BuildDiagnostics()
     {
         var p = Page(Loc.T("Diagnóstico"));
-        p.Children.Add(Toggle(Loc.T("Registrar a CSV"), Loc.T("Graba una fila por muestra (CPU, límites, por-núcleo, RAM, GPU0, red, disco) a %LOCALAPPDATA%\\SidebarMonitor\\logs."), () => _cfg.LogCsv, v => { _cfg.LogCsv = v; _host.ApplyLive("csv"); }));
+        var csvToggle = Toggle(Loc.T("Registrar a CSV"),
+            Loc.T("Graba una fila por muestra con las métricas elegidas abajo a %LOCALAPPDATA%\\SidebarMonitor\\logs. Se aplica al momento, también si se edita ui.json desde fuera."),
+            () => _cfg.LogCsv, v => { if (_syncingCsv) return; _cfg.LogCsv = v; _host.ApplyLive("csv"); });
+        _csvChecks.Add((CheckOf(csvToggle), () => _cfg.LogCsv));
+        p.Children.Add(csvToggle);
+
+        p.Children.Add(SubHeader(Loc.T("Métricas del CSV")));
+        p.Children.Add(Note(Loc.T("Columnas que se graban. Cambiarlas con el registro activo empieza un archivo nuevo, porque cambia la cabecera. Las desactivadas por defecto (ventilador, limitador) son nuevas: los CSV de siempre no cambian.")));
+        foreach (var m in CsvLogger.Catalog)
+        {
+            string key = m.Key;
+            bool Has() => CsvLogger.Resolve(_cfg.CsvMetrics).Contains(key);
+            var row = Toggle(m.Label(), m.Columns, Has, v =>
+            {
+                if (_syncingCsv) return;
+                var keys = CsvLogger.Resolve(_cfg.CsvMetrics).ToList();
+                if (v) { if (!keys.Contains(key)) keys.Add(key); } else keys.Remove(key);
+                _cfg.CsvMetrics = [.. CsvLogger.Resolve(keys)];
+                _host.ApplyLive("csv");
+            });
+            _csvChecks.Add((CheckOf(row), Has));
+            p.Children.Add(row);
+        }
         p.Children.Add(Toggle(Loc.T("Datos de depuración (overlay)"), Loc.T("Bajo el título: fabricante/modelo de CPU, versiones del contrato, estado del SDK/helper, cadencia y estado del CSV."), () => _cfg.LogVerbose, v => { _cfg.LogVerbose = v; _host.ApplyLive("verbose"); }));
 
         p.Children.Add(Toggle(Loc.T("FPS de juegos (PresentMon)"),
@@ -542,6 +564,21 @@ internal sealed class SettingsWindow : Window
         p.Children.Add(status);
         return p;
     }
+
+    // ── CSV controls kept in sync with external edits ─────────────────────────────────────────
+    private readonly List<(CheckBox Check, Func<bool> Get)> _csvChecks = [];
+    private bool _syncingCsv;
+
+    /// <summary>Re-read the CSV toggles from the config after ui.json changed on disk. The guard keeps
+    /// the programmatic IsChecked from firing the setters (which would restart the log file).</summary>
+    internal void RefreshCsvControls()
+    {
+        _syncingCsv = true;
+        try { foreach (var (check, get) in _csvChecks) check.IsChecked = get(); }
+        finally { _syncingCsv = false; }
+    }
+
+    private static CheckBox CheckOf(Border toggleRow) => (CheckBox)((Grid)toggleRow.Child).Children[1];
 
     // ── control framework ─────────────────────────────────────────────────────────────────────
     private static StackPanel Page(string title)

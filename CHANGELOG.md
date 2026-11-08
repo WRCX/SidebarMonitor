@@ -18,7 +18,14 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 - **BATTERY section** on laptops: charge, state, power in or out with time to empty (or ~ to full),
   Wh, and a power graph — on battery that is the whole machine's draw. Read unelevated via
   `CallNtPowerInformation`; on a desktop the section never appears. Snapshot contract **v27**, so the
-  agent and UI must match (they ship together). CSV logs gain `battery_pct,battery_w` at the end.
+  agent and UI must match (they ship together). The CSV log can record it too (see below).
+- **Choose what the CSV log records.** Settings → Diagnostics now lists the CSV columns by group, each
+  with its own checkbox. Besides the usual ones there are new groups, off by default: **fan** (`fan_pct`,
+  `fan_rpm`), **active limiter** (`throttle_thermal`, `throttle_power`, `throttle_current`, the same
+  hard-cap rule as the panel's indicator), **GPU 0 fan** (`gpu0_fan_pct`) and **battery** (`battery_pct`,
+  `battery_w`, blank on a desktop). The default selection writes exactly the columns earlier versions
+  wrote, so existing files and scripts don't change. Changing the selection while logging starts a new
+  file, since the header changes. Saved as `CsvMetrics` in `ui.json`.
 - A section added in a newer version now appears after its neighbour in a saved custom order,
   instead of at the very bottom.
 
@@ -40,6 +47,10 @@ All notable changes to SidebarMonitor are documented here. The format is based o
   (`RTX 4070 Ti SUPER1%`). The stat tiles shrink to fit and the title ellipsises instead.
 - The CPU limits line wrapped mid-item (`térm` / `78%`); it now only breaks between items. An iGPU no
   longer shows `PCIe x0`, and a missing GPU power reading no longer reaches the header as `NaNW`.
+- **Editing `LogCsv` in `ui.json` by hand did nothing until the panel restarted** — and the running
+  panel could overwrite the edit on its next save. The panel now watches `ui.json` and applies changes to
+  `LogCsv` and `CsvMetrics` live, so a script can start and stop recording (e.g. around a benchmark).
+  Only the logging keys are reloaded; everything else still applies on restart.
 
 ### Performance
 

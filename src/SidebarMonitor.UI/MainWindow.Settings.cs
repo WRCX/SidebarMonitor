@@ -99,13 +99,73 @@ internal sealed partial class MainWindow
             case "gpuview": _gpuSection.View = _cfg.GpuView; break;
             case "gpuengines": _gpuSection.ShowEngines = _cfg.ShowGpuEngines; break;
             case "gpucols": _gpuSection.ApplyColumns(_cfg.GpuEngineColumns); break;
-            case "csv": if (_cfg.LogCsv) _csv.Start(DateTime.Now); else _csv.Stop(); break;
+            case "csv": if (_cfg.LogCsv) _csv.Start(DateTime.Now, _cfg.CsvMetrics); else _csv.Stop(); break;
             case "verbose": _debug.Visibility = _cfg.LogVerbose ? Visibility.Visible : Visibility.Collapsed; break;
             case "netrows": _netProcRows.Children.Clear(); break;
             case "disks": _diskBlocks.Clear(); _diskPanels.Children.Clear(); break;
             case "menu": ContextMenu = BuildMenu(); break;
         }
         _cfg.Save();
+    }
+
+    // ---------------------------------------------------------------- live reload of the CSV settings
+    // The Settings window already applies the CSV toggle live. This covers the other way in: editing
+    // ui.json by hand or from a script (e.g. to start recording during a benchmark) used to need a
+    // restart, and the running panel would even overwrite the edit on its next save. Only the logging
+    // keys are synced — reloading layout or sensor opt-ins from under a live window is a different,
+    // riskier job — and our own saves come back as no-ops because the values already match.
+
+    private FileSystemWatcher? _cfgWatcher;
+    private System.Windows.Threading.DispatcherTimer? _cfgDebounce;
+
+    private void StartConfigWatcher()
+    {
+        if (_cfg.Ephemeral) return;   // --csv and friends own the logging state for this run
+        try
+        {
+            string path = UiConfig.FilePath;
+            string dir = Path.GetDirectoryName(path)!;
+            Directory.CreateDirectory(dir);
+
+            // Editors and our own atomic save (temp + File.Replace) fire several events per write;
+            // wait for them to settle, then read the file once.
+            _cfgDebounce = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+            _cfgDebounce.Tick += (_, _) => { _cfgDebounce.Stop(); SyncLoggingFromDisk(); };
+
+            _cfgWatcher = new FileSystemWatcher(dir, Path.GetFileName(path))
+            {
+                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
+            };
+            void Kick() => Dispatcher.InvokeAsync(() => { _cfgDebounce?.Stop(); _cfgDebounce?.Start(); });
+            _cfgWatcher.Changed += (_, _) => Kick();
+            _cfgWatcher.Created += (_, _) => Kick();
+            _cfgWatcher.Renamed += (_, _) => Kick();
+            _cfgWatcher.EnableRaisingEvents = true;
+        }
+        catch { _cfgWatcher = null; }
+    }
+
+    private void StopConfigWatcher()
+    {
+        try { _cfgWatcher?.Dispose(); } catch { }
+        _cfgWatcher = null;
+        _cfgDebounce?.Stop();
+    }
+
+    /// <summary>Apply an on-disk change to LogCsv / CsvMetrics to the running logger.</summary>
+    private void SyncLoggingFromDisk()
+    {
+        if (_cfgWatcher is null) return;   // closing
+        var disk = UiConfig.ReadCurrent();
+        if (disk is null) return;          // mid-write or malformed: the next event will retry
+
+        bool sameMetrics = CsvLogger.Resolve(disk.CsvMetrics).SequenceEqual(CsvLogger.Resolve(_cfg.CsvMetrics));
+        if (disk.LogCsv == _cfg.LogCsv && sameMetrics) return;
+
+        _cfg.LogCsv = disk.LogCsv;
+        _cfg.CsvMetrics = disk.CsvMetrics;
+        if (_cfg.LogCsv) _csv.Start(DateTime.Now, _cfg.CsvMetrics); else _csv.Stop();
+        _settings?.RefreshCsvControls();
     }
 
     internal void SetSectionShown(Section s, bool shown)
