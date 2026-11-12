@@ -6,6 +6,13 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ## [Unreleased]
 
+## [1.5.9] — 2026-11-12
+
+### Fixed
+
+- **The VRAM bar's tooltip came up as a white box** with the panel's light text barely readable on it.
+  It now uses the panel's own dark tooltip, like every other hover in the panel.
+
 ## [1.5.8] — 2026-11-12
 
 ### Added
@@ -762,7 +769,8 @@ First public release.
 
 > Not code-signed yet, so Windows SmartScreen may warn on first run — choose **More info → Run anyway**.
 
-[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.5.8...HEAD
+[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.5.9...HEAD
+[1.5.9]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.9
 [1.5.8]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.8
 [1.5.7]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.7
 [1.5.6]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.6
