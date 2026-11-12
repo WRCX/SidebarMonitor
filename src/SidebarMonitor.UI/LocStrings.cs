@@ -74,6 +74,7 @@ internal static class LocStrings
         ["ahora"] = "now",
         ["hace {0:F0} s"] = "{0:F0}s ago",
         ["Total {0}%"] = "Total {0}%",
+        ["VRAM por proceso"] = "VRAM by process",
         ["Módulo"] = "Module",
 
         // ── Core colour palettes ──────────────────────────────────────────────────────────────

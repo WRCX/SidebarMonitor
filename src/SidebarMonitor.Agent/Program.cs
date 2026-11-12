@@ -529,14 +529,15 @@ internal static class Program
     private static void ZeroEngines(ref GpuInfo g)
     {
         for (int e = 0; e < GpuEngines.Count; e++) g.Engines[e] = 0;
-        g.TopProcPct = 0;
+        g.ProcCount = 0;
     }
 
     /// <summary>
     /// What each GPU is doing and who's driving it, from the "GPU Engine" counter. Every instance is
     /// "pid_&lt;n&gt;_luid_0x&lt;hi&gt;_0x&lt;lo&gt;_..._engtype_&lt;type&gt;". We route each sample to the GPU whose
-    /// LUID matches, fold the engtype into a curated slot, and track the busiest process per GPU. An
-    /// adapter with no NVML load (the iGPU) takes its utilisation from its busiest engine.
+    /// LUID matches, fold the engtype into a curated slot, and work out who is using each GPU: every
+    /// process's utilisation and, from the "GPU Process Memory" counter, its VRAM. An adapter with no
+    /// NVML load (the iGPU) takes its utilisation from its busiest engine.
     /// </summary>
     private static void FillEngines(ref Snapshot s, PdhQuery pdh, Processes procs, List<GpuAdapters.Adapter> adapters)
     {
@@ -545,11 +546,11 @@ internal static class Program
         if (!pdh.HasGpuEngine) return;
         // Active instances only; this loop skipped NaN and ≤ 0 anyway, so the result is the same.
         // An idle GPU now yields an empty list — which must still fall through, not return: the
-        // loop below is also what clears TopProc and sets an iGPU's load (to 0) for this tick.
+        // loop below is also what clears the process list and sets an iGPU's load (to 0) for this tick.
         var eng = pdh.GpuEngineActive();
 
-        var byPid = new Dictionary<int, float>[s.GpuCount];
-        for (int i = 0; i < s.GpuCount; i++) byPid[i] = new Dictionary<int, float>(16);
+        var byPid = new Dictionary<int, PidGpu>[s.GpuCount];
+        for (int i = 0; i < s.GpuCount; i++) byPid[i] = new Dictionary<int, PidGpu>(32);
 
         foreach (var item in eng)
         {
@@ -562,17 +563,50 @@ internal static class Program
             ref var g = ref s.Gpus[gi];
             g.Engines[slot] = Math.Min(100, g.Engines[slot] + v);
 
+            // A process's utilisation is its busiest engine, as Task Manager counts it. Summing its
+            // engines (3D + copy + …) read 105 % for a game on a GPU whose own load was 97 %.
             int pid = EngPid(item.Instance);
-            if (pid > 0) byPid[gi][pid] = byPid[gi].GetValueOrDefault(pid) + v;
+            if (pid > 0)
+            {
+                var p = byPid[gi].GetValueOrDefault(pid);
+                byPid[gi][pid] = p with { Pct = Math.Max(p.Pct, v) };
+            }
+        }
+
+        int gpuCount = s.GpuCount;   // a local function cannot capture the ref parameter
+        foreach (var item in pdh.GpuMemLocalActive()) AddMem(item, local: true);
+        foreach (var item in pdh.GpuMemNonLocalActive()) AddMem(item, local: false);
+
+        void AddMem(InstanceSample item, bool local)
+        {
+            int gi = GpuIndexForInstance(item.Instance, adapters, gpuCount);
+            int pid = EngPid(item.Instance);
+            if (gi < 0 || pid <= 0 || double.IsNaN(item.Value)) return;
+            var p = byPid[gi].GetValueOrDefault(pid);
+            ulong bytes = (ulong)Math.Max(0, item.Value);
+            byPid[gi][pid] = local ? p with { Local = p.Local + bytes } : p with { NonLocal = p.NonLocal + bytes };
         }
 
         for (int i = 0; i < s.GpuCount; i++)
         {
             ref var g = ref s.Gpus[i];
-            int topPid = 0; float topV = 0;
-            foreach (var kv in byPid[i]) if (kv.Value > topV) { topV = kv.Value; topPid = kv.Key; }
-            NameField.Set(ref g.TopProc, topPid > 0 ? procs.NameFor(topPid) ?? string.Empty : string.Empty);
-            g.TopProcPct = Math.Min(100, topV);
+
+            // A pid that started after the last process enumeration has no name yet; it gets its row
+            // next tick rather than a bare number now.
+            var usage = new List<GpuProcRanking.PidUsage>(byPid[i].Count);
+            foreach (var (pid, p) in byPid[i])
+                if (procs.NameFor(pid) is { } name) usage.Add(new(name, p.Pct, p.Local, p.NonLocal));
+
+            var rows = GpuProcRanking.Rank(usage, SnapshotLayout.MaxGpuProcs);
+            g.ProcCount = rows.Count;
+            for (int k = 0; k < rows.Count; k++)
+            {
+                ref var r = ref g.Procs[k];
+                NameField.Set(ref r.Name, rows[k].Name);
+                r.Pct = rows[k].Pct;
+                r.VramLocal = rows[k].Local;
+                r.VramNonLocal = rows[k].NonLocal;
+            }
 
             if (g.HasDetail == 0)
             {
@@ -582,6 +616,9 @@ internal static class Program
             }
         }
     }
+
+    /// <summary>One pid's GPU use on one adapter while FillEngines gathers it.</summary>
+    private readonly record struct PidGpu(float Pct, ulong Local, ulong NonLocal);
 
     /// <summary>Which GPU (index into s.Gpus) a "GPU Engine" instance belongs to, matched by LUID.
     /// With no adapter list (fallback), everything folds into GPU 0. -1 = no match.</summary>

@@ -358,6 +358,252 @@ internal sealed class Sparkline : FrameworkElement
 }
 
 /// <summary>
+/// A GPU's load split by process: the GPU's own load as the translucent area under a thin white line,
+/// and on top one line per process in that process's colour (Theme.ProcessColor — the hue it also
+/// wears on the CPU bars and on the VRAM bar below), so the chart says who the load is. A process
+/// keeps its line while any of its history is in the window: a game that just closed scrolls out
+/// instead of vanishing, and one that just started rises from zero instead of appearing mid-air.
+/// </summary>
+internal sealed class ProcSparkline : FrameworkElement
+{
+    private const int Capacity = 120;
+    private readonly float[] _total = new float[Capacity];
+    private readonly Dictionary<string, float[]> _procs = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Pen> _pens = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _seen = new(StringComparer.OrdinalIgnoreCase);
+    private int _count;
+
+    private readonly Brush _fill;
+    private static readonly Pen TotalPen = MakePen(Theme.InkPrimary, 1.5);
+
+    private double _lo, _hi;
+    private bool _boundsInit;
+
+    private double _hoverX = -1;
+    private readonly ToolTip _tip = Theme.MakeToolTip();
+
+    /// <summary>Fit the axis to the window's min..max, as <see cref="Sparkline.AutoScale"/>.</summary>
+    public bool AutoScale { get; set; } = true;
+
+    /// <summary>Smallest Y span the auto scale will zoom to, in %.</summary>
+    public double MinRange { get; set; } = 10;
+
+    /// <summary>Sample spacing, for the hover tooltip's "hace N s".</summary>
+    public double SecondsPerSample { get; set; } = 1;
+
+    public ProcSparkline(Color series, double height = 36)
+    {
+        Height = height;
+        SnapsToDevicePixels = true;
+        var fill = new SolidColorBrush(Color.FromArgb(48, series.R, series.G, series.B));
+        fill.Freeze();
+        _fill = fill;
+
+        // See the Sparkline note: a manually-opened tooltip needs its PlacementTarget pinned.
+        _tip.PlacementTarget = this;
+        _tip.Placement = System.Windows.Controls.Primitives.PlacementMode.Relative;
+        ToolTip = _tip;
+        ToolTipService.SetInitialShowDelay(this, 100);
+        ToolTipService.SetBetweenShowDelay(this, 0);
+    }
+
+    private static Pen MakePen(Brush b, double width)
+    {
+        var p = new Pen(b, width) { LineJoin = PenLineJoin.Round, StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+        p.Freeze();
+        return p;
+    }
+
+    private Pen ProcPen(string name)
+    {
+        if (!_pens.TryGetValue(name, out var pen)) _pens[name] = pen = MakePen(Theme.ProcessBrush(name), 1.5);
+        return pen;
+    }
+
+    /// <summary>One tick: the GPU's load and each process's %, by name. A process below
+    /// <see cref="GpuProcRanking.MinPct"/> that has no line yet does not get one.</summary>
+    public void Push(float total, IReadOnlyList<(string Name, float Pct)> procs)
+    {
+        if (_count == Capacity)
+        {
+            Array.Copy(_total, 1, _total, 0, Capacity - 1);
+            foreach (var arr in _procs.Values) Array.Copy(arr, 1, arr, 0, Capacity - 1);
+            _count--;
+        }
+
+        _total[_count] = ChartMath.HoldIfMissing(total, _count > 0 ? _total[_count - 1] : 0f);
+
+        _seen.Clear();
+        foreach (var (raw, pct) in procs)
+        {
+            string name = Theme.NormalizeProcess(raw);
+            if (!_procs.TryGetValue(name, out var arr))
+            {
+                if (pct < GpuProcRanking.MinPct) continue;
+                _procs[name] = arr = new float[Capacity];   // zeros: it was idle before it showed up
+            }
+            arr[_count] = float.IsNaN(pct) ? 0 : pct;
+            _seen.Add(name);
+        }
+        foreach (var (name, arr) in _procs)
+            if (!_seen.Contains(name)) arr[_count] = 0;
+        _count++;
+
+        // Drop a line once its whole history has scrolled down to zero.
+        List<string>? gone = null;
+        foreach (var (name, arr) in _procs)
+            if (!arr.AsSpan(0, _count).ContainsAnyExcept(0f)) (gone ??= []).Add(name);
+        if (gone is not null) foreach (var name in gone) _procs.Remove(name);
+
+        InvalidateVisual();
+    }
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        _hoverX = e.GetPosition(this).X;
+        UpdateTip();
+        InvalidateVisual();
+    }
+
+    protected override void OnMouseLeave(MouseEventArgs e)
+    {
+        _hoverX = -1;
+        _tip.IsOpen = false;
+        InvalidateVisual();
+    }
+
+    /// <summary>Test hook: place the crosshair without a real mouse, for screenshot verification.</summary>
+    public void ForceHover(double fraction)
+    {
+        _hoverX = ActualWidth * fraction;
+        UpdateTip();
+        InvalidateVisual();
+    }
+
+    private int HoverIndex(double w)
+    {
+        if (_hoverX < 0 || _count < 2) return -1;
+        double dx = w / (Capacity - 1);
+        double x0 = w - (_count - 1) * dx;
+        return Math.Clamp((int)Math.Round((_hoverX - x0) / dx), 0, _count - 1);
+    }
+
+    /// <summary>The GPU's load at that instant, then every process that was using it, busiest first,
+    /// each name in its line's colour.</summary>
+    private void UpdateTip()
+    {
+        int i = HoverIndex(ActualWidth);
+        if (i < 0) { _tip.IsOpen = false; return; }
+
+        double ago = (_count - 1 - i) * SecondsPerSample;
+        string when = ago < 0.5 ? Loc.T("ahora") : Loc.T("hace {0:F0} s", ago);
+
+        var tb = Theme.TipBlock();
+        tb.Inlines.Add(Theme.TipHead(Loc.T("Total {0}%", _total[i].ToString("F0", CultureInfo.InvariantCulture))));
+        tb.Inlines.Add(Theme.TipDim($"   {when}"));
+        foreach (var (name, arr) in _procs.Where(p => p.Value[i] >= GpuProcRanking.MinPct).OrderByDescending(p => p.Value[i]))
+        {
+            tb.Inlines.Add(new LineBreak());
+            tb.Inlines.Add(new Run("● ") { Foreground = Theme.ProcessBrush(name) });
+            tb.Inlines.Add(new Run(string.Create(CultureInfo.InvariantCulture, $"{name}  {arr[i]:F0}%")));
+        }
+
+        _tip.Content = tb;
+        _tip.HorizontalOffset = _hoverX + 12;
+        _tip.VerticalOffset = 4;
+        _tip.IsOpen = true;
+    }
+
+    protected override void OnRender(DrawingContext dc)
+    {
+        double w = ActualWidth, h = ActualHeight;
+        if (w <= 0 || h <= 0) return;
+
+        dc.DrawRoundedRectangle(Theme.Surface, null, new System.Windows.Rect(0, 0, w, h), 3, 3);
+        dc.DrawLine(new Pen(Theme.Baseline, 1), new Point(0, h - 0.5), new Point(w, h - 0.5));
+        if (_count < 2) return;
+
+        ComputeBounds(out double lo, out double hi);
+        DrawSeries(dc, _total, lo, hi, w, h, TotalPen, _fill);
+        // Processes on top: when one process IS the load (a game), its colour is what shows.
+        foreach (var (name, arr) in _procs) DrawSeries(dc, arr, lo, hi, w, h, ProcPen(name), null);
+
+        AxisLabels.Draw(dc, this, lo, hi, w, h, v => v.ToString("F0", CultureInfo.InvariantCulture) + " %");
+
+        int hoverIdx = HoverIndex(w);
+        if (hoverIdx >= 0)
+        {
+            double dx = w / (Capacity - 1);
+            double x = w - (_count - 1) * dx + hoverIdx * dx;
+            dc.DrawLine(new Pen(Theme.Grid, 1), new Point(x, 0), new Point(x, h));
+            foreach (var (name, arr) in _procs)
+                if (arr[hoverIdx] >= GpuProcRanking.MinPct)
+                    dc.DrawEllipse(Theme.Surface, new Pen(Theme.ProcessBrush(name), 1.5), new Point(x, YAt(arr[hoverIdx], lo, hi, h)), 2.0, 2.0);
+            dc.DrawEllipse(Theme.Surface, new Pen(Theme.InkPrimary, 2), new Point(x, YAt(_total[hoverIdx], lo, hi, h)), 3.0, 3.0);
+        }
+    }
+
+    private static double YAt(float v, double lo, double hi, double h)
+    {
+        double span = hi - lo;
+        return h - 1 - Math.Clamp(span > 1e-9 ? (v - lo) / span : 0, 0, 1) * (h - 5);
+    }
+
+    private void ComputeBounds(out double lo, out double hi)
+    {
+        double tLo = 0, tHi = 100;
+        if (AutoScale)
+        {
+            double dLo = double.MaxValue, dHi = double.MinValue;
+            for (int i = 0; i < _count; i++) { dLo = Math.Min(dLo, _total[i]); dHi = Math.Max(dHi, _total[i]); }
+            foreach (var arr in _procs.Values)
+                for (int i = 0; i < _count; i++) { dLo = Math.Min(dLo, arr[i]); dHi = Math.Max(dHi, arr[i]); }
+            if (!ChartMath.BoundsUsable(dLo, dHi)) { dLo = 0; dHi = MinRange; }
+            double range = Math.Max(dHi - dLo, MinRange);
+            double margin = range * 0.18;
+            tHi = Math.Min(100, dHi + margin);
+            tLo = Math.Max(0, dLo - margin);
+            if (tHi - tLo < MinRange) tLo = Math.Max(0, tHi - MinRange);
+        }
+
+        if (!_boundsInit) { _lo = tLo; _hi = tHi; _boundsInit = true; }
+        else { _lo += (tLo - _lo) * 0.25; _hi += (tHi - _hi) * 0.25; }
+        lo = _lo; hi = _hi;
+
+        if (Math.Abs(_lo - tLo) > 1e-4 || Math.Abs(_hi - tHi) > 1e-4)
+            Dispatcher.BeginInvoke(InvalidateVisual, System.Windows.Threading.DispatcherPriority.Background);
+    }
+
+    private void DrawSeries(DrawingContext dc, float[] v, double lo, double hi, double w, double h, Pen pen, Brush? fill)
+    {
+        double dx = w / (Capacity - 1);
+        double x0 = w - (_count - 1) * dx;
+
+        var line = new StreamGeometry();
+        using (var lc = line.Open())
+        {
+            lc.BeginFigure(new Point(x0, YAt(v[0], lo, hi, h)), false, false);
+            for (int i = 1; i < _count; i++) lc.LineTo(new Point(x0 + i * dx, YAt(v[i], lo, hi, h)), true, false);
+        }
+        line.Freeze();
+
+        if (fill is not null)
+        {
+            var area = new StreamGeometry();
+            using (var ac = area.Open())
+            {
+                ac.BeginFigure(new Point(x0, h - 1), true, true);
+                for (int i = 0; i < _count; i++) ac.LineTo(new Point(x0 + i * dx, YAt(v[i], lo, hi, h)), false, false);
+                ac.LineTo(new Point(x0 + (_count - 1) * dx, h - 1), false, false);
+            }
+            area.Freeze();
+            dc.DrawGeometry(fill, null, area);
+        }
+        dc.DrawGeometry(null, pen, line);
+    }
+}
+
+/// <summary>
 /// One line per core on a shared 0..100 scale, each in its own colour (see Theme.CoreColor) so
 /// the cores can be told apart and matched to the coloured index numbers in the rows below. No
 /// fills — 16 stacked translucent areas would be mud. The total sits on top as a thick white
@@ -587,11 +833,14 @@ internal sealed class CoreSparkline : FrameworkElement
     }
 }
 
-/// <summary>Horizontal capacity meter. Turns status-critical near exhaustion, label alongside.</summary>
+/// <summary>Horizontal capacity meter. Turns status-critical near exhaustion, label alongside.
+/// Optionally split into owner segments (the VRAM bar by process): then the fill keeps its owners'
+/// colours, and nearing exhaustion shows as a status-coloured end cap instead.</summary>
 internal sealed class BarMeter : FrameworkElement
 {
     private double _fraction;
     private readonly Brush _fill;
+    private (Brush Fill, double Fraction)[] _segments = [];
 
     public BarMeter(Color series) { Height = 6; _fill = Theme.SeriesBrush(series); SnapsToDevicePixels = true; }
 
@@ -602,6 +851,22 @@ internal sealed class BarMeter : FrameworkElement
     public void Update(double fraction)
     {
         _fraction = Math.Clamp(fraction, 0, 1);
+        _segments = [];
+        InvalidateVisual();
+    }
+
+    /// <summary>
+    /// A fill of <paramref name="fraction"/>, split left to right into <paramref name="segments"/>
+    /// (each a fraction of the whole bar); whatever of the fill they do not cover is drawn as
+    /// <see cref="Theme.OtherFill"/> — the driver, the desktop, the processes below the cut.
+    /// The fill is the measured total and the segments are cropped to it, never the other way round:
+    /// on an iGPU the per-process counters added up to 512 MiB of a 0.3 GiB reading, and letting them
+    /// widen the bar painted a 60 % full carve-out as a critical 100 %.
+    /// </summary>
+    public void Update(double fraction, (Brush Fill, double Fraction)[] segments)
+    {
+        _fraction = Math.Clamp(fraction, 0, 1);
+        _segments = segments;
         InvalidateVisual();
     }
 
@@ -610,11 +875,33 @@ internal sealed class BarMeter : FrameworkElement
         double w = ActualWidth, h = ActualHeight;
         if (w <= 0) return;
         dc.DrawRoundedRectangle(Theme.Grid, null, new System.Windows.Rect(0, 0, w, h), 3, 3);
-        Brush fill = LowIsBad
-            ? (_fraction <= 0.10 ? Theme.StatusCritical : _fraction <= 0.20 ? Theme.StatusSerious : _fill)
-            : (_fraction >= 0.90 ? Theme.StatusCritical : _fraction >= 0.80 ? Theme.StatusSerious : _fill);
-        if (_fraction > 0.005)
-            dc.DrawRoundedRectangle(fill, null, new System.Windows.Rect(0, 0, w * _fraction, h), 3, 3);
+        Brush? status = LowIsBad
+            ? (_fraction <= 0.10 ? Theme.StatusCritical : _fraction <= 0.20 ? Theme.StatusSerious : null)
+            : (_fraction >= 0.90 ? Theme.StatusCritical : _fraction >= 0.80 ? Theme.StatusSerious : null);
+        if (_fraction <= 0.005) return;
+
+        var filled = new System.Windows.Rect(0, 0, w * _fraction, h);
+        if (_segments.Length == 0)
+        {
+            dc.DrawRoundedRectangle(status ?? _fill, null, filled, 3, 3);
+            return;
+        }
+
+        // Square segments inside the fill's rounded outline, so only the bar's two ends are round.
+        dc.PushClip(new RectangleGeometry(filled, 3, 3));
+        double x = 0;
+        foreach (var (fill, f) in _segments)
+        {
+            double sw = Math.Min(w * Math.Max(0, f), filled.Width - x);
+            if (sw <= 0) break;
+            dc.DrawRectangle(fill, null, new System.Windows.Rect(x, 0, sw, h));
+            x += sw;
+        }
+        if (filled.Width - x > 0.5)
+            dc.DrawRectangle(Theme.OtherFill, null, new System.Windows.Rect(x, 0, filled.Width - x, h));
+        if (status is not null)
+            dc.DrawRectangle(status, null, new System.Windows.Rect(Math.Max(0, filled.Width - 3), 0, 3, h));
+        dc.Pop();
     }
 }
 

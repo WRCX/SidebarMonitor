@@ -6,6 +6,23 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ## [Unreleased]
 
+### Added
+
+- **GPU use by process.** Each GPU's load graph now carries one line per process, in that process's
+  colour (the same hue it wears on the CPU bars), over the GPU's own load as the shaded area; hovering
+  lists every process's % at that instant. The VRAM bar is split by process, biggest holder first, with
+  the unowned rest (driver, desktop, small fry) as the grey tail; hovering lists each process's VRAM
+  and any GPU-visible system RAM it also holds. A legend under the bar names the colours:
+  `● Sandfall 97% 7.8G  ● chrome 2% 412M`. Read unelevated from the same counters Task Manager uses
+  (`GPU Engine` and `GPU Process Memory` → *Local* / *Non Local Usage*), up to six processes per GPU:
+  the busiest first, plus the biggest idle VRAM holders, so a model server parked on 9 GiB stays on the
+  bar while a game is running. Snapshot contract **v28**: agent and UI must match.
+
+### Changed
+
+- A process's GPU % is now its busiest engine, as Task Manager counts it, not the sum of its engines,
+  which could read above the GPU's own load (105 % for a game on a GPU at 97 %).
+
 ## [1.5.7] — 2026-11-08
 
 ### Added

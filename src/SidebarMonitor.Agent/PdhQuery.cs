@@ -53,7 +53,7 @@ internal sealed class PdhQuery : IDisposable
     private readonly IntPtr _cpuTotal, _cpuPerf, _cpuPerfPerCore, _cpuFreq, _cpuPerCore;
     private readonly IntPtr _committed;
     private readonly IntPtr _diskRead, _diskWrite, _diskQueue, _diskIdle;
-    private readonly IntPtr _gpuEngine;
+    private readonly IntPtr _gpuEngine, _gpuMemLocal, _gpuMemNonLocal;
 
     public PdhQuery()
     {
@@ -79,6 +79,11 @@ internal sealed class PdhQuery : IDisposable
         // aggregating them tells us what the GPU is doing and who's driving it. Absent on machines
         // without the GPU counter set — then it just returns nothing.
         _gpuEngine = Add(@"\GPU Engine(*)\Utilization Percentage");
+
+        // Per-process GPU memory, same "pid_N_luid_..." instances. Local = the adapter's own memory,
+        // Non Local = GPU-visible system RAM. ~120 instances on the dev desktop, most of them non-zero.
+        _gpuMemLocal = Add(@"\GPU Process Memory(*)\Local Usage");
+        _gpuMemNonLocal = Add(@"\GPU Process Memory(*)\Non Local Usage");
 
         PdhCollectQueryData(_query);   // rate counters need a baseline
     }
@@ -159,6 +164,13 @@ internal sealed class PdhQuery : IDisposable
     /// <summary>False on machines without the GPU Engine counter set.</summary>
     public bool HasGpuEngine => _gpuEngine != IntPtr.Zero;
 
+    /// <summary>Per-process bytes in the adapter's own memory, non-zero instances only. Uncapped: these
+    /// are byte counts, and the default format would clamp any of them to 100.</summary>
+    public List<InstanceSample> GpuMemLocalActive() => Array(_gpuMemLocal, activeOnly: true, cap: false);
+
+    /// <summary>Per-process bytes of GPU-visible system RAM, non-zero instances only.</summary>
+    public List<InstanceSample> GpuMemNonLocalActive() => Array(_gpuMemNonLocal, activeOnly: true, cap: false);
+
     private static double Scalar(IntPtr counter, bool cap = true)
     {
         if (counter == IntPtr.Zero) return double.NaN;
@@ -169,19 +181,20 @@ internal sealed class PdhQuery : IDisposable
 
     /// <param name="activeOnly">Skip instances whose value is NaN or ≤ 0 before their name is decoded:
     /// the name is the expensive part, and it is never needed for an idle instance.</param>
-    private static List<InstanceSample> Array(IntPtr counter, bool activeOnly = false)
+    private static List<InstanceSample> Array(IntPtr counter, bool activeOnly = false, bool cap = true)
     {
         var result = new List<InstanceSample>();
         if (counter == IntPtr.Zero) return result;
 
+        uint fmt = cap ? PdhFmtDouble : PdhFmtDouble | PdhFmtNoCap100;
         uint size = 0;
-        PdhGetFormattedCounterArrayW(counter, PdhFmtDouble, ref size, out _, IntPtr.Zero);
+        PdhGetFormattedCounterArrayW(counter, fmt, ref size, out _, IntPtr.Zero);
         if (size == 0) return result;
 
         IntPtr buf = Marshal.AllocHGlobal((int)size);
         try
         {
-            if (PdhGetFormattedCounterArrayW(counter, PdhFmtDouble, ref size, out uint count, buf) != 0)
+            if (PdhGetFormattedCounterArrayW(counter, fmt, ref size, out uint count, buf) != 0)
                 return result;
 
             for (int i = 0; i < count; i++)

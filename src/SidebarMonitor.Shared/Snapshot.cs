@@ -10,7 +10,7 @@ public static class SnapshotLayout
     public const uint Signature = 0x4E4D4253;
 
     /// <summary>Bump on any layout change. The reader refuses anything it does not know.</summary>
-    public const uint Version = 27;   // 27: Battery
+    public const uint Version = 28;   // 28: per-process GPU usage and VRAM
 
     /// <summary>
     /// Local\, not Global\. Creating a Global\ kernel object requires SeCreateGlobalPrivilege,
@@ -28,6 +28,7 @@ public static class SnapshotLayout
     public const int MaxNics = 4;
     public const int MaxDisks = 8;
     public const int MaxProcs = 16;
+    public const int MaxGpuProcs = 6;
 }
 
 [InlineArray(32)] public struct Name32 { private byte _element0; }
@@ -52,6 +53,7 @@ public static class GpuEngines
 [InlineArray(SnapshotLayout.MaxNics)] public struct NicArray { private NicInfo _element0; }
 [InlineArray(SnapshotLayout.MaxDisks)] public struct DiskArray { private DiskInfo _element0; }
 [InlineArray(SnapshotLayout.MaxProcs)] public struct ProcArray { private ProcInfo _element0; }
+[InlineArray(SnapshotLayout.MaxGpuProcs)] public struct GpuProcArray { private GpuProcInfo _element0; }
 
 /// <summary>How to aggregate the per-core clock into one reported number.</summary>
 public enum CpuFreqMode { Best = 0, Mean = 1, Median = 2 }
@@ -133,9 +135,11 @@ public struct GpuInfo
     /// <summary>Per-engine GPU utilisation (%), indexed by <see cref="GpuEngines"/>: what the GPU is
     /// actually doing — 3D, compute/ML, video decode/encode, generic video, DMA copy, VR, other.</summary>
     public GpuEngArray Engines;
-    /// <summary>The process driving this GPU the most, and its total GPU utilisation %.</summary>
-    public Name32 TopProc;
-    public float TopProcPct;
+    /// <summary>Who is using this GPU, per process name: the busiest by utilisation first, then the
+    /// biggest VRAM holders that are idle (see <see cref="GpuProcRanking"/>). Refreshed every tick,
+    /// even when the vendor read is throttled.</summary>
+    public int ProcCount;
+    public GpuProcArray Procs;
 
     /// <summary>1 for an integrated GPU (Ryzen/Intel iGPU), 0 for a discrete card.</summary>
     public byte IsIntegrated;
@@ -143,6 +147,25 @@ public struct GpuInfo
     /// 0 for adapters we only see through the vendor-neutral counters (the AMD iGPU), whose stat
     /// row the UI then omits.</summary>
     public byte HasDetail;
+}
+
+/// <summary>
+/// One process (all its instances, folded by name) on one GPU, from the "GPU Engine" and "GPU Process
+/// Memory" counters — the same ones Task Manager reads.
+/// </summary>
+[StructLayout(LayoutKind.Sequential)]
+public struct GpuProcInfo
+{
+    public Name32 Name;
+    /// <summary>Utilisation %, Task Manager's way: each process's busiest engine, summed over its
+    /// instances and capped at 100. Not the sum of its engines, which can pass the GPU's own load.</summary>
+    public float Pct;
+    /// <summary>"Local Usage": the process's allocations in the GPU's own memory (VRAM on a card).
+    /// Preferred over "Dedicated Usage", which counts a surface shared between processes twice.</summary>
+    public ulong VramLocal;
+    /// <summary>"Non Local Usage": GPU-visible system RAM. Normal for an iGPU; on a card, a hint that
+    /// the process spilled out of VRAM.</summary>
+    public ulong VramNonLocal;
 }
 
 [StructLayout(LayoutKind.Sequential)]
