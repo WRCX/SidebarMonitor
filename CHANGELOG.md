@@ -6,6 +6,8 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ## [Unreleased]
 
+## [1.5.8] — 2026-11-12
+
 ### Added
 
 - **GPU use by process.** Each GPU's load graph now carries one line per process, in that process's
@@ -760,7 +762,8 @@ First public release.
 
 > Not code-signed yet, so Windows SmartScreen may warn on first run — choose **More info → Run anyway**.
 
-[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.5.7...HEAD
+[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.5.8...HEAD
+[1.5.8]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.8
 [1.5.7]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.7
 [1.5.6]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.6
 [1.5.5]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.5
