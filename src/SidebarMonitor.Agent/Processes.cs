@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 
 namespace SidebarMonitor.Agent;
 
-internal readonly record struct ProcSample(int Pid, string Name, long Cpu100Ns, int Threads, long WorkingSet);
+internal readonly record struct ProcSample(int Pid, string Name, long Cpu100Ns, int Threads, long WorkingSet, long PrivateWorkingSet);
 
 /// <summary>
 /// One NtQuerySystemInformation call returns every process with its kernel+user times, so CPU
@@ -22,7 +22,9 @@ internal sealed class Processes : IDisposable
     private static extern uint NtQuerySystemInformation(int cls, IntPtr buf, uint len, out uint retLen);
 
     // x64 offsets into SYSTEM_PROCESS_INFORMATION.
-    private const int OffNextEntry = 0, OffThreadCount = 4, OffUserTime = 40, OffKernelTime = 48;
+    // WorkingSetPrivateSize is Task Manager's "Memory" column: the working set minus pages shared with
+    // other processes, so the per-process numbers add up instead of counting every DLL once per user.
+    private const int OffNextEntry = 0, OffThreadCount = 4, OffPrivateWorkingSet = 8, OffUserTime = 40, OffKernelTime = 48;
     private const int OffImageNameLen = 56, OffImageNameBuf = 64, OffUniquePid = 80, OffWorkingSet = 144;
 
     private readonly int _cores = Environment.ProcessorCount;
@@ -38,6 +40,14 @@ internal sealed class Processes : IDisposable
     /// <summary>Process name for a pid from the last enumeration, or null. Used to name the top GPU
     /// process, whose pid comes from a different (GPU) counter.</summary>
     public string? NameFor(int pid) => _previous.TryGetValue(pid, out var p) ? p.Name : null;
+
+    /// <summary>Every process's private working set from the last enumeration (the one <see cref="Top"/>
+    /// just took), for the RAM bar. No second NtQuerySystemInformation call.</summary>
+    public IEnumerable<(string Name, ulong Bytes)> PrivateWorkingSets()
+    {
+        foreach (var p in _previous.Values)
+            if (p.Pid != 0) yield return (p.Name, (ulong)Math.Max(0, p.PrivateWorkingSet));
+    }
 
     public readonly record struct TopRow(string Name, int Pid, float CpuPct, ulong WorkingSet, int Threads, int Instances);
 
@@ -124,6 +134,7 @@ internal sealed class Processes : IDisposable
             long kernel = Marshal.ReadInt64(p, OffKernelTime);
             int pid = (int)Marshal.ReadIntPtr(p, OffUniquePid);
             long ws = (long)Marshal.ReadIntPtr(p, OffWorkingSet);
+            long privateWs = Marshal.ReadInt64(p, OffPrivateWorkingSet);
 
             short nameLen = Marshal.ReadInt16(p, OffImageNameLen);
             IntPtr namePtr = Marshal.ReadIntPtr(p, OffImageNameBuf);
@@ -131,7 +142,7 @@ internal sealed class Processes : IDisposable
                 ? Marshal.PtrToStringUni(namePtr, nameLen / 2)
                 : (pid == 0 ? "Idle" : "System");
 
-            result[pid] = new ProcSample(pid, name, user + kernel, threads, ws);
+            result[pid] = new ProcSample(pid, name, user + kernel, threads, ws, privateWs);
 
             if (next == 0) break;
             p += next;

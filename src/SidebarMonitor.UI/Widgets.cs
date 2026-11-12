@@ -359,8 +359,8 @@ internal sealed class Sparkline : FrameworkElement
 
 /// <summary>
 /// A GPU's load split by process: the GPU's own load as the translucent area under a thin white line,
-/// and on top one line per process in that process's colour (Theme.ProcessColor — the hue it also
-/// wears on the CPU bars and on the VRAM bar below), so the chart says who the load is. A process
+/// and on top one line per process in the colour its section assigned it (the same one it wears on the
+/// VRAM bar and in the legend below), so the chart says who the load is. A process
 /// keeps its line while any of its history is in the window: a game that just closed scrolls out
 /// instead of vanishing, and one that just started rises from zero instead of appearing mid-air.
 /// </summary>
@@ -368,8 +368,11 @@ internal sealed class ProcSparkline : FrameworkElement
 {
     private const int Capacity = 120;
     private readonly float[] _total = new float[Capacity];
+    private readonly float[] _aux = new float[Capacity];   // a second reading of the total, tooltip only
     private readonly Dictionary<string, float[]> _procs = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Pen> _pens = new(StringComparer.OrdinalIgnoreCase);
+    // Each line's colour as last assigned by the section; a process that left keeps its last one.
+    private readonly Dictionary<string, Brush> _brushes = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _seen = new(StringComparer.OrdinalIgnoreCase);
     private int _count;
 
@@ -390,6 +393,10 @@ internal sealed class ProcSparkline : FrameworkElement
 
     /// <summary>Sample spacing, for the hover tooltip's "hace N s".</summary>
     public double SecondsPerSample { get; set; } = 1;
+
+    /// <summary>What the tooltip calls the second reading of the total ("NVML"). Not drawn: it is
+    /// there to explain why another tool shows a different figure, not to compete with the line.</summary>
+    public string AuxLabel { get; set; } = "";
 
     public ProcSparkline(Color series, double height = 36)
     {
@@ -414,24 +421,30 @@ internal sealed class ProcSparkline : FrameworkElement
         return p;
     }
 
+    private Brush ProcBrush(string name) => _brushes.TryGetValue(name, out var b) ? b : Theme.ProcessBrush(name);
+
     private Pen ProcPen(string name)
     {
-        if (!_pens.TryGetValue(name, out var pen)) _pens[name] = pen = MakePen(Theme.ProcessBrush(name), 1.5);
+        if (!_pens.TryGetValue(name, out var pen)) _pens[name] = pen = MakePen(ProcBrush(name), 1.5);
         return pen;
     }
 
-    /// <summary>One tick: the GPU's load and each process's %, by name. A process below
+    /// <summary>One tick: the GPU's load, each process's %, by name, and optionally a second reading of
+    /// the load (<paramref name="aux"/>, NaN for none). <paramref name="colors"/> is the section's own
+    /// assignment, so the lines match its bar and legend. A process below
     /// <see cref="GpuProcRanking.MinPct"/> that has no line yet does not get one.</summary>
-    public void Push(float total, IReadOnlyList<(string Name, float Pct)> procs)
+    public void Push(float total, IReadOnlyList<(string Name, float Pct)> procs, float aux = float.NaN, ProcessColorMap? colors = null)
     {
         if (_count == Capacity)
         {
             Array.Copy(_total, 1, _total, 0, Capacity - 1);
+            Array.Copy(_aux, 1, _aux, 0, Capacity - 1);
             foreach (var arr in _procs.Values) Array.Copy(arr, 1, arr, 0, Capacity - 1);
             _count--;
         }
 
         _total[_count] = ChartMath.HoldIfMissing(total, _count > 0 ? _total[_count - 1] : 0f);
+        _aux[_count] = aux;
 
         _seen.Clear();
         foreach (var (raw, pct) in procs)
@@ -444,6 +457,13 @@ internal sealed class ProcSparkline : FrameworkElement
             }
             arr[_count] = float.IsNaN(pct) ? 0 : pct;
             _seen.Add(name);
+
+            var brush = (colors ?? ProcessColorMap.Empty).For(name);
+            if (!_brushes.TryGetValue(name, out var had) || had != brush)
+            {
+                _brushes[name] = brush;
+                _pens.Remove(name);   // rebuilt in the new colour on the next render
+            }
         }
         foreach (var (name, arr) in _procs)
             if (!_seen.Contains(name)) arr[_count] = 0;
@@ -453,7 +473,8 @@ internal sealed class ProcSparkline : FrameworkElement
         List<string>? gone = null;
         foreach (var (name, arr) in _procs)
             if (!arr.AsSpan(0, _count).ContainsAnyExcept(0f)) (gone ??= []).Add(name);
-        if (gone is not null) foreach (var name in gone) _procs.Remove(name);
+        if (gone is not null)
+            foreach (var name in gone) { _procs.Remove(name); _brushes.Remove(name); _pens.Remove(name); }
 
         InvalidateVisual();
     }
@@ -489,7 +510,7 @@ internal sealed class ProcSparkline : FrameworkElement
     }
 
     /// <summary>The GPU's load at that instant, then every process that was using it, busiest first,
-    /// each name in its line's colour.</summary>
+    /// each name in its line's colour, and whatever of the load they don't account for.</summary>
     private void UpdateTip()
     {
         int i = HoverIndex(ActualWidth);
@@ -497,15 +518,31 @@ internal sealed class ProcSparkline : FrameworkElement
 
         double ago = (_count - 1 - i) * SecondsPerSample;
         string when = ago < 0.5 ? Loc.T("ahora") : Loc.T("hace {0:F0} s", ago);
+        var ci = CultureInfo.InvariantCulture;
 
         var tb = Theme.TipBlock();
-        tb.Inlines.Add(Theme.TipHead(Loc.T("Total {0}%", _total[i].ToString("F0", CultureInfo.InvariantCulture))));
+        tb.Inlines.Add(Theme.TipHead(Loc.T("Total {0}%", _total[i].ToString("F0", ci))));
         tb.Inlines.Add(Theme.TipDim($"   {when}"));
+        if (!float.IsNaN(_aux[i]) && AuxLabel.Length > 0)
+            tb.Inlines.Add(Theme.TipDim(string.Create(ci, $"   {AuxLabel} {_aux[i]:F0}%")));
+
+        float listed = 0;
         foreach (var (name, arr) in _procs.Where(p => p.Value[i] >= GpuProcRanking.MinPct).OrderByDescending(p => p.Value[i]))
         {
+            listed += arr[i];
             tb.Inlines.Add(new LineBreak());
-            tb.Inlines.Add(new Run("● ") { Foreground = Theme.ProcessBrush(name) });
-            tb.Inlines.Add(new Run(string.Create(CultureInfo.InvariantCulture, $"{name}  {arr[i]:F0}%")));
+            tb.Inlines.Add(new Run("● ") { Foreground = ProcBrush(name) });
+            tb.Inlines.Add(new Run(string.Create(ci, $"{name}  {arr[i]:F0}%")));
+        }
+
+        // Processes below the cut, and work the counter credits to no process. Can't go the other way
+        // round meaningfully: two processes on different engines overlap and may sum past the total.
+        float rest = _total[i] - listed;
+        if (rest >= 1)
+        {
+            tb.Inlines.Add(new LineBreak());
+            tb.Inlines.Add(new Run("● ") { Foreground = Theme.OtherFill });
+            tb.Inlines.Add(new Run(Loc.T("otros {0}%", rest.ToString("F0", ci))));
         }
 
         _tip.Content = tb;
@@ -538,7 +575,7 @@ internal sealed class ProcSparkline : FrameworkElement
             dc.DrawLine(new Pen(Theme.Grid, 1), new Point(x, 0), new Point(x, h));
             foreach (var (name, arr) in _procs)
                 if (arr[hoverIdx] >= GpuProcRanking.MinPct)
-                    dc.DrawEllipse(Theme.Surface, new Pen(Theme.ProcessBrush(name), 1.5), new Point(x, YAt(arr[hoverIdx], lo, hi, h)), 2.0, 2.0);
+                    dc.DrawEllipse(Theme.Surface, new Pen(ProcBrush(name), 1.5), new Point(x, YAt(arr[hoverIdx], lo, hi, h)), 2.0, 2.0);
             dc.DrawEllipse(Theme.Surface, new Pen(Theme.InkPrimary, 2), new Point(x, YAt(_total[hoverIdx], lo, hi, h)), 3.0, 3.0);
         }
     }

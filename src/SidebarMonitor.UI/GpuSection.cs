@@ -69,8 +69,10 @@ internal sealed class GpuSection : StackPanel
         /// <summary>Who's using this GPU: a coloured dot per process, matching its line and segment.</summary>
         public readonly TextBlock Legend;
         public readonly BarMeter? VramMeter;
-        /// <summary>This tick's processes, for the VRAM bar's tooltip, built only when it opens.</summary>
+        /// <summary>This tick's processes and their colours, for the VRAM bar's tooltip, built only when
+        /// it opens.</summary>
         public GpuProcRanking.Row[] Procs = [];
+        public ProcessColorMap Colors = ProcessColorMap.Empty;
         // A Grid with star columns, not a UniformGrid: star columns divide the panel width exactly,
         // so the cells never grow to their content and spill the mini-graphs off the sidebar edge.
         public readonly Grid EngineGrid = new() { Margin = new Thickness(0, 3, 0, 0) };
@@ -92,7 +94,8 @@ internal sealed class GpuSection : StackPanel
             Pct.HorizontalAlignment = HorizontalAlignment.Right;
             Pct.VerticalAlignment = VerticalAlignment.Top;
             Pct.Margin = new Thickness(0, 1, 6, 0);
-            Load = new ProcSparkline(Theme.SeriesGpu, height: 36 * graphScale) { AutoScale = autoLoad, MinRange = 10, SecondsPerSample = secs };
+            // The driver's own load in the tooltip, so a different figure in Afterburner has an answer.
+            Load = new ProcSparkline(Theme.SeriesGpu, height: 36 * graphScale) { AutoScale = autoLoad, MinRange = 10, SecondsPerSample = secs, AuxLabel = "driver" };
             var loadHost = new Grid();
             loadHost.Children.Add(Load);
             loadHost.Children.Add(Pct);
@@ -111,7 +114,7 @@ internal sealed class GpuSection : StackPanel
                 var vramTip = Theme.MakeToolTip();
                 VramMeter = new BarMeter(Theme.SeriesGpu) { Margin = new Thickness(0, 3, 0, 3), ToolTip = vramTip };
                 ToolTipService.SetInitialShowDelay(VramMeter, 100);
-                VramMeter.ToolTipOpening += (_, _) => vramTip.Content = VramTip(Procs);
+                VramMeter.ToolTipOpening += (_, _) => vramTip.Content = VramTip(Procs, Colors);
                 panel.Children.Add(VramMeter);
                 Clocks = Theme.Text("", 10, Theme.InkMuted, mono: true);
                 panel.Children.Add(Clocks);
@@ -165,7 +168,7 @@ internal sealed class GpuSection : StackPanel
 
         /// <summary>Every process on the VRAM bar, biggest first, with the GPU-visible system RAM it
         /// also holds (which on a card is memory that did not fit in VRAM).</summary>
-        private static object VramTip(GpuProcRanking.Row[] procs)
+        private static object VramTip(GpuProcRanking.Row[] procs, ProcessColorMap colors)
         {
             var tb = Theme.TipBlock();
             tb.Inlines.Add(Theme.TipHead(Loc.T("VRAM por proceso")));
@@ -173,7 +176,7 @@ internal sealed class GpuSection : StackPanel
             {
                 string name = Theme.NormalizeProcess(p.Name);
                 tb.Inlines.Add(new System.Windows.Documents.LineBreak());
-                tb.Inlines.Add(new System.Windows.Documents.Run("● ") { Foreground = Theme.ProcessBrush(name) });
+                tb.Inlines.Add(new System.Windows.Documents.Run("● ") { Foreground = colors.For(name) });
                 string ram = p.NonLocal >= GpuProcRanking.MinBytes ? $"  +{Size(p.NonLocal)} RAM" : "";
                 tb.Inlines.Add(new System.Windows.Documents.Run($"{name}  {Size(p.Local)}{ram}"));
             }
@@ -272,8 +275,12 @@ internal sealed class GpuSection : StackPanel
                 procs[k] = new(NameField.Get(ref p.Name), p.Pct, p.VramLocal, p.VramNonLocal);
             }
             block.Procs = procs;
+            // One assignment for the line, the bar segment, the legend dot and the tooltip, all
+            // different from each other: busiest first keeps its usual hue.
+            var colors = Theme.DistinctProcessColors(procs.Select(p => p.Name));
+            block.Colors = colors;
 
-            block.Load.Push(float.IsNaN(g.LoadPct) ? 0 : g.LoadPct, procs.Select(p => (p.Name, p.Pct)).ToArray());
+            block.Load.Push(float.IsNaN(g.LoadPct) ? 0 : g.LoadPct, procs.Select(p => (p.Name, p.Pct)).ToArray(), g.DriverLoadPct, colors);
             block.Load.AutoScale = AutoScaleLoad;
 
             if (block.HasDetail && block.Watts is not null)
@@ -289,7 +296,7 @@ internal sealed class GpuSection : StackPanel
                     double total = g.VramTotal;
                     var segs = procs.Where(p => p.Local >= GpuProcRanking.MinBytes)
                                     .OrderByDescending(p => p.Local)
-                                    .Select(p => (Theme.ProcessBrush(p.Name), p.Local / total))
+                                    .Select(p => (colors.For(p.Name), p.Local / total))
                                     .ToArray();
                     block.VramMeter!.Update(g.VramUsed / total, segs);
                 }
@@ -299,7 +306,7 @@ internal sealed class GpuSection : StackPanel
                 block.Clocks!.Text = string.Create(ci, $"{g.CoreClockMhz} / {g.MemClockMhz} MHz{pcie}");
             }
 
-            UpdateLegend(block.Legend, procs, block.HasDetail);
+            UpdateLegend(block.Legend, procs, block.HasDetail, colors);
 
             if (ShowEngines)
             {
@@ -331,7 +338,7 @@ internal sealed class GpuSection : StackPanel
     /// process's line and VRAM segment. Busy processes first; the VRAM is listed only where there is a
     /// VRAM bar for it to explain (the card, not the iGPU).
     /// </summary>
-    private static void UpdateLegend(TextBlock legend, GpuProcRanking.Row[] procs, bool withVram)
+    private static void UpdateLegend(TextBlock legend, GpuProcRanking.Row[] procs, bool withVram, ProcessColorMap colors)
     {
         legend.Inlines.Clear();
         int n = 0;
@@ -344,7 +351,7 @@ internal sealed class GpuSection : StackPanel
 
             string name = Theme.NormalizeProcess(p.Name);   // no ".exe", like every other list
             if (n > 1) legend.Inlines.Add(new System.Windows.Documents.Run("  "));
-            legend.Inlines.Add(new System.Windows.Documents.Run("● ") { Foreground = Theme.ProcessBrush(name) });
+            legend.Inlines.Add(new System.Windows.Documents.Run("● ") { Foreground = colors.For(name) });
             string pct = busy ? string.Create(CultureInfo.InvariantCulture, $" {p.Pct:F0}%") : "";
             string vram = holds ? " " + Size(p.Local) : "";
             legend.Inlines.Add(new System.Windows.Documents.Run(name + pct + vram));

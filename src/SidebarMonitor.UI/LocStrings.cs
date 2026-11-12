@@ -75,6 +75,11 @@ internal static class LocStrings
         ["hace {0:F0} s"] = "{0:F0}s ago",
         ["Total {0}%"] = "Total {0}%",
         ["VRAM por proceso"] = "VRAM by process",
+        ["RAM en uso {0}"] = "RAM in use {0}",
+        ["otros {0}%"] = "others {0}%",
+        ["núcleo {0} · caché {1} · procesos {2}"] = "kernel {0} · cache {1} · processes {2}",
+        ["otros procesos  {0}"] = "other processes  {0}",
+        ["compartida y sin atribuir  {0}"] = "shared and unattributed  {0}",
         ["Módulo"] = "Module",
 
         // ── Core colour palettes ──────────────────────────────────────────────────────────────

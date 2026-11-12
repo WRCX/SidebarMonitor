@@ -223,7 +223,16 @@ internal sealed partial class MainWindow
         var panel = new StackPanel();
         panel.Children.Add(_ramText);
         _ramMeter.Margin = new Thickness(0, 3, 0, 3);
+        // Split by process and Windows; hovering lists every piece of the RAM in use.
+        var ramTip = Theme.MakeToolTip();
+        _ramMeter.ToolTip = ramTip;
+        ToolTipService.SetInitialShowDelay(_ramMeter, 100);
+        _ramMeter.ToolTipOpening += (_, _) => ramTip.Content = RamBreakdown.Tip(_lastMem, _cfg.MemUnitsBinary);
         panel.Children.Add(_ramMeter);
+        // Wraps rather than trims, like the GPU legend: a cut name no longer says whose colour it is.
+        _ramLegend.TextWrapping = TextWrapping.Wrap;
+        _ramLegend.Margin = new Thickness(0, 0, 0, 2);
+        panel.Children.Add(_ramLegend);
         panel.Children.Add(_commitText);
 
         // Static module info (model/type/speed) from WMI, filled in once it loads. Hidden until then;

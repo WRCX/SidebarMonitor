@@ -450,6 +450,8 @@ internal static class Program
         mem.PhysUsed = m.ullTotalPhys - m.ullAvailPhys;
         mem.CommitTotal = m.ullTotalPageFile;
         mem.CommitUsed = (ulong)Math.Max(0, pdh.CommittedBytes);
+        mem.KernelBytes = (ulong)pdh.KernelResidentBytes;
+        mem.CacheBytes = (ulong)pdh.CacheResidentBytes;
     }
 
     /// <summary>
@@ -476,6 +478,7 @@ internal static class Program
                     s.Gpus[i] = default;
                     nvml!.Fill(i, ref s.Gpus[i]);
                     s.Gpus[i].HasDetail = 1;
+                    s.Gpus[i].DriverLoadPct = s.Gpus[i].LoadPct;
                 }
                 else ZeroEngines(ref s.Gpus[i]);
             }
@@ -518,6 +521,9 @@ internal static class Program
                     g.HasDetail = 1;
                 }
             }
+            // Kept apart: FillEngines replaces LoadPct with the engine-based load, and on a throttled
+            // tick this is the last vendor reading, held like temp and power.
+            g.DriverLoadPct = g.LoadPct;
             g.IsIntegrated = (byte)(a.Integrated ? 1 : 0);
         }
 
@@ -536,8 +542,8 @@ internal static class Program
     /// What each GPU is doing and who's driving it, from the "GPU Engine" counter. Every instance is
     /// "pid_&lt;n&gt;_luid_0x&lt;hi&gt;_0x&lt;lo&gt;_..._engtype_&lt;type&gt;". We route each sample to the GPU whose
     /// LUID matches, fold the engtype into a curated slot, and work out who is using each GPU: every
-    /// process's utilisation and, from the "GPU Process Memory" counter, its VRAM. An adapter with no
-    /// NVML load (the iGPU) takes its utilisation from its busiest engine.
+    /// process's utilisation and, from the "GPU Process Memory" counter, its VRAM. Each GPU's load is
+    /// its busiest engine, the vendor's own figure having been kept in DriverLoadPct.
     /// </summary>
     private static void FillEngines(ref Snapshot s, PdhQuery pdh, Processes procs, List<GpuAdapters.Adapter> adapters)
     {
@@ -608,12 +614,13 @@ internal static class Program
                 r.VramNonLocal = rows[k].NonLocal;
             }
 
-            if (g.HasDetail == 0)
-            {
-                float max = 0;
-                for (int e = 0; e < GpuEngines.Count; e++) max = Math.Max(max, g.Engines[e]);
-                g.LoadPct = max;
-            }
+            // Every GPU's load is its busiest engine, as Task Manager counts it — also the NVIDIA card,
+            // whose NVML figure (kept in DriverLoadPct) read 2–12 points higher than its engines under the
+            // same load, so the processes on the graph never added up to the total above them. It also
+            // refreshes every tick, where the vendor read is throttled by --gpu-every.
+            float max = 0;
+            for (int e = 0; e < GpuEngines.Count; e++) max = Math.Max(max, g.Engines[e]);
+            g.LoadPct = max;
         }
     }
 
@@ -804,6 +811,20 @@ internal static class Program
         s.ProcCount = top.Count;
         s.TotalProcesses = procs.TotalProcesses;
         s.TotalThreads = procs.TotalThreads;
+
+        // Who holds the RAM, from the same enumeration: always folded by name, whatever the list's
+        // grouping, so one app is one colour on the bar.
+        var mem = MemProcRanking.Rank(procs.PrivateWorkingSets(), SnapshotLayout.MaxMemProcs);
+        for (int i = 0; i < mem.Top.Count; i++)
+        {
+            ref var m = ref s.Mem.Procs[i];
+            NameField.Set(ref m.Name, mem.Top[i].Name);
+            m.PrivateBytes = mem.Top[i].Bytes;
+            m.Instances = mem.Top[i].Instances;
+        }
+        s.Mem.ProcCount = mem.Top.Count;
+        s.Mem.OtherProcsBytes = mem.OtherBytes;
+        s.Mem.OsProcsBytes = mem.OsBytes;
     }
 
 }

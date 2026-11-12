@@ -52,6 +52,7 @@ internal sealed class PdhQuery : IDisposable
     private readonly IntPtr _query;
     private readonly IntPtr _cpuTotal, _cpuPerf, _cpuPerfPerCore, _cpuFreq, _cpuPerCore;
     private readonly IntPtr _committed;
+    private readonly IntPtr _poolNonpaged, _poolPagedResident, _driverResident, _kernelCodeResident, _cacheResident, _modified;
     private readonly IntPtr _diskRead, _diskWrite, _diskQueue, _diskIdle;
     private readonly IntPtr _gpuEngine, _gpuMemLocal, _gpuMemNonLocal;
 
@@ -67,6 +68,15 @@ internal sealed class PdhQuery : IDisposable
         _cpuFreq = Add(@"\Processor Information(_Total)\Processor Frequency");
         _cpuPerCore = Add(@"\Processor Information(*)\% Processor Utility");
         _committed = Add(@"\Memory\Committed Bytes");
+
+        // What Windows itself holds in RAM, for the RAM bar's Windows segment. The *Resident* variants:
+        // the paged pool's full size includes pages that are out on disk and use no RAM at all.
+        _poolNonpaged = Add(@"\Memory\Pool Nonpaged Bytes");
+        _poolPagedResident = Add(@"\Memory\Pool Paged Resident Bytes");
+        _driverResident = Add(@"\Memory\System Driver Resident Bytes");
+        _kernelCodeResident = Add(@"\Memory\System Code Resident Bytes");
+        _cacheResident = Add(@"\Memory\System Cache Resident Bytes");
+        _modified = Add(@"\Memory\Modified Page List Bytes");
         _diskRead = Add(@"\PhysicalDisk(*)\Disk Read Bytes/sec");
         _diskWrite = Add(@"\PhysicalDisk(*)\Disk Write Bytes/sec");
         _diskQueue = Add(@"\PhysicalDisk(*)\Current Disk Queue Length");
@@ -109,6 +119,21 @@ internal sealed class PdhQuery : IDisposable
     public double CpuTotalPct => Scalar(_cpuTotal);
 
     public double CommittedBytes => Scalar(_committed);
+
+    /// <summary>The kernel's resident RAM: nonpaged pool, resident paged pool, drivers, kernel code.</summary>
+    public double KernelResidentBytes =>
+        Bytes(_poolNonpaged) + Bytes(_poolPagedResident) + Bytes(_driverResident) + Bytes(_kernelCodeResident);
+
+    /// <summary>The file cache's resident pages plus the modified list (dirty pages awaiting write-back).</summary>
+    public double CacheResidentBytes => Bytes(_cacheResident) + Bytes(_modified);
+
+    /// <summary>A byte counter, uncapped, and 0 rather than NaN when absent so the sums above survive one
+    /// missing counter (System Code Resident Bytes reads 0 on some builds, and may not exist on others).</summary>
+    private static double Bytes(IntPtr counter)
+    {
+        double v = Scalar(counter, cap: false);
+        return double.IsNaN(v) || v < 0 ? 0 : v;
+    }
 
     /// <summary>The rated (base) frequency. "% Processor Performance" is a percentage of this.</summary>
     public double NominalMhz => Scalar(_cpuFreq);

@@ -38,6 +38,37 @@ public class ThemeColorTests
         Assert.Equal("nvidia-smi", Theme.NormalizeProcess("nvidia-smi"));
     }
 
+    /// <summary>
+    /// Processes drawn together never share a colour while the palette lasts — two segments of one bar
+    /// in the same hue cannot be told apart, which is exactly the complaint the assignment answers.
+    /// </summary>
+    [Fact]
+    public void Processes_drawn_together_get_all_different_colours()
+    {
+        string[] names = ["game", "chrome", "claude", "dwm", "explorer", "firefox", "steam", "obs64"];
+        var map = Theme.DistinctProcessColors(names);
+
+        var colours = names.Select(n => ((SolidColorBrush)map.For(n)).Color).ToList();
+        Assert.Equal(names.Length, colours.Distinct().Count());
+    }
+
+    /// <summary>The biggest process keeps the colour it wears everywhere else; only a smaller twin moves.</summary>
+    [Fact]
+    public void The_first_process_keeps_its_usual_colour()
+    {
+        var map = Theme.DistinctProcessColors(["Sandfall-Win64-Shipping.exe", "chrome"]);
+        Assert.Equal(Theme.ProcessColor("Sandfall-Win64-Shipping"), ((SolidColorBrush)map.For("Sandfall-Win64-Shipping")).Color);
+    }
+
+    /// <summary>One process spelled two ways is one entry, not two slots.</summary>
+    [Fact]
+    public void One_process_however_spelled_takes_one_slot()
+    {
+        var map = Theme.DistinctProcessColors(["chrome.exe", "chrome ×12", "claude"]);
+        Assert.Equal(map.For("chrome"), map.For("chrome.exe ×3"));
+        Assert.NotEqual(map.For("chrome"), map.For("claude"));
+    }
+
     /// <summary>A name that is nothing but the suffix must not normalise to an empty key.</summary>
     [Theory]
     [InlineData(".exe", ".exe")]

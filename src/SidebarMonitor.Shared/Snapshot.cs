@@ -10,7 +10,7 @@ public static class SnapshotLayout
     public const uint Signature = 0x4E4D4253;
 
     /// <summary>Bump on any layout change. The reader refuses anything it does not know.</summary>
-    public const uint Version = 28;   // 28: per-process GPU usage and VRAM
+    public const uint Version = 29;   // 29: RAM by process and the Windows share
 
     /// <summary>
     /// Local\, not Global\. Creating a Global\ kernel object requires SeCreateGlobalPrivilege,
@@ -29,6 +29,7 @@ public static class SnapshotLayout
     public const int MaxDisks = 8;
     public const int MaxProcs = 16;
     public const int MaxGpuProcs = 6;
+    public const int MaxMemProcs = 6;
 }
 
 [InlineArray(32)] public struct Name32 { private byte _element0; }
@@ -54,6 +55,7 @@ public static class GpuEngines
 [InlineArray(SnapshotLayout.MaxDisks)] public struct DiskArray { private DiskInfo _element0; }
 [InlineArray(SnapshotLayout.MaxProcs)] public struct ProcArray { private ProcInfo _element0; }
 [InlineArray(SnapshotLayout.MaxGpuProcs)] public struct GpuProcArray { private GpuProcInfo _element0; }
+[InlineArray(SnapshotLayout.MaxMemProcs)] public struct MemProcArray { private MemProcInfo _element0; }
 
 /// <summary>How to aggregate the per-core clock into one reported number.</summary>
 public enum CpuFreqMode { Best = 0, Mean = 1, Median = 2 }
@@ -122,13 +124,48 @@ public struct MemInfo
 {
     public ulong PhysUsed, PhysTotal;
     public ulong CommitUsed, CommitTotal;
+
+    // ---- Who holds the RAM in use (PhysUsed). Refreshed with the process list (every --proc-every
+    // ticks); the pieces below plus the shared/unattributed rest add up to PhysUsed. ----
+
+    /// <summary>The biggest processes by private working set (Task Manager's "Memory" column), folded
+    /// by name, Windows' own processes excluded (they are in <see cref="OsProcsBytes"/>).</summary>
+    public int ProcCount;
+    public MemProcArray Procs;
+    /// <summary>Private working set of every other process.</summary>
+    public ulong OtherProcsBytes;
+    /// <summary>Windows' own processes: System, Secure System, Registry and Memory Compression (which
+    /// holds other processes' pages, compressed).</summary>
+    public ulong OsProcsBytes;
+    /// <summary>The kernel, resident: nonpaged pool, paged pool, drivers and kernel code.</summary>
+    public ulong KernelBytes;
+    /// <summary>The file cache in use plus the modified list (dirty pages on their way to disk).</summary>
+    public ulong CacheBytes;
+}
+
+/// <summary>One process name's private working set (all instances summed).</summary>
+[StructLayout(LayoutKind.Sequential)]
+public struct MemProcInfo
+{
+    public Name32 Name;
+    public ulong PrivateBytes;
+    /// <summary>How many processes were folded into this row.</summary>
+    public int Instances;
 }
 
 [StructLayout(LayoutKind.Sequential)]
 public struct GpuInfo
 {
     public Name64 Name;
-    public float LoadPct, MemControllerPct, TempC, PowerW;
+    /// <summary>GPU load, Task Manager's way whenever the "GPU Engine" counter exists: the busiest
+    /// engine, each engine the sum of its processes — so the per-process figures add up to it. Only
+    /// without that counter is it the vendor's own reading (<see cref="DriverLoadPct"/>).</summary>
+    public float LoadPct;
+    public float MemControllerPct, TempC, PowerW;
+    /// <summary>The vendor SDK's own load (NVML "utilization.gpu", ADLX usage) — what nvidia-smi and
+    /// Afterburner show. Measured differently (any kernel active, over the driver's window): it read 2–12
+    /// points above the engine counters under the same load. NaN when no SDK covers this GPU.</summary>
+    public float DriverLoadPct;
     public uint CoreClockMhz, MemClockMhz, FanPct, PcieWidth;
     public ulong VramUsed, VramTotal;
 

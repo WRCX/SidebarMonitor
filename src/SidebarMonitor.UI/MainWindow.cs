@@ -84,6 +84,8 @@ internal sealed partial class MainWindow : AppBarWindow
 
     // RAM
     private readonly BarMeter _ramMeter = new(Theme.SeriesCpu);
+    private readonly TextBlock _ramLegend = Muted();
+    private MemInfo _lastMem;   // for the RAM bar's tooltip, built only when it opens
     private readonly TextBlock _ramText = Value();
     private readonly TextBlock _commitText = Muted();
     private readonly TextBlock _ramModules = Muted();
@@ -479,7 +481,8 @@ internal sealed partial class MainWindow : AppBarWindow
                     // bars (which colour by process in this mode) are finally the same scheme instead of
                     // a fixed blue next to seven hues. Procs is sorted, so [0] is the one.
                     _cpuSpark.SetSeriesColor(_cfg.CpuGraphByProcess && s.ProcCount > 0
-                        ? Theme.ProcessColor(NameField.Get(ref s.Procs[0].Name))
+                        && _coreRows.ColorFor(NameField.Get(ref s.Procs[0].Name)) is SolidColorBrush top
+                        ? top.Color
                         : Theme.SeriesCpu);
                     _cpuSpark.Push(c.TotalUsagePct);
                     break;
@@ -494,7 +497,9 @@ internal sealed partial class MainWindow : AppBarWindow
         if (SectionDue("ram") && Find("ram").IsUpdateWorthy())
         {
             _ramText.Text = string.Create(ci, $"{Theme.MemVal(s.Mem.PhysUsed, memBin)} / {Theme.MemVal(s.Mem.PhysTotal, memBin)} {mu}");
-            _ramMeter.Update(ramFrac);
+            _lastMem = s.Mem;
+            _ramMeter.Update(ramFrac, RamBreakdown.Segments(s.Mem));
+            RamBreakdown.Legend(_ramLegend, s.Mem, memBin);
             _commitText.Text = string.Create(ci, $"commit {Theme.MemVal(s.Mem.CommitUsed, memBin)} / {Theme.MemVal(s.Mem.CommitTotal, memBin)} {mu}");
         }
 

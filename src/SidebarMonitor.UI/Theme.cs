@@ -55,18 +55,82 @@ internal static class Theme
     /// </summary>
     /// <remarks>
     /// Blue is deliberately absent: it is the CPU series colour used by the sparkline right
-    /// above these bars, and a process landing on it would read as "the CPU series".
+    /// above these bars, and a process landing on it would read as "the CPU series". So are the
+    /// greys, which mean the kernel/Windows and "everything else".
+    /// <para>
+    /// Eight hues spread round the wheel, with lightness pulling apart the two pairs that sit closest
+    /// (orange/yellow, magenta/pink). The previous seven held red, magenta and orange within 25° of
+    /// each other and two greens, and side by side on one bar they could not be told apart.
+    /// </para>
     /// </remarks>
     private static readonly Color[] ProcessPalette =
     [
-        (Color)ColorConverter.ConvertFromString("#199E70"),   // aqua
-        (Color)ColorConverter.ConvertFromString("#C98500"),   // yellow
-        (Color)ColorConverter.ConvertFromString("#9085E9"),   // violet
-        (Color)ColorConverter.ConvertFromString("#E66767"),   // red
-        (Color)ColorConverter.ConvertFromString("#D55181"),   // magenta
-        (Color)ColorConverter.ConvertFromString("#D95926"),   // orange
-        (Color)ColorConverter.ConvertFromString("#008300"),   // green
+        (Color)ColorConverter.ConvertFromString("#E5484D"),   // red
+        (Color)ColorConverter.ConvertFromString("#F08A24"),   // orange
+        (Color)ColorConverter.ConvertFromString("#F2D04B"),   // yellow (light)
+        (Color)ColorConverter.ConvertFromString("#4CBF4C"),   // green
+        (Color)ColorConverter.ConvertFromString("#22B8C9"),   // cyan
+        (Color)ColorConverter.ConvertFromString("#9B86F2"),   // violet
+        (Color)ColorConverter.ConvertFromString("#C93FBF"),   // magenta (deep)
+        (Color)ColorConverter.ConvertFromString("#F7A1C8"),   // pink (light)
     ];
+
+    /// <summary>
+    /// Where a process goes when its own slot is taken in a set drawn together: the opposite side of
+    /// the wheel first, then the quarters, then the neighbours — the farther from the colour it
+    /// collided with, the better it stands apart.
+    /// </summary>
+    private static readonly int[] FallbackOffsets = [4, 2, 6, 3, 5, 1, 7];
+
+    private static int PreferredSlot(string normalized)
+    {
+        uint hash = 2166136261;
+        foreach (char ch in normalized)
+        {
+            hash ^= char.ToLowerInvariant(ch);
+            hash *= 16777619;
+        }
+        return (int)(hash % (uint)ProcessPalette.Length);
+    }
+
+    private static readonly Dictionary<int, SolidColorBrush> SlotBrushes = [];
+
+    private static SolidColorBrush SlotBrush(int slot)
+    {
+        if (SlotBrushes.TryGetValue(slot, out var b)) return b;
+        b = new SolidColorBrush(ProcessPalette[slot]);
+        b.Freeze();
+        return SlotBrushes[slot] = b;
+    }
+
+    /// <summary>
+    /// Colours for processes drawn TOGETHER — one bar, one chart, one legend — all different while
+    /// there are slots left. <paramref name="namesByImportance"/> goes biggest first: each process takes
+    /// its usual colour (<see cref="ProcessBrush"/>) if it is free, else the free slot that contrasts
+    /// most with it. So the main process keeps the hue it wears everywhere else, and only a smaller one
+    /// that would have been its twin moves.
+    /// </summary>
+    public static ProcessColorMap DistinctProcessColors(IEnumerable<string> namesByImportance)
+    {
+        var map = new Dictionary<string, Brush>(StringComparer.OrdinalIgnoreCase);
+        var used = new bool[ProcessPalette.Length];
+        foreach (var raw in namesByImportance)
+        {
+            string key = NormalizeProcess(raw);
+            if (map.ContainsKey(key)) continue;
+
+            int slot = PreferredSlot(key);
+            if (used[slot])
+                foreach (int off in FallbackOffsets)
+                {
+                    int s = (slot + off) % ProcessPalette.Length;
+                    if (!used[s]) { slot = s; break; }
+                }
+            used[slot] = true;   // with every slot taken it shares its own, which is all that's left
+            map[key] = SlotBrush(slot);
+        }
+        return new ProcessColorMap(map);
+    }
 
     /// <summary>The kernel is not a series. It gets a reserved neutral, never a palette slot.</summary>
     public static readonly Brush KernelFill = Freeze("#898781");
@@ -209,17 +273,7 @@ internal static class Theme
     {
         string key = NormalizeProcess(name);
         if (ProcessBrushes.TryGetValue(key, out var cached)) return cached;
-
-        uint hash = 2166136261;
-        foreach (char ch in key)
-        {
-            hash ^= char.ToLowerInvariant(ch);
-            hash *= 16777619;
-        }
-
-        var brush = new SolidColorBrush(ProcessPalette[hash % (uint)ProcessPalette.Length]);
-        brush.Freeze();
-        return ProcessBrushes[key] = brush;
+        return ProcessBrushes[key] = SlotBrush(PreferredSlot(key));
     }
 
     /// <summary>The colour behind <see cref="ProcessBrush"/>, for callers that need the Color itself
@@ -407,4 +461,14 @@ internal static class Theme
 
     /// <summary>The matching unit label for <see cref="MemVal"/>.</summary>
     public static string MemUnit(bool binary) => binary ? "GiB" : "GB";
+}
+
+/// <summary>The colours one widget gives the processes it draws together (see
+/// <see cref="Theme.DistinctProcessColors"/>). A name outside the set gets its usual colour.</summary>
+internal sealed class ProcessColorMap(Dictionary<string, Brush> map)
+{
+    public static readonly ProcessColorMap Empty = new(new Dictionary<string, Brush>(StringComparer.OrdinalIgnoreCase));
+
+    public Brush For(string name) =>
+        map.TryGetValue(Theme.NormalizeProcess(name), out var b) ? b : Theme.ProcessBrush(name);
 }

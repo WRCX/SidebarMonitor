@@ -161,8 +161,21 @@ internal sealed class CoreRows : FrameworkElement
             row.Segments = [.. list];
         }
 
+        // One colour per process across every row, all different while the palette lasts: the process
+        // holding the most core-time keeps its usual hue, a smaller twin moves to a contrasting one.
+        var weight = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in _rows)
+            foreach (var sg in row.Segments)
+                if (!sg.Kernel) weight[sg.Name] = weight.GetValueOrDefault(sg.Name) + sg.Pct * row.Usage;
+        _colors = Theme.DistinctProcessColors(weight.OrderByDescending(kv => kv.Value).Select(kv => kv.Key));
+
         InvalidateVisual();
     }
+
+    private ProcessColorMap _colors = ProcessColorMap.Empty;
+
+    /// <summary>The colour these rows give a process, so the CPU graph can wear the same one.</summary>
+    public Brush ColorFor(string name) => _colors.For(name);
 
     protected override void OnMouseMove(MouseEventArgs e)
     {
@@ -261,7 +274,7 @@ internal sealed class CoreRows : FrameworkElement
 
             Brush dominantBrush = row.Segments.Length == 0
                 ? Theme.InkMuted
-                : row.Segments[0].Kernel ? Theme.KernelFill : Theme.ProcessBrush(row.Segments[0].Name);
+                : row.Segments[0].Kernel ? Theme.KernelFill : _colors.For(row.Segments[0].Name);
 
             // Best / second-best physical core gets a star / diamond before its index. With SMT a
             // physical core spans two logical rows, so both siblings are marked.
@@ -337,7 +350,7 @@ internal sealed class CoreRows : FrameworkElement
                     foreach (var seg in row.Segments)
                     {
                         double segW = filled * (seg.Pct / 100.0);
-                        Brush fill = seg.Kernel ? Theme.KernelFill : Theme.ProcessBrush(seg.Name);
+                        Brush fill = seg.Kernel ? Theme.KernelFill : _colors.For(seg.Name);
                         dc.DrawRectangle(fill, null, new WRect(x, barY, Math.Max(0.5, segW - gap), barH));
                         x += segW;
                         covered += seg.Pct;
