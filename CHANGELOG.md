@@ -6,7 +6,36 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ## [Unreleased]
 
-## [1.5.9] — 2026-11-12
+## [1.5.10] — 2026-11-12
+
+### Added
+
+- **RAM by process, Windows included.** The RAM bar is split by who holds the memory in use: the
+  biggest processes by private working set (Task Manager's "Memory" column, instances folded by name)
+  in their own colours, then **Windows** in the kernel's neutral grey — its own processes (System,
+  Memory Compression, Registry, Secure System), the kernel's resident pools and drivers, and the file
+  cache with the modified list — then a dark tail for every smaller process and the pages processes
+  share (DLLs, shared memory), which no single process owns. A legend names the colours
+  (`● claude 1.4G  ● vmmemWSL 1.1G  ● Windows 5.0G`) and hovering the bar lists every piece, Windows
+  broken down into kernel, cache and processes; the pieces add up to the RAM in use. Read from the
+  process enumeration the agent already does (no extra call) and from `\Memory` counters. Snapshot
+  contract **v29**: agent and UI must match.
+
+### Changed
+
+- **The GPU load now adds up.** Every GPU's load — the graph, the big %, the header — is Task Manager's
+  figure: its busiest engine, each engine the sum of its processes. The NVIDIA card used NVML's own
+  reading, which ran 2–12 points above the engines under the same load, so the processes on the graph
+  never added up to the total above them. The NVML figure (what nvidia-smi and Afterburner show) stays
+  in the graph's tooltip as "driver", and the tooltip adds "otros" for any load the listed processes
+  don't account for. The load also refreshes every tick now, not only when the vendor sensors are read.
+  The CSV's `gpu_load` follows: it is the engine-based figure.
+- **Process colours contrast.** A new eight-hue palette, spread round the wheel (the old one held red,
+  magenta and orange within 25° of each other, and two greens). And processes drawn together — one bar,
+  one graph, one legend — never share a colour while the palette lasts: the biggest keeps its usual hue,
+  and a smaller one that would have been its twin moves to a contrasting one. Applies to the per-core
+  bars, the GPU lines and VRAM bar, and the RAM bar.
+
 
 ### Fixed
 
@@ -769,7 +798,8 @@ First public release.
 
 > Not code-signed yet, so Windows SmartScreen may warn on first run — choose **More info → Run anyway**.
 
-[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.5.9...HEAD
+[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.5.10...HEAD
+[1.5.10]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.10
 [1.5.9]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.9
 [1.5.8]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.8
 [1.5.7]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.7
