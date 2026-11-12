@@ -106,9 +106,12 @@ internal sealed class GpuSection : StackPanel
                 Vram = Theme.Text("", 11, Theme.InkSecondary, mono: true);
                 Vram.Margin = new Thickness(0, 4, 0, 0);
                 panel.Children.Add(Vram);
-                VramMeter = new BarMeter(Theme.SeriesGpu) { Margin = new Thickness(0, 3, 0, 3), ToolTip = "" };
+                // The panel's own tooltip, with only its content swapped on open: assigning the content
+                // straight to ToolTip got WPF's default one — a white box with the dark-theme text.
+                var vramTip = Theme.MakeToolTip();
+                VramMeter = new BarMeter(Theme.SeriesGpu) { Margin = new Thickness(0, 3, 0, 3), ToolTip = vramTip };
                 ToolTipService.SetInitialShowDelay(VramMeter, 100);
-                VramMeter.ToolTipOpening += (_, _) => VramMeter.ToolTip = VramTip(Procs);
+                VramMeter.ToolTipOpening += (_, _) => vramTip.Content = VramTip(Procs);
                 panel.Children.Add(VramMeter);
                 Clocks = Theme.Text("", 10, Theme.InkMuted, mono: true);
                 panel.Children.Add(Clocks);
