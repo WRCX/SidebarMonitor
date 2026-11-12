@@ -8,6 +8,8 @@
 
 <img src="docs/img/demo.gif" alt="SidebarMonitor live: CPU per-core, memory and dual-GPU under load" width="380">
 
+**[Download](https://github.com/WRCX/SidebarMonitor/releases/latest)** · [Website](https://WRCX.github.io/SidebarMonitor) · [FAQ](docs/FAQ.md) · [♥ Sponsor](https://github.com/sponsors/WRCX)
+
 </div>
 
 ---
@@ -166,6 +168,17 @@ maintainer (**WRCX**) — human-supervised, not human-typed. Every design decisi
 release is a human call; the keystrokes are the model's. This is stated up front on purpose: if you'd
 rather not run AI-written software, that's completely fair — better you know before you download it.
 Bug reports and fixes are triaged and shipped by a human.
+
+## Support the project
+
+SidebarMonitor is free and stays free: MIT, no ads, no telemetry, no "Pro" tier holding features back.
+If it earns its place on your screen and you'd like to say thanks, you can
+**[sponsor it on GitHub](https://github.com/sponsors/WRCX)** — a one-off coffee or a small monthly
+amount, whatever suits you. GitHub takes no cut.
+
+Just as useful, and free: **star the repo** so others can find it, **[open an issue](https://github.com/WRCX/SidebarMonitor/issues)**
+when something reads wrong on your hardware (especially Intel CPUs, AMD GPUs and laptops, which get
+less testing here), and tell someone who lost their sidebar when WinRing0 was blocklisted.
 
 ## Licence
 
