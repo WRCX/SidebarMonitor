@@ -54,7 +54,7 @@ internal sealed class PdhQuery : IDisposable
     private readonly IntPtr _committed;
     private readonly IntPtr _poolNonpaged, _poolPagedResident, _driverResident, _kernelCodeResident, _cacheResident, _modified;
     private readonly IntPtr _diskRead, _diskWrite, _diskQueue, _diskIdle;
-    private readonly IntPtr _gpuEngine, _gpuMemLocal, _gpuMemNonLocal;
+    private readonly IntPtr _gpuEngine, _gpuMemLocal, _gpuMemNonLocal, _gpuMemDedicated, _gpuMemShared;
 
     public PdhQuery()
     {
@@ -94,6 +94,10 @@ internal sealed class PdhQuery : IDisposable
         // Non Local = GPU-visible system RAM. ~120 instances on the dev desktop, most of them non-zero.
         _gpuMemLocal = Add(@"\GPU Process Memory(*)\Local Usage");
         _gpuMemNonLocal = Add(@"\GPU Process Memory(*)\Non Local Usage");
+        // An iGPU's segments are all "local" (it has no memory of its own to be non-local to), so its
+        // per-process VRAM comes from these instead — see FillEngines.
+        _gpuMemDedicated = Add(@"\GPU Process Memory(*)\Dedicated Usage");
+        _gpuMemShared = Add(@"\GPU Process Memory(*)\Shared Usage");
 
         PdhCollectQueryData(_query);   // rate counters need a baseline
     }
@@ -198,6 +202,12 @@ internal sealed class PdhQuery : IDisposable
 
     /// <summary>Per-process bytes of GPU-visible system RAM, non-zero instances only.</summary>
     public List<InstanceSample> GpuMemNonLocalActive() => Array(_gpuMemNonLocal, activeOnly: true, cap: false);
+
+    /// <summary>Per-process bytes in dedicated segments (an iGPU's carve-out), non-zero instances only.</summary>
+    public List<InstanceSample> GpuMemDedicatedActive() => Array(_gpuMemDedicated, activeOnly: true, cap: false);
+
+    /// <summary>Per-process bytes in shared segments (system RAM the GPU uses), non-zero instances only.</summary>
+    public List<InstanceSample> GpuMemSharedActive() => Array(_gpuMemShared, activeOnly: true, cap: false);
 
     private static double Scalar(IntPtr counter, bool cap = true)
     {

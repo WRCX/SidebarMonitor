@@ -210,11 +210,12 @@ public struct GpuProcInfo
     /// <summary>Utilisation %, Task Manager's way: each process's busiest engine, summed over its
     /// instances and capped at 100. Not the sum of its engines, which can pass the GPU's own load.</summary>
     public float Pct;
-    /// <summary>"Local Usage": the process's allocations in the GPU's own memory (VRAM on a card).
-    /// Preferred over "Dedicated Usage", which counts a surface shared between processes twice.</summary>
+    /// <summary>The process's allocations in the GPU's own memory — what the VRAM bar splits. On a card,
+    /// "Local Usage" ("Dedicated Usage" counts a surface shared between processes twice). On an iGPU,
+    /// "Dedicated Usage": its carve-out, since a unified-memory adapter reports every segment as local.</summary>
     public ulong VramLocal;
-    /// <summary>"Non Local Usage": GPU-visible system RAM. Normal for an iGPU; on a card, a hint that
-    /// the process spilled out of VRAM.</summary>
+    /// <summary>The process's GPU-visible system RAM: "Non Local Usage" on a card (a hint it spilled out
+    /// of VRAM), "Shared Usage" on an iGPU (where most of its memory normally lives).</summary>
     public ulong VramNonLocal;
 }
 

@@ -584,15 +584,25 @@ internal static class Program
             }
         }
 
+        // Which counter pair is "this process's VRAM" depends on the adapter. A card: Local / Non Local
+        // ("Dedicated" counts a surface shared between processes twice — 2.6 GiB of per-process figures
+        // against 1.7 GiB the card reported). An iGPU: Dedicated / Shared, because every segment of a
+        // unified-memory adapter is "local" — Local read 789 MiB against a 426 MiB carve-out, so one
+        // process filled the whole bar and the others vanished.
         int gpuCount = s.GpuCount;   // a local function cannot capture the ref parameter
-        foreach (var item in pdh.GpuMemLocalActive()) AddMem(item, local: true);
-        foreach (var item in pdh.GpuMemNonLocalActive()) AddMem(item, local: false);
+        var integrated = new bool[gpuCount];
+        for (int i = 0; i < gpuCount; i++) integrated[i] = s.Gpus[i].IsIntegrated != 0;
+        foreach (var item in pdh.GpuMemLocalActive()) AddMem(item, local: true, forIntegrated: false);
+        foreach (var item in pdh.GpuMemNonLocalActive()) AddMem(item, local: false, forIntegrated: false);
+        foreach (var item in pdh.GpuMemDedicatedActive()) AddMem(item, local: true, forIntegrated: true);
+        foreach (var item in pdh.GpuMemSharedActive()) AddMem(item, local: false, forIntegrated: true);
 
-        void AddMem(InstanceSample item, bool local)
+        void AddMem(InstanceSample item, bool local, bool forIntegrated)
         {
             int gi = GpuIndexForInstance(item.Instance, adapters, gpuCount);
             int pid = EngPid(item.Instance);
             if (gi < 0 || pid <= 0 || double.IsNaN(item.Value)) return;
+            if (integrated[gi] != forIntegrated) return;   // the other adapter kind's counter pair
             var p = byPid[gi].GetValueOrDefault(pid);
             ulong bytes = (ulong)Math.Max(0, item.Value);
             byPid[gi][pid] = local ? p with { Local = p.Local + bytes } : p with { NonLocal = p.NonLocal + bytes };
