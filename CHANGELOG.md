@@ -6,6 +6,21 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ## [Unreleased]
 
+## [1.5.15] — 2026-11-13
+
+### Fixed
+
+- **Showing or hiding a section in one place left the other showing the old state.** The panel's
+  right-click menu and Settings → Secciones both show and hide sections, and each read the state
+  once: hide one in Settings and the menu kept its check mark; hide or reorder from the menu with
+  Settings open and its checkboxes and order list did not move. Both now follow every change.
+- **Settings → GPU named the GPUs by brand** — «NVIDIA» / «AMD iGPU» — which was wrong on an Intel
+  iGPU or a Radeon card, and said the integrated GPU had no sensors of its own, untrue since AMD's
+  driver gives it temperature, watts and VRAM. Now «Dedicada» / «Integrada» / «Ambas», with a
+  description that matches.
+- «Actualizar ahora» could take the panel down if the check before an install failed unexpectedly
+  (an unguarded `async void`); that failure is now reported in the status line.
+
 ## [1.5.14] — 2026-11-13
 
 ### Fixed
@@ -864,7 +879,8 @@ First public release.
 
 > Not code-signed yet, so Windows SmartScreen may warn on first run — choose **More info → Run anyway**.
 
-[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.5.14...HEAD
+[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.5.15...HEAD
+[1.5.15]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.15
 [1.5.14]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.14
 [1.5.13]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.13
 [1.5.12]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.12
