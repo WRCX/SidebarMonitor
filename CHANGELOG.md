@@ -6,6 +6,20 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ## [Unreleased]
 
+## [1.5.14] — 2026-11-13
+
+### Fixed
+
+- **Updating fired a Windows notification for every percent of the download** — ten a second, each
+  with its sound. Progress now goes to the Settings page's status line and the tray icon's hover text
+  ("SidebarMonitor — Descargando… 42%"), silently; notifications are kept for what is worth an
+  interruption, once each: the download starting, a new version (once per version, not on every check
+  that finds it), and a failure. A manual check no longer notifies "you're up to date" on top of the
+  page saying it.
+- **Clicking any notification could start an update.** The click handler meant for the "new version
+  available" notice stayed attached to every notification after it, so clicking a temperature alert,
+  or the "Descargando…" notice itself, started an update. Only the update offer does now.
+
 ## [1.5.13] — 2026-11-13
 
 ### Fixed
@@ -850,7 +864,8 @@ First public release.
 
 > Not code-signed yet, so Windows SmartScreen may warn on first run — choose **More info → Run anyway**.
 
-[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.5.13...HEAD
+[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.5.14...HEAD
+[1.5.14]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.14
 [1.5.13]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.13
 [1.5.12]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.12
 [1.5.11]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.11
