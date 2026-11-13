@@ -6,6 +6,17 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ## [Unreleased]
 
+## [1.5.13] — 2026-11-13
+
+### Fixed
+
+- **The integrated GPU's VRAM bar was one colour.** A unified-memory adapter reports every segment as
+  "local", so the per-process figure the bar was split by ("Local Usage") counted the RAM it shares
+  too: 789 MiB of processes on a 426 MiB carve-out, one process filling the whole bar and the rest
+  vanishing. On an iGPU the bar now splits by "Dedicated Usage" (the carve-out), with "Shared Usage" as
+  the RAM in the tooltip — firefox 347M · mstsc 48M · dwm 41M of 408M. A card keeps "Local Usage",
+  which is the one that matches it.
+
 ## [1.5.12] — 2026-11-13
 
 ### Fixed
@@ -839,7 +850,8 @@ First public release.
 
 > Not code-signed yet, so Windows SmartScreen may warn on first run — choose **More info → Run anyway**.
 
-[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.5.12...HEAD
+[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.5.13...HEAD
+[1.5.13]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.13
 [1.5.12]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.12
 [1.5.11]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.11
 [1.5.10]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.10
