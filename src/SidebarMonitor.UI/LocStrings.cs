@@ -336,7 +336,6 @@ internal static class LocStrings
         ["Esta instalación no se actualiza sola: abierta la página de {0} en el navegador."] = "This install doesn't update itself: opened the {0} page in the browser.",
         ["Actualizar a {0}"] = "Update to {0}",
         ["La búsqueda automática está desactivada: pulsa «Buscar ahora» para comprobar."] = "Automatic checking is off: click «Check now» to check.",
-        ["Estás en la última versión."] = "You're on the latest version.",
         ["Disponible {0} — pulsa «Actualizar»."] = "{0} available — click «Update».",
         ["Instalar automáticamente (silencioso)"] = "Install automatically (silent)",
         ["Al detectar una versión nueva, la descarga e instala sola en segundo plano y reinicia el panel — sin diálogos ni navegador. Windows pedirá permiso una vez: una instalación para todo el equipo no puede hacerse sin ello (sin aviso si tienes el UAC desactivado). Activarlo activa también «Buscar actualizaciones»."]

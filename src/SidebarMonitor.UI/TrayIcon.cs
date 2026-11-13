@@ -46,22 +46,41 @@ internal sealed class TrayIcon : IDisposable
         _icon.ContextMenuStrip.Items.Add(Loc.T("Salir"), null, (_, _) => ExitRequested?.Invoke());
 
         _icon.DoubleClick += (_, _) => ToggleRequested?.Invoke();
+        // Only the update offer's balloon applies the update when clicked. The handler used to be hooked
+        // up the first time an update was found and then fire for every later balloon — clicking a
+        // temperature alert, or the "Descargando…" notice itself, started an update.
+        _icon.BalloonTipClicked += (_, _) => { if (_balloonOffersUpdate) UpdateRequested?.Invoke(); };
     }
+
+    private bool _balloonOffersUpdate;
+    private string? _announcedVersion;
 
     /// <summary>Mirrors the click-through state in the tray item's check mark.</summary>
     public void SetClickThrough(bool on) => _clickThroughItem.Checked = on;
 
+    /// <summary>A Windows notification — with its sound. For events worth interrupting someone for, once
+    /// each; anything that ticks (download progress) goes to <see cref="SetStatus"/> instead.</summary>
     public void Notify(string text)
     {
+        _balloonOffersUpdate = false;
         _icon.BalloonTipTitle = "SidebarMonitor";
         _icon.BalloonTipText = text;
         _icon.BalloonTipIcon = ToolTipIcon.None;
         _icon.ShowBalloonTip(3000);
     }
 
+    /// <summary>A line under the icon's hover text ("SidebarMonitor — Descargando… 42%"), silent. Null
+    /// clears it. Windows refuses hover text over 127 characters, so it is cut to fit.</summary>
+    public void SetStatus(string? text)
+    {
+        string s = string.IsNullOrEmpty(text) ? "SidebarMonitor" : "SidebarMonitor — " + text;
+        _icon.Text = s.Length <= 127 ? s : s[..126] + "…";
+    }
+
     /// <summary>An alert: its own title and the warning icon, so it doesn't read like an update notice.</summary>
     public void Alert(string title, string text)
     {
+        _balloonOffersUpdate = false;
         _icon.BalloonTipTitle = title;
         _icon.BalloonTipText = text;
         _icon.BalloonTipIcon = ToolTipIcon.Warning;
@@ -69,7 +88,8 @@ internal sealed class TrayIcon : IDisposable
     }
 
     /// <summary>Surfaces an available update: a highlighted menu item at the top + a balloon whose
-    /// click also applies it. Idempotent — refreshes the version text if called again.</summary>
+    /// click also applies it. The balloon comes once per version — every check that found it used to
+    /// raise it again, so «Actualizar ahora» opened with an offer for the update it was already doing.</summary>
     public void SetUpdateAvailable(string version)
     {
         string text = Loc.T("Actualizar a {0}", version);
@@ -78,12 +98,15 @@ internal sealed class TrayIcon : IDisposable
             _updateItem = new ToolStripMenuItem(text, null, (_, _) => UpdateRequested?.Invoke()) { Font = new Font(_icon.ContextMenuStrip!.Font, FontStyle.Bold) };
             _icon.ContextMenuStrip!.Items.Insert(0, _updateItem);
             _icon.ContextMenuStrip.Items.Insert(1, new ToolStripSeparator());
-            _icon.BalloonTipClicked += (_, _) => UpdateRequested?.Invoke();
         }
         else _updateItem.Text = text;
 
+        if (version == _announcedVersion) return;
+        _announcedVersion = version;
+        _balloonOffersUpdate = true;
         _icon.BalloonTipTitle = "SidebarMonitor";
         _icon.BalloonTipText = Loc.T("Hay una versión nueva disponible ({0}). Clic para actualizar.", version);
+        _icon.BalloonTipIcon = ToolTipIcon.None;
         _icon.ShowBalloonTip(5000);
     }
 

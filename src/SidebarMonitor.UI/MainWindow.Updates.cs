@@ -134,8 +134,8 @@ internal sealed partial class MainWindow
         if (!Updater.IsNewer(rel.Version, Updater.CurrentVersion()))
         {
             _latest = null;
+            // No notification: a manual check comes from the Settings page, which says so right there.
             SetUpdateStatus(Loc.T("Estás en la última versión (comprobado a las {0}).", At(DateTime.Now)));
-            if (!automatic) _tray?.Notify(Loc.T("Estás en la última versión."));
             return null;
         }
 
@@ -207,7 +207,10 @@ internal sealed partial class MainWindow
         try
         {
             string ver = Updater.Format(latest.Version);
-            void Report(string s) { SetUpdateStatus(s); _tray?.Notify(s); }
+            // Progress goes to the Settings page and the tray icon's hover text — never a notification:
+            // the download reports every percent, and each one was a Windows toast with its sound, ten
+            // a second. One notification says it started; the panel closing says it is installing.
+            void Report(string s) { SetUpdateStatus(s); _tray?.SetStatus(s); }
 
             if (!_install.FromMsi || latest.AssetUrl is null)
             {
@@ -236,6 +239,7 @@ internal sealed partial class MainWindow
 
             var progress = new Progress<string>(Report);
             Report(Loc.T("Descargando {0}…", ver));
+            _tray?.Notify(Loc.T("Descargando {0}…", ver));
             // Pressing the button IS the user asking again, so it retries a version that failed before:
             // ApplyAsync overwrites the marker on the way past.
             LastUpdateError = null;
@@ -248,6 +252,6 @@ internal sealed partial class MainWindow
             string m = Loc.T("No se pudo actualizar. Prueba a descargarlo manualmente.");
             SetUpdateStatus(m); _tray?.Notify(m);
         }
-        finally { _updateBusy = false; UpdateStateChanged?.Invoke(); }
+        finally { _updateBusy = false; _tray?.SetStatus(null); UpdateStateChanged?.Invoke(); }
     }
 }
