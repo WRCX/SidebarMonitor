@@ -331,12 +331,16 @@ internal static class LocStrings
         ["Hay una versión nueva disponible ({0}). Clic para actualizar."]
             = "A new version is available ({0}). Click to update.",
         ["Buscando…"] = "Checking…",
-        ["No se pudo comprobar (sin conexión o sin releases)."] = "Couldn't check (offline or no releases).",
+        ["No se pudo comprobar a las {0} (sin conexión o sin releases)."] = "Couldn't check at {0} (offline or no releases).",
+        ["Estás en la última versión (comprobado a las {0})."] = "You're on the latest version (checked at {0}).",
+        ["Esta instalación no se actualiza sola: abierta la página de {0} en el navegador."] = "This install doesn't update itself: opened the {0} page in the browser.",
+        ["Actualizar a {0}"] = "Update to {0}",
+        ["La búsqueda automática está desactivada: pulsa «Buscar ahora» para comprobar."] = "Automatic checking is off: click «Check now» to check.",
         ["Estás en la última versión."] = "You're on the latest version.",
         ["Disponible {0} — pulsa «Actualizar»."] = "{0} available — click «Update».",
         ["Instalar automáticamente (silencioso)"] = "Install automatically (silent)",
-        ["Al detectar una versión nueva, la descarga e instala sola en segundo plano y reinicia el panel — sin diálogos ni navegador. Windows pedirá permiso una vez: una instalación para todo el equipo no puede hacerse sin ello (sin aviso si tienes el UAC desactivado). Requiere «Buscar actualizaciones» activado."]
-            = "When a new version is found, it downloads and installs itself in the background and restarts the panel — no dialogs, no browser. Windows will ask for consent once: a machine-wide install cannot happen without it (no prompt at all if you have UAC off). Requires «Check for updates» on.",
+        ["Al detectar una versión nueva, la descarga e instala sola en segundo plano y reinicia el panel — sin diálogos ni navegador. Windows pedirá permiso una vez: una instalación para todo el equipo no puede hacerse sin ello (sin aviso si tienes el UAC desactivado). Activarlo activa también «Buscar actualizaciones»."]
+            = "When a new version is found, it downloads and installs itself in the background and restarts the panel — no dialogs, no browser. Windows will ask for consent once: a machine-wide install cannot happen without it (no prompt at all if you have UAC off). Turning it on turns on «Check for updates» too.",
         ["Instalando {0} automáticamente…"] = "Installing {0} automatically…",
         ["Actualizando a {0}…"] = "Updating to {0}…",
         ["No se pudo actualizar automáticamente."] = "Automatic update failed.",

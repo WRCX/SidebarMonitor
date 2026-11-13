@@ -534,12 +534,35 @@ internal sealed class SettingsWindow : Window
     private UIElement BuildUpdates()
     {
         var p = Page(Loc.T("Actualizaciones"));
-        p.Children.Add(Toggle(Loc.T("Buscar actualizaciones automáticamente"),
+
+        // The two settings depend on each other (installing implies checking; no checking, no
+        // installing), so each one's setter moves the other's checkbox too — they used to change the
+        // config underneath a checkbox that went on showing the old value.
+        CheckBox? checkBox = null, autoBox = null;
+        var checkRow = Toggle(Loc.T("Buscar actualizaciones automáticamente"),
             Loc.T("Al arrancar (y a diario) consulta GitHub Releases. Solo se contacta la API pública de GitHub; no se envía nada tuyo."),
-            () => _cfg.CheckUpdates, v => { _cfg.CheckUpdates = v; if (!v) _cfg.AutoInstallUpdates = false; _cfg.Save(); }));
-        p.Children.Add(Toggle(Loc.T("Instalar automáticamente (silencioso)"),
-            Loc.T("Al detectar una versión nueva, la descarga e instala sola en segundo plano y reinicia el panel — sin diálogos ni navegador. Windows pedirá permiso una vez: una instalación para todo el equipo no puede hacerse sin ello (sin aviso si tienes el UAC desactivado). Requiere «Buscar actualizaciones» activado."),
-            () => _cfg.AutoInstallUpdates, v => { _cfg.AutoInstallUpdates = v; if (v) _cfg.CheckUpdates = true; _cfg.Save(); }));
+            () => _cfg.CheckUpdates, v =>
+            {
+                if (_cfg.CheckUpdates == v) return;
+                _cfg.CheckUpdates = v;
+                if (!v) { _cfg.AutoInstallUpdates = false; if (autoBox is not null) autoBox.IsChecked = false; }
+                _cfg.Save();
+                _host.UpdateSettingsChanged();   // switched on: check now, not tomorrow
+            });
+        var autoRow = Toggle(Loc.T("Instalar automáticamente (silencioso)"),
+            Loc.T("Al detectar una versión nueva, la descarga e instala sola en segundo plano y reinicia el panel — sin diálogos ni navegador. Windows pedirá permiso una vez: una instalación para todo el equipo no puede hacerse sin ello (sin aviso si tienes el UAC desactivado). Activarlo activa también «Buscar actualizaciones»."),
+            () => _cfg.AutoInstallUpdates, v =>
+            {
+                if (_cfg.AutoInstallUpdates == v) return;
+                _cfg.AutoInstallUpdates = v;
+                if (v) { _cfg.CheckUpdates = true; if (checkBox is not null) checkBox.IsChecked = true; }
+                _cfg.Save();
+                if (v) _host.UpdateSettingsChanged();   // a version already waiting installs now
+            });
+        checkBox = CheckIn(checkRow);
+        autoBox = CheckIn(autoRow);
+        p.Children.Add(checkRow);
+        p.Children.Add(autoRow);
 
         p.Children.Add(SubHeader(Loc.T("Versión actual: {0}", _host.CurrentVersionText)));
 
@@ -547,15 +570,30 @@ internal sealed class SettingsWindow : Window
         {
             Foreground = Theme.InkSecondary, FontFamily = Theme.Ui, FontSize = 12.5,
             Margin = new Thickness(0, 12, 0, 0), TextWrapping = TextWrapping.Wrap,
-            // Opens on the last failed update rather than blank: this page is where somebody comes
-            // after pressing «Actualizar» and finding themselves on the same version as before.
-            Text = _host.LastUpdateError ?? "",
         };
         var check = TextButton(Loc.T("Buscar ahora"));
-        check.Click += (_, _) => _host.RunUpdateCheck(true, s => status.Text = s);
+        check.Click += (_, _) => _host.CheckForUpdateNow();
         var apply = TextButton(Loc.T("Actualizar ahora"));
         apply.Margin = new Thickness(8, 12, 0, 0);
-        apply.Click += (_, _) => _host.ApplyUpdate(s => status.Text = s);
+        apply.Click += (_, _) => _host.ApplyUpdate();
+
+        // Everything on this page follows the one update state, whoever changed it — a button here,
+        // the tray, the startup or daily check, an automatic install.
+        void Sync()
+        {
+            bool busy = _host.UpdateBusy;
+            check.IsEnabled = apply.IsEnabled = !busy;
+            check.Opacity = apply.Opacity = busy ? 0.5 : 1;
+            // Named for what it will do: install that version, or check first and install if there is one.
+            apply.Content = _host.AvailableUpdate is { } rel
+                ? Loc.T("Actualizar a {0}", Updater.Format(rel.Version))
+                : Loc.T("Actualizar ahora");
+            status.Text = _host.UpdateStatus.Length > 0 ? _host.UpdateStatus
+                : _cfg.CheckUpdates ? "" : Loc.T("La búsqueda automática está desactivada: pulsa «Buscar ahora» para comprobar.");
+        }
+        Sync();
+        _host.UpdateStateChanged += Sync;
+        Closed += (_, _) => _host.UpdateStateChanged -= Sync;
 
         var row = new StackPanel { Orientation = Orientation.Horizontal };
         row.Children.Add(check);
@@ -563,6 +601,8 @@ internal sealed class SettingsWindow : Window
         p.Children.Add(row);
         p.Children.Add(status);
         return p;
+
+        static CheckBox CheckIn(Border toggleRow) => ((Grid)toggleRow.Child).Children.OfType<CheckBox>().First();
     }
 
     // ── CSV controls kept in sync with external edits ─────────────────────────────────────────
