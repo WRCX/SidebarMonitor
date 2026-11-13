@@ -6,7 +6,27 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ## [Unreleased]
 
-## [1.5.11] — 2026-11-13
+## [1.5.12] — 2026-11-13
+
+### Fixed
+
+- **«Actualizar ahora» did nothing unless a check had already found the version** in this session — so
+  after a release came out while the panel was running, the button was dead and only «Buscar ahora»
+  (which then installed, when automatic install was on) did anything. Every case on the Updates page,
+  reworked:
+  - **«Actualizar ahora» always acts**: it checks first when it has to, then installs; with a version
+    known it reads «Actualizar a v1.5.12». Pressing it while up to date says so.
+  - **«Buscar ahora» only checks** — finding a version is not agreeing to it.
+  - **The two settings stay in sync on screen**: turning automatic install on ticks «Buscar» too, turning
+    «Buscar» off unticks automatic install. Before, the config changed under a checkbox that kept
+    showing the old value.
+  - **Turning either one on acts now**, not at tomorrow's check: a version already waiting installs.
+  - **The status line follows everything**, whoever started it — the buttons, the tray, the startup
+    and daily checks, an automatic install — and says when it last checked. The page used to open
+    blank and miss anything not started from its own buttons.
+  - **The buttons grey out** while a check or an install is running.
+  - A non-MSI install says it opened the release page instead of doing it silently.
+
 
 ### Changed
 
@@ -819,7 +839,8 @@ First public release.
 
 > Not code-signed yet, so Windows SmartScreen may warn on first run — choose **More info → Run anyway**.
 
-[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.5.11...HEAD
+[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.5.12...HEAD
+[1.5.12]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.12
 [1.5.11]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.11
 [1.5.10]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.10
 [1.5.9]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.9
