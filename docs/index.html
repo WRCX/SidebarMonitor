@@ -259,6 +259,21 @@
         <h3 data-i18n="feat.priv.h">Private by default</h3>
         <p data-i18n="feat.priv.p">Nothing leaves your machine. No analytics, no crash reporting, no network activity in normal use.</p>
       </div>
+      <div class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-6 4 3 5-7 4 4"/><path d="M3 21h18"/></svg></div>
+        <h3 data-i18n="feat.who.h">Who's using it</h3>
+        <p data-i18n="feat.who.p">Each GPU graph splits into a line per process, VRAM and RAM bars into a segment per process — and Windows' own share of RAM, measured page by page like RAMMap.</p>
+      </div>
+      <div class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10 20a2 2 0 0 0 4 0"/></svg></div>
+        <h3 data-i18n="feat.alerts.h">Alerts &amp; battery</h3>
+        <p data-i18n="feat.alerts.p">A tray alert when the CPU or GPU runs hot, RAM fills up, a drive runs out of space or the battery runs low — and a battery section with the laptop's whole draw.</p>
+      </div>
+      <div class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg></div>
+        <h3 data-i18n="feat.desk.h">Fits your desk</h3>
+        <p data-i18n="feat.desk.p">Dock it to any monitor's edge or float it; reorder, fold or hide sections; let clicks pass through; give each section its own refresh rate.</p>
+      </div>
     </div>
   </div>
 </section>
@@ -270,9 +285,10 @@
     <div class="shots">
       <figure>
         <img id="shotHero" src="img/hero-en.png" alt="CPU, memory and GPU sections">
-        <figcaption data-i18n="screens.cap1">Per-core bars coloured by process (svchost broken out by
-          service), per-core clock and temperature, best-core marker and power/thermal limits — plus
-          NVIDIA and the Ryzen iGPU with real ADLX sensors.</figcaption>
+        <figcaption data-i18n="screens.cap1">Per-core bars coloured by process, per-core clock and
+          temperature, best-core marker and power limits; RAM split by process and Windows; and each
+          GPU's load as a line per process, with its VRAM split the same way — NVIDIA and the Ryzen iGPU
+          alike.</figcaption>
       </figure>
       <figure>
         <img id="shotSections" src="img/sections-en.png" alt="Network, disks and processes sections">
@@ -317,6 +333,11 @@
           <td data-i18n="req.r4c1">Per-core process colours, per-process network</td>
           <td data-i18n="req.r4c2">The elevated helper</td>
           <td data-i18n="req.r4c3">Bars still show usage; no per-process attribution.</td>
+        </tr>
+        <tr>
+          <td data-i18n="req.r5c1">RAM broken down: kernel, mapped files, shared memory</td>
+          <td data-i18n="req.r5c2">The elevated helper</td>
+          <td data-i18n="req.r5c3">Processes and Windows still shown; the rest is one figure.</td>
         </tr>
       </tbody>
     </table>
@@ -450,11 +471,20 @@
     "feat.priv.h": {en:"Private by default", es:"Privado por defecto"},
     "feat.priv.p": {en:"Nothing leaves your machine. No analytics, no crash reporting, no network activity in normal use.",
       es:"Nada sale de tu equipo. Sin analíticas, sin informes de fallos, sin actividad de red en uso normal."},
+    "feat.who.h": {en:"Who's using it", es:"Quién lo está usando"},
+    "feat.who.p": {en:"Each GPU graph splits into a line per process, VRAM and RAM bars into a segment per process — and Windows' own share of RAM, measured page by page like RAMMap.",
+      es:"Cada gráfica de GPU se divide en una línea por proceso, y las barras de VRAM y RAM en un segmento por proceso — más la parte de RAM de Windows, medida página a página como RAMMap."},
+    "feat.alerts.h": {en:"Alerts &amp; battery", es:"Alertas y batería"},
+    "feat.alerts.p": {en:"A tray alert when the CPU or GPU runs hot, RAM fills up, a drive runs out of space or the battery runs low — and a battery section with the laptop's whole draw.",
+      es:"Un aviso en la bandeja cuando la CPU o la GPU se calientan, la RAM se llena, un disco se queda sin espacio o la batería baja — y una sección de batería con el consumo total del portátil."},
+    "feat.desk.h": {en:"Fits your desk", es:"Se adapta a tu escritorio"},
+    "feat.desk.p": {en:"Dock it to any monitor's edge or float it; reorder, fold or hide sections; let clicks pass through; give each section its own refresh rate.",
+      es:"Ánclalo al borde de cualquier monitor o déjalo flotando; ordena, pliega u oculta secciones; deja que los clics lo atraviesen; dale a cada sección su propio ritmo de refresco."},
 
     "screens.eyebrow": {en:"A look inside", es:"Un vistazo por dentro"},
     "screens.h2": {en:"One panel, everything at a glance.", es:"Un panel, todo de un vistazo."},
-    "screens.cap1": {en:"Per-core bars coloured by process (svchost broken out by service), per-core clock and temperature, best-core marker and power/thermal limits — plus NVIDIA and the Ryzen iGPU with real ADLX sensors.",
-      es:"Barras por núcleo coloreadas por proceso (svchost desglosado por servicio), frecuencia y temperatura por núcleo, marcador de mejor núcleo y límites de potencia/térmicos — más NVIDIA y la iGPU Ryzen con sensores ADLX reales."},
+    "screens.cap1": {en:"Per-core bars coloured by process, per-core clock and temperature, best-core marker and power limits; RAM split by process and Windows; and each GPU's load as a line per process, with its VRAM split the same way — NVIDIA and the Ryzen iGPU alike.",
+      es:"Barras por núcleo coloreadas por proceso, frecuencia y temperatura por núcleo, marcador de mejor núcleo y límites de potencia; RAM repartida entre procesos y Windows; y la carga de cada GPU como una línea por proceso, con su VRAM repartida igual — tanto la NVIDIA como la iGPU Ryzen."},
     "screens.cap2": {en:"Per-adapter and per-process network, per-disk temperature (NVMe + SATA) and activity, and top processes by CPU and RAM.",
       es:"Red por adaptador y por proceso, temperatura por disco (NVMe + SATA) y actividad, y los procesos top por CPU y RAM."},
 
@@ -477,6 +507,9 @@
     "req.r4c1": {en:"Per-core process colours, per-process network", es:"Colores de proceso por núcleo, red por proceso"},
     "req.r4c2": {en:"The elevated helper", es:"El ayudante elevado"},
     "req.r4c3": {en:"Bars still show usage; no per-process attribution.", es:"Las barras siguen mostrando uso; sin atribución por proceso."},
+    "req.r5c1": {en:"RAM broken down: kernel, mapped files, shared memory", es:"RAM desglosada: núcleo, archivos mapeados, memoria compartida"},
+    "req.r5c2": {en:"The elevated helper", es:"El ayudante elevado"},
+    "req.r5c3": {en:"Processes and Windows still shown; the rest is one figure.", es:"Procesos y Windows se siguen mostrando; el resto es una sola cifra."},
 
     "how.eyebrow": {en:"How it works", es:"Cómo funciona"},
     "how.h2": {en:"Three small processes, each chosen for a reason.", es:"Tres procesos pequeños, cada uno elegido por una razón."},
@@ -523,7 +556,8 @@
       if (!entry) continue;
       var v = entry[lang];
       if (v == null) continue;
-      if (v.indexOf('<') >= 0) el.innerHTML = v; else el.textContent = v;
+      // Entities too: as textContent, "~2&nbsp;MB" and "NVIDIA &amp; AMD" showed up literally.
+      if (v.indexOf('<') >= 0 || v.indexOf('&') >= 0) el.innerHTML = v; else el.textContent = v;
     }
     var hero = document.getElementById('heroImg');
     var sh = document.getElementById('shotHero');
