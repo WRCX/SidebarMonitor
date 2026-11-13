@@ -182,18 +182,31 @@ internal sealed class SettingsWindow : Window
     {
         var p = Page(Loc.T("Secciones"));
         p.Children.Add(Note(Loc.T("Muestra u oculta cada sección.")));
+        var boxes = new List<(CheckBox Box, Section Sec)>();
         foreach (var s in _host.SectionsRO)
         {
             var sec = s;
-            p.Children.Add(Toggle(sec.Title, null,
+            var row = Toggle(sec.Title, null,
                 () => _host.IsSectionWanted(sec),
-                v => _host.SetSectionShown(sec, v)));
+                v => _host.SetSectionShown(sec, v));
+            boxes.Add((CheckOf(row), sec));
+            p.Children.Add(row);
         }
 
         p.Children.Add(SubHeader(Loc.T("Orden (arriba = primera)")));
         _orderPanel = new StackPanel();
         p.Children.Add(_orderPanel);
         PopulateOrder();
+
+        // The panel's right-click menu shows and hides sections too; follow it while this is open.
+        void Sync()
+        {
+            foreach (var (box, sec) in boxes)
+                if (box.IsChecked != _host.IsSectionWanted(sec)) box.IsChecked = _host.IsSectionWanted(sec);
+            PopulateOrder();
+        }
+        _host.SectionsChanged += Sync;
+        Closed += (_, _) => _host.SectionsChanged -= Sync;
         return p;
     }
 
@@ -330,8 +343,9 @@ internal sealed class SettingsWindow : Window
     private UIElement BuildGpu()
     {
         var p = Page(Loc.T("GPU"));
-        p.Children.Add(Choice(Loc.T("Mostrar"), Loc.T("Qué GPU(s) ver. La iGPU solo da % y motores (sin sensores propios)."),
-            [("NVIDIA", 0), ("AMD iGPU", 1), (Loc.T("Ambas"), 2)], () => _cfg.GpuView,
+        // By kind, not by brand: "NVIDIA" / "AMD iGPU" were wrong on an Intel iGPU or a Radeon card.
+        p.Children.Add(Choice(Loc.T("Mostrar"), Loc.T("Qué GPU(s) ver. La integrada da carga, motores y uso por proceso; temperatura, vatios y VRAM solo si su driver los ofrece (AMD sí)."),
+            [(Loc.T("Dedicada"), 0), (Loc.T("Integrada"), 1), (Loc.T("Ambas"), 2)], () => _cfg.GpuView,
             v => { _cfg.GpuView = v; _host.ApplyLive("gpuview"); }));
         p.Children.Add(Toggle(Loc.T("Motores (mini-gráficas)"), Loc.T("Una mini-gráfica por motor: 3D, compute/ML, decode/encode…"), () => _cfg.ShowGpuEngines, v => { _cfg.ShowGpuEngines = v; _host.ApplyLive("gpuengines"); }));
         p.Children.Add(Choice(Loc.T("Columnas de motores"), Loc.T("Cuántas mini-gráficas por fila."),
@@ -559,8 +573,8 @@ internal sealed class SettingsWindow : Window
                 _cfg.Save();
                 if (v) _host.UpdateSettingsChanged();   // a version already waiting installs now
             });
-        checkBox = CheckIn(checkRow);
-        autoBox = CheckIn(autoRow);
+        checkBox = CheckOf(checkRow);
+        autoBox = CheckOf(autoRow);
         p.Children.Add(checkRow);
         p.Children.Add(autoRow);
 
@@ -601,8 +615,6 @@ internal sealed class SettingsWindow : Window
         p.Children.Add(row);
         p.Children.Add(status);
         return p;
-
-        static CheckBox CheckIn(Border toggleRow) => ((Grid)toggleRow.Child).Children.OfType<CheckBox>().First();
     }
 
     // ── CSV controls kept in sync with external edits ─────────────────────────────────────────

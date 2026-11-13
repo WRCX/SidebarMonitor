@@ -32,6 +32,12 @@ internal sealed partial class MainWindow
             it.Click += (_, _) => SetSectionShown(sec, it.IsChecked);
             quickSections.Items.Add(it);
         }
+        // The menu is built once; Settings may have shown or hidden a section since. Read it on opening.
+        quickSections.SubmenuOpened += (_, _) =>
+        {
+            for (int i = 0; i < _sections.Count && i < quickSections.Items.Count; i++)
+                if (quickSections.Items[i] is MenuItem item) item.IsChecked = IsSectionWanted(_sections[i]);
+        };
         menu.Items.Add(quickSections);
 
         menu.Items.Add(new Separator());

@@ -170,11 +170,21 @@ internal sealed partial class MainWindow
 
     internal void SetSectionShown(Section s, bool shown)
     {
+        if (IsSectionWanted(s) == shown) return;
         // BATTERY's visibility is "has a battery AND wanted", decided each tick; only the wish is stored.
-        if (s.Key == "bat") { _cfg.ShowBattery = shown; _cfg.Save(); return; }
-        s.Visibility = shown ? Visibility.Visible : Visibility.Collapsed;
-        SaveSections();
+        if (s.Key == "bat") { _cfg.ShowBattery = shown; _cfg.Save(); }
+        else
+        {
+            s.Visibility = shown ? Visibility.Visible : Visibility.Collapsed;
+            SaveSections();
+        }
+        SectionsChanged?.Invoke();
     }
+
+    /// <summary>A section was shown, hidden or moved — from the panel's menu or from Settings. Both
+    /// show the same state and each used to read it once: a section hidden in one kept its old check
+    /// mark in the other.</summary>
+    internal event Action? SectionsChanged;
 
     /// <summary>Settings → Alertas → «Probar aviso»: the same notification path a real alert takes.</summary>
     internal void TestAlert() =>

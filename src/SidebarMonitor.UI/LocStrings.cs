@@ -234,8 +234,10 @@ internal static class LocStrings
 
         // ── Settings: GPU ─────────────────────────────────────────────────────────────────────
         ["Mostrar"] = "Show",
-        ["Qué GPU(s) ver. La iGPU solo da % y motores (sin sensores propios)."]
-            = "Which GPU(s) to see. The iGPU only gives % and engines (no sensors of its own).",
+        ["Qué GPU(s) ver. La integrada da carga, motores y uso por proceso; temperatura, vatios y VRAM solo si su driver los ofrece (AMD sí)."]
+            = "Which GPU(s) to see. The integrated one gives load, engines and use by process; temperature, watts and VRAM only if its driver offers them (AMD's does).",
+        ["Dedicada"] = "Discrete",
+        ["Integrada"] = "Integrated",
         ["Ambas"] = "Both",
         ["Motores (mini-gráficas)"] = "Engines (mini-graphs)",
         ["Una mini-gráfica por motor: 3D, compute/ML, decode/encode…"]

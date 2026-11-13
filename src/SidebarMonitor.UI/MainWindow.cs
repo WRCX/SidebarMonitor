@@ -282,7 +282,7 @@ internal sealed partial class MainWindow : AppBarWindow
         _cfg.SectionOrder = order;
         _cfg.Save();
         ApplySectionOrder();
-        ContextMenu = BuildMenu();   // rebuild so the "Orden" submenu reflects the new positions
+        SectionsChanged?.Invoke();
     }
 
     // ---------------------------------------------------------------- data

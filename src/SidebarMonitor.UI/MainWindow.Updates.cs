@@ -198,7 +198,11 @@ internal sealed partial class MainWindow
         if (_updateBusy) { SetUpdateStatus(Loc.T("Ya hay una actualización en curso.")); return; }
         if (_checking) return;   // the check in flight will say what it found; press again then
 
-        var latest = _latest ?? await CheckForUpdate(automatic: false);
+        // async void: anything thrown and not caught here takes the whole panel down, so the check
+        // that may come first is inside the try as well.
+        Updater.Release? latest;
+        try { latest = _latest ?? await CheckForUpdate(automatic: false); }
+        catch { SetUpdateStatus(Loc.T("No se pudo actualizar. Prueba a descargarlo manualmente.")); return; }
         if (latest is null) return;   // up to date, or the check failed — the status line says which
         if (_updateBusy) return;      // an automatic install started while we were checking
 
