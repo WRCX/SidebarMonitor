@@ -6,6 +6,27 @@ All notable changes to SidebarMonitor are documented here. The format is based o
 
 ## [Unreleased]
 
+## [1.5.11] — 2026-11-13
+
+### Changed
+
+- **The RAM breakdown is measured, not inferred.** "Other processes" and "shared and unattributed" were
+  two lumps that together hid ~7 of 15 GiB — and the second was a remainder, not a measurement: checked
+  against RAMMap, ~1.5 GiB of it was kernel memory (page tables, driver-locked pages, stacks) that no
+  counter reports. The elevated helper now reads the memory manager's own page database, the way
+  RAMMap does, but sampled: one page in 16, rotating, every 5 s — 41 ms a pass on 32 GiB, every
+  category within 1 % of a full walk, on its own timer so ETW never waits on it. The tooltip then shows
+  only RAM actually occupied, each piece counted once:
+  - the next ten processes by name under **más procesos** (`mstsc 401M · svchost ×94 363M …`), then
+    "and 124 more processes 1.3G";
+  - **Windows** with its kernel broken down (pools, page tables, drivers, metadata, stacks), the file
+    cache and the pages waiting to be written — the Windows segment grows by what the counters missed;
+  - **DLLs and mapped files** (in RAM once, however many processes use them) and **memory shared
+    between processes**, as their own lines;
+  - whatever is left as "unclassified" (91 MiB of 18 GiB on the dev desktop).
+  Without the helper, the part only the page database can split says so instead of guessing.
+  Snapshot contract **v30** and helper contract **v18**: agent, helper and UI must match.
+
 ## [1.5.10] — 2026-11-12
 
 ### Added
@@ -798,7 +819,8 @@ First public release.
 
 > Not code-signed yet, so Windows SmartScreen may warn on first run — choose **More info → Run anyway**.
 
-[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.5.10...HEAD
+[Unreleased]: https://github.com/WRCX/SidebarMonitor/compare/v1.5.11...HEAD
+[1.5.11]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.11
 [1.5.10]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.10
 [1.5.9]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.9
 [1.5.8]: https://github.com/WRCX/SidebarMonitor/releases/tag/v1.5.8
