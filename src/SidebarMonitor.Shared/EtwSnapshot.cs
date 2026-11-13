@@ -7,7 +7,7 @@ public static class EtwLayout
 {
     /// <summary>'SBME' little-endian.</summary>
     public const uint Signature = 0x454D4253;
-    public const uint Version = 17;
+    public const uint Version = 18;   // 18: PageUse
     /// <summary>Global\ on purpose: there is exactly ONE elevated helper per machine (the NT Kernel
     /// Logger session it owns is single-instance machine-wide), and every user's session must see
     /// it. Creating a Global\ map needs SeCreateGlobalPrivilege — the helper is elevated, so it has
@@ -181,6 +181,10 @@ public struct EtwSnapshot
     /// <summary>Foreground game frame-timing (FPS/frametime/lows/GPU busy/latency/stutter), measured
     /// by PresentMon (ETW, no injection). App empty = nothing presenting or the feature is off.</summary>
     public FrameInfo Frame;
+
+    /// <summary>The RAM in use by page type, from the memory manager's page database (sampled every
+    /// few seconds; needs the helper's admin rights). Not available = all zero.</summary>
+    public PageUseInfo PageUse;
 }
 
 [InlineArray(SnapshotLayout.MaxDisks)] public struct DiskTempArray { private float _element0; }

@@ -124,8 +124,11 @@ internal sealed class PdhQuery : IDisposable
     public double KernelResidentBytes =>
         Bytes(_poolNonpaged) + Bytes(_poolPagedResident) + Bytes(_driverResident) + Bytes(_kernelCodeResident);
 
-    /// <summary>The file cache's resident pages plus the modified list (dirty pages awaiting write-back).</summary>
-    public double CacheResidentBytes => Bytes(_cacheResident) + Bytes(_modified);
+    /// <summary>The file cache's resident pages (the system working set's file pages).</summary>
+    public double CacheResidentBytes => Bytes(_cacheResident);
+
+    /// <summary>The modified list: written-to pages of any kind awaiting write-back to disk.</summary>
+    public double ModifiedBytes => Bytes(_modified);
 
     /// <summary>A byte counter, uncapped, and 0 rather than NaN when absent so the sums above survive one
     /// missing counter (System Code Resident Bytes reads 0 on some builds, and may not exist on others).</summary>

@@ -10,7 +10,7 @@ public static class SnapshotLayout
     public const uint Signature = 0x4E4D4253;
 
     /// <summary>Bump on any layout change. The reader refuses anything it does not know.</summary>
-    public const uint Version = 29;   // 29: RAM by process and the Windows share
+    public const uint Version = 30;   // 30: the RAM's smaller processes and shared pages named
 
     /// <summary>
     /// Local\, not Global\. Creating a Global\ kernel object requires SeCreateGlobalPrivilege,
@@ -29,7 +29,8 @@ public static class SnapshotLayout
     public const int MaxDisks = 8;
     public const int MaxProcs = 16;
     public const int MaxGpuProcs = 6;
-    public const int MaxMemProcs = 6;
+    /// <summary>Processes named in the RAM breakdown: the bar draws the first few, the tooltip all.</summary>
+    public const int MaxMemProcs = 16;
 }
 
 [InlineArray(32)] public struct Name32 { private byte _element0; }
@@ -132,18 +133,30 @@ public struct MemInfo
     /// by name, Windows' own processes excluded (they are in <see cref="OsProcsBytes"/>).</summary>
     public int ProcCount;
     public MemProcArray Procs;
-    /// <summary>Private working set of every other process.</summary>
+    /// <summary>Private working set of every other process, and how many names that is.</summary>
     public ulong OtherProcsBytes;
+    public int OtherProcsCount;
     /// <summary>Windows' own processes: System, Secure System, Registry and Memory Compression (which
     /// holds other processes' pages, compressed).</summary>
     public ulong OsProcsBytes;
-    /// <summary>The kernel, resident: nonpaged pool, paged pool, drivers and kernel code.</summary>
+    /// <summary>The kernel, resident, as the counters see it: nonpaged pool, paged pool, drivers and
+    /// kernel code. Short of the real figure — no counter covers page tables, driver-locked pages or
+    /// kernel stacks — so <see cref="PageUse"/> replaces it when the helper provides one.</summary>
     public ulong KernelBytes;
-    /// <summary>The file cache in use plus the modified list (dirty pages on their way to disk).</summary>
+    /// <summary>The file cache's resident pages. These are file pages, so the page database counts
+    /// them inside <see cref="PageUseInfo.MappedFile"/>.</summary>
     public ulong CacheBytes;
+    /// <summary>The modified list: written-to pages awaiting write-back. In use (not available), but
+    /// not active, so outside every <see cref="PageUseInfo"/> category.</summary>
+    public ulong ModifiedBytes;
+
+    /// <summary>The RAM in use by page type, from the elevated helper (see <see cref="PageUseInfo"/>):
+    /// what splits the rest of the RAM — mapped files, shared memory, the kernel's page tables, locked
+    /// pages and stacks — into measured parts. Not available without the helper.</summary>
+    public PageUseInfo PageUse;
 }
 
-/// <summary>One process name's private working set (all instances summed).</summary>
+/// <summary>One process name's private working set, all instances summed.</summary>
 [StructLayout(LayoutKind.Sequential)]
 public struct MemProcInfo
 {

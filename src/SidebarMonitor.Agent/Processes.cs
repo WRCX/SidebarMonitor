@@ -42,7 +42,7 @@ internal sealed class Processes : IDisposable
     public string? NameFor(int pid) => _previous.TryGetValue(pid, out var p) ? p.Name : null;
 
     /// <summary>Every process's private working set from the last enumeration (the one <see cref="Top"/>
-    /// just took), for the RAM bar. No second NtQuerySystemInformation call.</summary>
+    /// just took), for the RAM breakdown. No second NtQuerySystemInformation call.</summary>
     public IEnumerable<(string Name, ulong Bytes)> PrivateWorkingSets()
     {
         foreach (var p in _previous.Values)

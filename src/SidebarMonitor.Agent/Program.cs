@@ -207,7 +207,9 @@ internal static class Program
         s.CpuFromAmd = false;
         s.CpuFromPawnIo = false;
         s.CpuFromIntel = false;
-        if (etw is null) { Array.Fill(diskTemps, float.NaN); return null; }
+        // PageUse is cleared only when the helper is gone, not on a tick that merely caught it
+        // mid-write: that would flip the RAM tooltip to its no-helper form for one second.
+        if (etw is null) { Array.Fill(diskTemps, float.NaN); s.Mem.PageUse = default; return null; }
 
         if (!etw.TryRead(out var e)) return etw;   // caught it mid-write; try again next tick
 
@@ -224,6 +226,7 @@ internal static class Program
         {
             etw.Dispose();
             Array.Fill(diskTemps, float.NaN);
+            s.Mem.PageUse = default;
             Console.WriteLine("ETW: el helper dejo de publicar.");
             return null;
         }
@@ -238,6 +241,7 @@ internal static class Program
         s.Frame = e.Frame;   // game frame-timing (PresentMon), or empty when off/idle
         s.Cpu.FanPct = e.CpuFanPct;   // EC fan duty % (helper); NaN → UI shows "—"
         s.Cpu.FanRpm = e.CpuFanRpm;   // HP WMI fan RPM (Victus/OMEN); NaN when no HP WMI source
+        s.Mem.PageUse = e.PageUse;    // RAM by page type; zero until the helper's first pass
         s.EtwAvailable = true;
 
         // CPU temp and package power come solely from the AMD SDK (via the helper): it works with
@@ -452,6 +456,7 @@ internal static class Program
         mem.CommitUsed = (ulong)Math.Max(0, pdh.CommittedBytes);
         mem.KernelBytes = (ulong)pdh.KernelResidentBytes;
         mem.CacheBytes = (ulong)pdh.CacheResidentBytes;
+        mem.ModifiedBytes = (ulong)pdh.ModifiedBytes;
     }
 
     /// <summary>
@@ -824,6 +829,7 @@ internal static class Program
         }
         s.Mem.ProcCount = mem.Top.Count;
         s.Mem.OtherProcsBytes = mem.OtherBytes;
+        s.Mem.OtherProcsCount = mem.OtherCount;
         s.Mem.OsProcsBytes = mem.OsBytes;
     }
 

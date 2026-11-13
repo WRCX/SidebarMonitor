@@ -4,7 +4,7 @@ using static SidebarMonitor.Shared.MemProcRanking;
 
 namespace SidebarMonitor.Tests;
 
-/// <summary>How the RAM bar splits the processes' private working sets.</summary>
+/// <summary>How the RAM breakdown splits the processes' private working sets.</summary>
 [Trait("Category", "Unit")]
 public class MemProcRankingTests
 {
@@ -34,25 +34,29 @@ public class MemProcRankingTests
 
         Assert.Equal(["game.exe"], split.Top.Select(r => r.Name));
         Assert.Equal(1540 * MiB, split.OsBytes);
+        Assert.Equal(0, split.OtherCount);
     }
 
-    /// <summary>Biggest first; the rest, however many, is one sum; nothing is counted twice.</summary>
+    /// <summary>Biggest first; the rest, however many, is one sum — and how many it is, so the tooltip
+    /// can say "and 120 more" instead of an unexplained lump.</summary>
     [Fact]
-    public void Biggest_first_and_the_rest_summed()
+    public void Biggest_first_and_the_rest_summed_and_counted()
     {
         var split = Rank([("a", 1 * GiB), ("b", 3 * GiB), ("c", 2 * GiB), ("d", 500 * MiB), ("e", 100 * MiB)], 3);
 
         Assert.Equal(["b", "c", "a"], split.Top.Select(r => r.Name));
         Assert.Equal(600 * MiB, split.OtherBytes);
+        Assert.Equal(2, split.OtherCount);
     }
 
-    /// <summary>A sliver is no segment: small processes go to the rest even with slots free.</summary>
+    /// <summary>Crumbs are no row: tiny processes go to the counted rest even with slots free.</summary>
     [Fact]
     public void Processes_below_the_threshold_go_to_the_rest()
     {
-        var split = Rank([("big", 1 * GiB), ("tiny", 10 * MiB), ("Idle", 0)], 6);
+        var split = Rank([("big", 1 * GiB), ("tiny", 4 * MiB), ("Idle", 0)], 6);
 
         Assert.Equal(["big"], split.Top.Select(r => r.Name));
-        Assert.Equal(10 * MiB, split.OtherBytes);
+        Assert.Equal(4 * MiB, split.OtherBytes);
+        Assert.Equal(1, split.OtherCount);
     }
 }

@@ -277,6 +277,10 @@ internal static class Program
         // Game frame-timing via the bundled PresentMon CLI (only spawns while the marker is present).
         using var frameStats = new FrameStats(AppContext.BaseDirectory);
 
+        // The RAM by page type (RAMMap's use counts), sampled on its own 5 s timer.
+        using var pageUse = new PageUseScanner();
+        if (pageUse.Status.Length > 0) Console.WriteLine($"PageUse: {pageUse.Status}");
+
         int publishing = 0;
         using var publish = new Timer(_ =>
         {
@@ -556,6 +560,7 @@ internal static class Program
             // Game frame-timing (PresentMon), opt-in via the marker the UI writes.
             frameStats.SetEnabled(ConsentMarker.FpsEnabled);
             snapshot.Frame = frameStats.Poll();
+            snapshot.PageUse = pageUse.Latest;
 
             writer.Publish(snapshot);
             published++;
